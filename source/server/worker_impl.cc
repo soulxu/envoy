@@ -17,6 +17,7 @@ namespace Server {
 WorkerPtr ProdWorkerFactory::createWorker(OverloadManager& overload_manager,
                                           const std::string& worker_name) {
   Event::DispatcherPtr dispatcher(api_.allocateDispatcher(worker_name));
+  ENVOY_LOG(info, "### soulxu ### Create new worker by ProdWorkerFactory");
   return WorkerPtr{
       new WorkerImpl(tls_, hooks_, std::move(dispatcher),
                      Network::ConnectionHandlerPtr{new ConnectionHandlerImpl(*dispatcher)},
@@ -40,8 +41,10 @@ void WorkerImpl::addListener(absl::optional<uint64_t> overridden_listener,
   // can not be created on the worker. There is a race condition where 2 processes can successfully
   // bind to an address, but then fail to listen() with EADDRINUSE. During initial startup, we want
   // to surface this.
+  // NOTE (soulxu) there should be someon call this method to create the lisner
   dispatcher_->post([this, overridden_listener, &listener, completion]() -> void {
     try {
+      // NOTE (soulxu) handler_ is the ConnectionHandlerImpl, it will create the Listener and add to the dispatcher
       handler_->addListener(overridden_listener, listener);
       hooks_.onWorkerListenerAdded();
       completion(true);
@@ -130,6 +133,7 @@ void WorkerImpl::threadRoutine(GuardDog& guard_dog) {
         guard_dog.createWatchDog(api_.threadFactory().currentThreadId(), dispatcher_->name());
     watch_dog_->startWatchdog(*dispatcher_);
   });
+  // NOTE (soulxu) run the its own dispatcher here
   dispatcher_->run(Event::Dispatcher::RunType::Block);
   ENVOY_LOG(debug, "worker exited dispatch loop");
   guard_dog.stopWatching(watch_dog_);

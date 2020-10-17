@@ -31,6 +31,7 @@ SubscriptionPtr SubscriptionFactoryImpl::subscriptionFromConfigSource(
   std::unique_ptr<Subscription> result;
   SubscriptionStats stats = Utility::generateStats(scope);
 
+  // NOTE (soulxu) The subscription will watch the xDS API
   const auto transport_api_version = config.api_config_source().transport_api_version();
   if (transport_api_version == envoy::config::core::v3::ApiVersion::V2 &&
       runtime_.snapshot().runtimeFeatureEnabled(

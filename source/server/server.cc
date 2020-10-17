@@ -416,6 +416,7 @@ void InstanceImpl::initialize(const Options& options,
     }
   }
 
+  // NOTE (soulxu) create listener_manager at here
   // Workers get created first so they register for thread local updates.
   listener_manager_ = std::make_unique<ListenerManagerImpl>(
       *this, listener_component_factory_, worker_factory_, bootstrap_.enable_dispatcher_stats());
@@ -436,6 +437,7 @@ void InstanceImpl::initialize(const Options& options,
     if (initial_config.admin().accessLogPath().empty()) {
       throw EnvoyException("An admin access log path is required for a listening server.");
     }
+    // # NOTE (soulxu): the place initialize admin API
     ENVOY_LOG(info, "admin address: {}", initial_config.admin().address()->asString());
     admin_->startHttpListener(initial_config.admin().accessLogPath(), options.adminAddressPath(),
                               initial_config.admin().address(),
@@ -450,6 +452,7 @@ void InstanceImpl::initialize(const Options& options,
     admin_->addListenerToHandler(handler_.get());
   }
 
+  // NOTE (soulxu) initialize the major things
   // The broad order of initialization from this point on is the following:
   // 1. Statically provisioned configuration (bootstrap) are loaded.
   // 2. Cluster manager is created and all primary clusters (i.e. with endpoint assignments
@@ -483,6 +486,7 @@ void InstanceImpl::initialize(const Options& options,
       messageValidationContext(), *api_, http_context_, grpc_context_, access_log_manager_,
       *singleton_manager_);
 
+  // config_ is the MainImpl, its load the static listener
   // Now the configuration gets parsed. The configuration may start setting
   // thread local data per above. See MainImpl::initialize() for why ConfigImpl
   // is constructed as part of the InstanceImpl and then populated once

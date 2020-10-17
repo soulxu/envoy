@@ -66,6 +66,7 @@ public:
   static Network::ListenerFilterMatcherSharedPtr
   createListenerFilterMatcher(const envoy::config::listener::v3::ListenerFilter& listener_filter);
 
+  // NOTE (soulxu) create the lds API here
   // Server::ListenerComponentFactory
   LdsApiPtr createLdsApi(const envoy::config::core::v3::ConfigSource& lds_config,
                          const udpa::core::v1::ResourceLocator* lds_resources_locator) override {

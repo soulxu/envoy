@@ -75,6 +75,7 @@ void LdsApiImpl::onConfigUpdate(const std::vector<Config::DecodedResourceRef>& a
         // applied.
         throw EnvoyException(fmt::format("duplicate listener {} found", listener.name()));
       }
+      // NOTE (soulxu) add listener to listener_manager for LDS API
       if (listener_manager_.addOrUpdateListener(listener, resource.get().version(), true)) {
         ENVOY_LOG(info, "lds: add/update listener '{}'", listener.name());
         any_applied = true;

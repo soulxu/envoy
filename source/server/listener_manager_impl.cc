@@ -698,6 +698,7 @@ void ListenerManagerImpl::addListenerToWorker(Worker& worker,
     });
     return;
   }
+  // NOTE (soulxu) here adds the listener to the worker
   worker.addListener(
       overridden_listener, listener, [this, &listener, completion_callback](bool success) -> void {
         // The add listener completion runs on the worker thread. Post back to the main thread to

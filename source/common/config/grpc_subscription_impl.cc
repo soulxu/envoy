@@ -23,6 +23,7 @@ void GrpcSubscriptionImpl::start(const std::set<std::string>& resources,
                                  const bool use_namespace_matching) {
   if (init_fetch_timeout_.count() > 0) {
     init_fetch_timeout_timer_ = dispatcher_.createTimer([this]() -> void {
+      ENVOY_LOG(debug, "### soulxu ### update for grpc {}", type_url_);
       callbacks_.onConfigUpdateFailed(Envoy::Config::ConfigUpdateFailureReason::FetchTimedout,
                                       nullptr);
     });
