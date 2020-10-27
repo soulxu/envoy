@@ -497,6 +497,7 @@ void InstanceImpl::initialize(const Options& options,
   // because various items do not yet exist when the listener manager is created.
   if (bootstrap_.dynamic_resources().has_lds_config() ||
       bootstrap_.dynamic_resources().has_lds_resources_locator()) {
+    ENVOY_LOG(debug, "#### invoke listener_manager_->createLdsApi");
     listener_manager_->createLdsApi(bootstrap_.dynamic_resources().lds_config(),
                                     bootstrap_.dynamic_resources().has_lds_resources_locator()
                                         ? &bootstrap_.dynamic_resources().lds_resources_locator()

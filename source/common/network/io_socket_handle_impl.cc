@@ -493,6 +493,7 @@ Event::FileEventPtr IoSocketHandleImpl::createFileEvent(Event::Dispatcher& dispa
                                                         Event::FileReadyCb cb,
                                                         Event::FileTriggerType trigger,
                                                         uint32_t events) {
+  ENVOY_LOG(debug, "#### IoSocketHandleImpl::createFileEvent");
   return dispatcher.createFileEvent(fd_, cb, trigger, events);
 }
 

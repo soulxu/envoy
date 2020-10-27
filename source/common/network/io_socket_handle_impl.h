@@ -13,7 +13,7 @@ namespace Envoy {
 namespace Network {
 
 /**
- * IoHandle derivative for sockets.
+ * IoHandle derivative for sockets. NOTE (soulxu): basic socket io handle abstraction
  */
 class IoSocketHandleImpl : public IoHandle, protected Logger::Loggable<Logger::Id::io> {
 public:
@@ -61,6 +61,7 @@ public:
   absl::optional<int> domain() override;
   Address::InstanceConstSharedPtr localAddress() override;
   Address::InstanceConstSharedPtr peerAddress() override;
+  // NOTE (soulxu): this is the method add socket to dispatcher event loop
   Event::FileEventPtr createFileEvent(Event::Dispatcher& dispatcher, Event::FileReadyCb cb,
                                       Event::FileTriggerType trigger, uint32_t events) override;
   Api::SysCallIntResult shutdown(int how) override;

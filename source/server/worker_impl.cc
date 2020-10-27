@@ -17,7 +17,7 @@ namespace Server {
 WorkerPtr ProdWorkerFactory::createWorker(OverloadManager& overload_manager,
                                           const std::string& worker_name) {
   Event::DispatcherPtr dispatcher(api_.allocateDispatcher(worker_name));
-  ENVOY_LOG(info, "### soulxu ### Create new worker by ProdWorkerFactory");
+  ENVOY_LOG(debug, "#### ProdWorkerFactory::createWorker {}", worker_name);
   return WorkerPtr{
       new WorkerImpl(tls_, hooks_, std::move(dispatcher),
                      Network::ConnectionHandlerPtr{new ConnectionHandlerImpl(*dispatcher)},
@@ -45,6 +45,7 @@ void WorkerImpl::addListener(absl::optional<uint64_t> overridden_listener,
   dispatcher_->post([this, overridden_listener, &listener, completion]() -> void {
     try {
       // NOTE (soulxu) handler_ is the ConnectionHandlerImpl, it will create the Listener and add to the dispatcher
+      ENVOY_LOG(debug, "#### WorkerImpl::addListener, add listener {} to worker {}", listener.name(), dispatcher_->name());
       handler_->addListener(overridden_listener, listener);
       hooks_.onWorkerListenerAdded();
       completion(true);

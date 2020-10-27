@@ -80,7 +80,7 @@ void MainImpl::initialize(const envoy::config::bootstrap::v3::Bootstrap& bootstr
   const auto& listeners = bootstrap.static_resources().listeners();
   ENVOY_LOG(info, "loading {} listener(s)", listeners.size());
   for (ssize_t i = 0; i < listeners.size(); i++) {
-    ENVOY_LOG(debug, "listener #{}:", i);
+    ENVOY_LOG(debug, "#### invoke listenerManager.addOrUpdateListener {}", listeners[i].name());
     server.listenerManager().addOrUpdateListener(listeners[i], "", false);
   }
 

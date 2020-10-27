@@ -102,7 +102,7 @@ Network::SocketSharedPtr ListenSocketFactoryImpl::createListenSocketAndApplyOpti
       local_address_, socket_type_, options_, {bind_to_port_, !reuse_port_});
 
   // Binding is done by now.
-  ENVOY_LOG(debug, "Create listen socket for listener {} on address {}", listener_name_,
+  ENVOY_LOG(debug, "#### Create listen socket for listener {} on address {}", listener_name_,
             local_address_->asString());
   if (socket != nullptr && options_ != nullptr) {
     const bool ok = Network::Socket::applyOptions(

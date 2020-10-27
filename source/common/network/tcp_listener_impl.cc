@@ -59,6 +59,7 @@ void TcpListenerImpl::onSocketEvent(short flags) {
       break;
     }
 
+    //ENVOY_LOG(debug, "#### TcpListenerImpl::onSocketEvent accept new socket {}", io_handle->peerAddress()->asString());
     if (rejectCxOverGlobalLimit()) {
       // The global connection limit has been reached.
       io_handle->close();
@@ -93,6 +94,7 @@ void TcpListenerImpl::onSocketEvent(short flags) {
 void TcpListenerImpl::setupServerSocket(Event::DispatcherImpl& dispatcher, Socket& socket) {
   socket.ioHandle().listen(backlog_size_);
 
+  //ENVOY_LOG(debug, "#### TcpListenerImpl::setupServerSocket {}", socket.localAddress());
   // Although onSocketEvent drains to completion, use level triggered mode to avoid potential
   // loss of the trigger due to transient accept errors.
   file_event_ = socket.ioHandle().createFileEvent(

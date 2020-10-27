@@ -260,6 +260,7 @@ ListenerManagerImpl::ListenerManagerImpl(Instance& server,
           "listeners", [this] { return dumpListenerConfigs(); })),
       enable_dispatcher_stats_(enable_dispatcher_stats) {
   for (uint32_t i = 0; i < server.options().concurrency(); i++) {
+    ENVOY_LOG(debug, "#### ListenerManagerImpl create worker: {}", absl::StrCat("worker_", i));
     workers_.emplace_back(
         worker_factory.createWorker(server.overloadManager(), absl::StrCat("worker_", i)));
   }
@@ -1035,6 +1036,7 @@ Network::ListenSocketFactorySharedPtr ListenerManagerImpl::createListenSocketFac
     const envoy::config::core::v3::Address& proto_address, ListenerImpl& listener,
     bool reuse_port) {
   Network::Socket::Type socket_type = Network::Utility::protobufAddressSocketType(proto_address);
+  ENVOY_LOG(debug, "#### ListenerManagerImpl::createListenSocketFactory listener: {} addresss: {}", listener.name(), listener.address());
   return std::make_shared<ListenSocketFactoryImpl>(
       factory_, listener.address(), socket_type, listener.listenSocketOptions(),
       listener.bindToPort(), listener.name(), reuse_port);
