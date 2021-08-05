@@ -578,6 +578,12 @@ private:
   std::chrono::milliseconds keepalive_interval_;
   std::chrono::milliseconds keepalive_timeout_;
   uint32_t keepalive_interval_jitter_percent_;
+
+  // simulate the dsa memcpy flag check
+  int async_memcpy_check_counter_{0};
+  void decodeDataForStream(int32_t stream_id);
+  Event::TimerPtr memcpy_timer_;
+  int32_t current_decode_stream_id_{0};
 };
 
 /**

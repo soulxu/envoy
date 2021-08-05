@@ -719,8 +719,10 @@ Http::Status ConnectionImpl::dispatch(Buffer::Instance& data) {
   for (const Buffer::RawSlice& slice : data.getRawSlices()) {
     current_slice_ = &slice;
     dispatching_ = true;
+    ENVOY_LOG(debug, "#### ConnectionImpl::dispatch -- before nghttp2_session_mem_recv");
     ssize_t rc =
         nghttp2_session_mem_recv(session_, static_cast<const uint8_t*>(slice.mem_), slice.len_);
+    ENVOY_LOG(debug, "#### ConnectionImpl::dispatch -- after nghttp2_session_mem_recv");
     if (!nghttp2_callback_status_.ok()) {
       return nghttp2_callback_status_;
     }
@@ -757,17 +759,12 @@ ConnectionImpl::StreamImpl* ConnectionImpl::getStream(int32_t stream_id) {
 }
 
 int ConnectionImpl::onData(int32_t stream_id, const uint8_t* data, size_t len) {
+  ENVOY_LOG(debug, "#### ConnectionImpl::onData stream_id = {}", stream_id);
   StreamImpl* stream = getStream(stream_id);
   // If this results in buffering too much data, the watermark buffer will call
   // pendingRecvBufferHighWatermark, resulting in ++read_disable_count_
   stream->pending_recv_data_->add(data, len);
-  // Update the window to the peer unless some consumer of this stream's data has hit a flow control
-  // limit and disabled reads on this stream
-  if (!stream->buffersOverrun()) {
-    nghttp2_session_consume(session_, stream_id, len);
-  } else {
-    stream->unconsumed_bytes_ += len;
-  }
+
   return 0;
 }
 
@@ -911,14 +908,33 @@ Status ConnectionImpl::onFrameReceived(const nghttp2_frame* frame) {
   }
   case NGHTTP2_DATA: {
     stream->remote_end_stream_ = frame->hd.flags & NGHTTP2_FLAG_END_STREAM;
+    ENVOY_LOG(debug, "#### ConnectionImpl::onFrameRecevied  remote_end_stream = {}", stream->remote_end_stream_);
 
-    // It's possible that we are waiting to send a deferred reset, so only raise data if local
-    // is not complete.
-    if (!stream->deferred_reset_) {
-      stream->decoder().decodeData(*stream->pending_recv_data_, stream->remote_end_stream_);
+    if (stream->remote_end_stream_) {
+      // It's possible that we are waiting to send a deferred reset, so only raise data if local
+      // is not complete.
+      if (!stream->deferred_reset_) {
+        stream->decoder().decodeData(*stream->pending_recv_data_, stream->remote_end_stream_);
+      }
+      stream->pending_recv_data_->drain(stream->pending_recv_data_->length());
+      break;
     }
 
-    stream->pending_recv_data_->drain(stream->pending_recv_data_->length());
+    current_decode_stream_id_ = frame->hd.stream_id;
+    ENVOY_LOG(debug, "#### ConnectionImpl::onFrameRecevied -- create the timer, stream {}", current_decode_stream_id_);
+    memcpy_timer_ = connection_.dispatcher().createTimer([&](){
+      // simulate that the dsa only finished after checking 3 times.
+      if (async_memcpy_check_counter_ < 3 && current_stream_id_.has_value()) {
+        async_memcpy_check_counter_++;
+        memcpy_timer_->enableTimer(std::chrono::milliseconds(0));
+      }
+      async_memcpy_check_counter_ = 0;
+      decodeDataForStream(current_decode_stream_id_);
+    });
+    ENVOY_LOG(debug, "#### ConnectionImpl::onFrameRecevied -- enable the timer");
+    //connection_.readDisable(true);
+    memcpy_timer_->enableTimer(std::chrono::milliseconds(0));
+    
     break;
   }
   case NGHTTP2_RST_STREAM: {
@@ -929,6 +945,47 @@ Status ConnectionImpl::onFrameReceived(const nghttp2_frame* frame) {
   }
 
   return okStatus();
+}
+
+void ConnectionImpl::decodeDataForStream(int32_t stream_id) {
+  ENVOY_LOG(debug, "#### ConnectionImpl::decodeDataForStream, stream id = {}", stream_id);
+  StreamImpl* stream = getStream(stream_id);
+  if (stream == nullptr) {
+    ENVOY_LOG(debug, "#### ConnectionImpl::decodeDataForStream can't find the stream");
+    return;
+  }
+  // It's possible that we are waiting to send a deferred reset, so only raise data if local
+  // is not complete.
+  if (!stream->deferred_reset_) {
+    ENVOY_LOG(debug, "#### !!!!! ConnectionImpl::decodeDataForStream -- before decode, size = {}", stream->pending_recv_data_->length());
+    stream->decoder().decodeData(*stream->pending_recv_data_, stream->remote_end_stream_);
+    ENVOY_LOG(debug, "#### !!!!!  ConnectionImpl::decodeDataForStream -- after decode");
+  }
+  ENVOY_LOG(debug, "#### ConnectionImpl::decodeDataForStream before drain");
+  stream->pending_recv_data_->drain(stream->pending_recv_data_->length());
+  ENVOY_LOG(debug, "#### ConnectionImpl::decodeDataForStream after drain");
+  connection_.readDisable(false);
+  current_decode_stream_id_ = 0;
+
+  // Update the window to the peer unless some consumer of this stream's data has hit a flow control
+  // limit and disabled reads on this stream
+  if (!stream->buffersOverrun()) {
+    nghttp2_session_consume(session_, stream_id, stream->pending_recv_data_->length());
+  } else {
+    stream->unconsumed_bytes_ += stream->pending_recv_data_->length();
+  }
+
+  if (!current_stream_id_.has_value()) {
+    stream->destroy();
+    current_stream_id_.reset();
+    connection_.dispatcher().deferredDelete(stream->removeFromList(active_streams_));
+    // Any unconsumed data must be consumed before the stream is deleted.
+    // nghttp2 does not appear to track this internally, and any stream deleted
+    // with outstanding window will contribute to a slow connection-window leak.
+    nghttp2_session_consume(session_, stream_id, stream->unconsumed_bytes_);
+    stream->unconsumed_bytes_ = 0;
+    nghttp2_session_set_stream_user_data(session_, stream->stream_id_, nullptr);
+  }
 }
 
 int ConnectionImpl::onFrameSend(const nghttp2_frame* frame) {
@@ -1066,6 +1123,7 @@ ssize_t ConnectionImpl::onSend(const uint8_t* data, size_t length) {
 }
 
 int ConnectionImpl::onStreamClose(int32_t stream_id, uint32_t error_code) {
+  ENVOY_LOG(debug, "##### onStreamClose id = {}, current decode stream id = {}", stream_id, current_decode_stream_id_);
   StreamImpl* stream = getStream(stream_id);
   if (stream) {
     ENVOY_CONN_LOG(debug, "stream closed: {}", connection_, error_code);
@@ -1100,15 +1158,17 @@ int ConnectionImpl::onStreamClose(int32_t stream_id, uint32_t error_code) {
       stream->runResetCallbacks(reason);
     }
 
-    stream->destroy();
     current_stream_id_.reset();
-    connection_.dispatcher().deferredDelete(stream->removeFromList(active_streams_));
-    // Any unconsumed data must be consumed before the stream is deleted.
-    // nghttp2 does not appear to track this internally, and any stream deleted
-    // with outstanding window will contribute to a slow connection-window leak.
-    nghttp2_session_consume(session_, stream_id, stream->unconsumed_bytes_);
-    stream->unconsumed_bytes_ = 0;
-    nghttp2_session_set_stream_user_data(session_, stream->stream_id_, nullptr);
+    if (current_decode_stream_id_ == 0) {
+      stream->destroy();
+      connection_.dispatcher().deferredDelete(stream->removeFromList(active_streams_));
+      // Any unconsumed data must be consumed before the stream is deleted.
+      // nghttp2 does not appear to track this internally, and any stream deleted
+      // with outstanding window will contribute to a slow connection-window leak.
+      nghttp2_session_consume(session_, stream_id, stream->unconsumed_bytes_);
+      stream->unconsumed_bytes_ = 0;
+      nghttp2_session_set_stream_user_data(session_, stream->stream_id_, nullptr);
+    }
   }
 
   return 0;
@@ -1647,6 +1707,7 @@ RequestEncoder& ClientConnectionImpl::newStream(ResponseDecoder& decoder) {
 }
 
 Status ClientConnectionImpl::onBeginHeaders(const nghttp2_frame* frame) {
+  ENVOY_LOG(debug, "##### ClientConnectionImpl::onBeginHeaders {}", frame->hd.stream_id);
   // The client code explicitly does not currently support push promise.
   RELEASE_ASSERT(frame->hd.type == NGHTTP2_HEADERS, "");
   RELEASE_ASSERT(frame->headers.cat == NGHTTP2_HCAT_RESPONSE ||
@@ -1733,6 +1794,7 @@ ServerConnectionImpl::ServerConnectionImpl(
 }
 
 Status ServerConnectionImpl::onBeginHeaders(const nghttp2_frame* frame) {
+  ENVOY_LOG(debug, "#### ServerConnectionImpl::onBeginHeaders {}", frame->hd.stream_id);
   // For a server connection, we should never get push promise frames.
   ASSERT(frame->hd.type == NGHTTP2_HEADERS);
   RETURN_IF_ERROR(trackInboundFrames(&frame->hd, frame->headers.padlen));
