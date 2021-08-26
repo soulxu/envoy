@@ -32,12 +32,12 @@ class OwnedImpl;
  * |                 |                |                      |
  * base_             data()           base_ + reservable_    base_ + capacity_
  */
-class Slice {
+class Slice: Logger::Loggable<Logger::Id::kafka> {
 public:
   using Reservation = RawSlice;
   using StoragePtr = std::unique_ptr<uint8_t[]>;
 
-  static constexpr uint32_t free_list_max_ = Buffer::Reservation::MAX_SLICES_;
+  static constexpr uint32_t free_list_max_ = 1024;
   using FreeListType = absl::InlinedVector<StoragePtr, free_list_max_>;
   class FreeListReference {
   private:
@@ -45,7 +45,7 @@ public:
     FreeListType& free_list_;
     friend class Slice;
   };
-
+  static thread_local FreeListType free_list_;
   static std::atomic_int64_t total_memory_allocated;
   static std::atomic_int64_t total_memory_freed;
 
@@ -363,7 +363,6 @@ protected:
     ASSERT(sliceSize(capacity) == capacity,
            "newStorage should only be called on values returned from sliceSize()");
     ASSERT(!free_list_opt.has_value() || &free_list_opt->free_list_ == &free_list_);
-
     StoragePtr storage;
     if (capacity == default_slice_size_ && free_list_opt.has_value()) {
       FreeListType& free_list = free_list_opt->free_list_;
@@ -372,10 +371,12 @@ protected:
         ASSERT(storage != nullptr);
         ASSERT(free_list.back() == nullptr);
         free_list.pop_back();
+    	ENVOY_LOG(debug, "Slice::newStorage from free list {}, free list size {}", capacity, free_list.size());
         return storage;
       }
     }
 
+    ENVOY_LOG(debug, "Slice::newStorage {}", capacity);
     total_memory_allocated++;
     storage.reset(new uint8_t[capacity]);
     return storage;
@@ -391,16 +392,17 @@ protected:
       FreeListType& free_list = free_list_opt->free_list_;
       if (free_list.size() < free_list_max_) {
         free_list.emplace_back(std::move(storage));
+        ENVOY_LOG(debug, "Slice::freeStorage to free list {} free_list size {}", capacity, free_list.size());
         ASSERT(storage == nullptr);
         return;
       }
     }
 
+    ENVOY_LOG(debug, "Slice::freeStorage {}", capacity);
     total_memory_freed++;
     storage.reset();
   }
 
-  static thread_local FreeListType free_list_;
 
   /** Length of the byte array that base_ points to. This is also the offset in bytes from the start
    * of the slice to the end of the Reservable section. */

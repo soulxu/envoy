@@ -71,6 +71,7 @@ Http::Code ServerInfoHandler::handlerServerInfo(absl::string_view, Http::Respons
                                                 Buffer::Instance& response, AdminStream&) {
   ENVOY_LOG(debug, "########### the total memory allocated {}", Buffer::Slice::total_memory_allocated);
   ENVOY_LOG(debug, "########### the total memory freed {}", Buffer::Slice::total_memory_freed);
+  ENVOY_LOG(debug, "########### the free list size {}", Buffer::Slice::free_list_.size());
   const std::time_t current_time =
       std::chrono::system_clock::to_time_t(server_.timeSource().systemTime());
   const std::time_t uptime_current_epoch = current_time - server_.startTimeCurrentEpoch();

@@ -29,7 +29,7 @@ void OwnedImpl::addImpl(const void* data, uint64_t size) {
   bool new_slice_needed = slices_.empty();
   while (size != 0) {
     if (new_slice_needed) {
-      slices_.emplace_back(Slice(size, account_));
+      slices_.emplace_back(Slice(size, account_, Slice::freeList()));
     }
     uint64_t copy_size = slices_.back().append(src, size);
     src += copy_size;
@@ -72,7 +72,7 @@ void OwnedImpl::prepend(absl::string_view data) {
   bool new_slice_needed = slices_.empty();
   while (size != 0) {
     if (new_slice_needed) {
-      slices_.emplace_front(Slice(size, account_));
+      slices_.emplace_front(Slice(size, account_, Slice::freeList()));
     }
     uint64_t copy_size = slices_.front().prepend(data.data(), size);
     size -= copy_size;
