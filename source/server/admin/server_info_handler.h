@@ -13,7 +13,7 @@
 namespace Envoy {
 namespace Server {
 
-class ServerInfoHandler : public HandlerContextBase {
+class ServerInfoHandler : public HandlerContextBase, Logger::Loggable<Logger::Id::kafka> {
 
 public:
   ServerInfoHandler(Server::Instance& server);

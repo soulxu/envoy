@@ -16,7 +16,7 @@
 
 namespace Envoy {
 namespace Buffer {
-
+class OwnedImpl;
 /**
  * A Slice manages a contiguous block of bytes.
  * The block is arranged like this:
@@ -45,6 +45,9 @@ public:
     FreeListType& free_list_;
     friend class Slice;
   };
+
+  static std::atomic_int64_t total_memory_allocated;
+  static std::atomic_int64_t total_memory_freed;
 
   /**
    * Create an empty Slice with 0 capacity.
@@ -352,6 +355,8 @@ protected:
     return num_pages * PageSize;
   }
 
+  
+
   static StoragePtr newStorage(uint64_t capacity, absl::optional<FreeListReference> free_list_opt) {
     ASSERT(sliceSize(default_slice_size_) == default_slice_size_,
            "default_slice_size_ incompatible with sliceSize()");
@@ -371,6 +376,7 @@ protected:
       }
     }
 
+    total_memory_allocated++;
     storage.reset(new uint8_t[capacity]);
     return storage;
   }
@@ -390,6 +396,7 @@ protected:
       }
     }
 
+    total_memory_freed++;
     storage.reset();
   }
 

@@ -1,6 +1,7 @@
 #include "source/server/admin/server_info_handler.h"
 
 #include "envoy/admin/v3/memory.pb.h"
+#include "source/common/buffer/buffer_impl.h"
 
 #include "source/common/memory/stats.h"
 #include "source/common/version/version.h"
@@ -68,6 +69,8 @@ Http::Code ServerInfoHandler::handlerReady(absl::string_view, Http::ResponseHead
 
 Http::Code ServerInfoHandler::handlerServerInfo(absl::string_view, Http::ResponseHeaderMap& headers,
                                                 Buffer::Instance& response, AdminStream&) {
+  ENVOY_LOG(debug, "########### the total memory allocated {}", Buffer::Slice::total_memory_allocated);
+  ENVOY_LOG(debug, "########### the total memory freed {}", Buffer::Slice::total_memory_freed);
   const std::time_t current_time =
       std::chrono::system_clock::to_time_t(server_.timeSource().systemTime());
   const std::time_t uptime_current_epoch = current_time - server_.startTimeCurrentEpoch();

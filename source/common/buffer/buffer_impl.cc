@@ -19,6 +19,9 @@ namespace {
 constexpr uint64_t CopyThreshold = 512;
 } // namespace
 
+std::atomic_int64_t Slice::total_memory_allocated = 0;
+std::atomic_int64_t Slice::total_memory_freed = 0;
+
 thread_local absl::InlinedVector<Slice::StoragePtr, Slice::free_list_max_> Slice::free_list_;
 
 void OwnedImpl::addImpl(const void* data, uint64_t size) {
