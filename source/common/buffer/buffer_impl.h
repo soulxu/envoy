@@ -16,7 +16,7 @@
 
 namespace Envoy {
 namespace Buffer {
-
+class OwnedImpl;
 /**
  * A Slice manages a contiguous block of bytes.
  * The block is arranged like this:
@@ -37,7 +37,7 @@ public:
   using Reservation = RawSlice;
   using StoragePtr = std::unique_ptr<uint8_t[]>;
 
-  static constexpr uint32_t free_list_max_ = Buffer::Reservation::MAX_SLICES_;
+  static constexpr uint32_t free_list_max_ = 1024;
   using FreeListType = absl::InlinedVector<StoragePtr, free_list_max_>;
   class FreeListReference {
   private:
@@ -45,6 +45,8 @@ public:
     FreeListType& free_list_;
     friend class Slice;
   };
+  static thread_local FreeListType free_list_;
+  static thread_local bool cache_allocated;
 
   /**
    * Create an empty Slice with 0 capacity.
@@ -99,7 +101,7 @@ public:
     if (this != &rhs) {
       callAndClearDrainTrackersAndCharges();
 
-      freeStorage(std::move(storage_), capacity_);
+      freeStorage(std::move(storage_), capacity_, Slice::freeList());
       storage_ = std::move(rhs.storage_);
       drain_trackers_ = std::move(rhs.drain_trackers_);
       account_ = std::move(rhs.account_);
@@ -119,7 +121,7 @@ public:
 
   ~Slice() {
     callAndClearDrainTrackersAndCharges();
-    freeStorage(std::move(storage_), capacity_);
+    freeStorage(std::move(storage_), capacity_, Slice::freeList());
   }
 
   void freeStorage(FreeListReference free_list) {
@@ -340,6 +342,17 @@ public:
 
   static FreeListReference freeList() { return FreeListReference(free_list_); }
 
+  static void initializeStorage() {
+    if (!cache_allocated) {
+      //ENVOY_LOG(debug, "############# Slice::newStorage initialize the cache");
+      for (uint32_t i = 0; i < free_list_max_; i++) {
+        //StoragePtr newstorage;
+        //newstorage.reset();
+        free_list_.emplace_back(new uint8_t[default_slice_size_]);
+      }
+      cache_allocated = true;
+    }
+  }
 protected:
   /**
    * Compute a slice size big enough to hold a specified amount of data.
@@ -352,13 +365,14 @@ protected:
     return num_pages * PageSize;
   }
 
+  
+
   static StoragePtr newStorage(uint64_t capacity, absl::optional<FreeListReference> free_list_opt) {
     ASSERT(sliceSize(default_slice_size_) == default_slice_size_,
            "default_slice_size_ incompatible with sliceSize()");
     ASSERT(sliceSize(capacity) == capacity,
            "newStorage should only be called on values returned from sliceSize()");
     ASSERT(!free_list_opt.has_value() || &free_list_opt->free_list_ == &free_list_);
-
     StoragePtr storage;
     if (capacity == default_slice_size_ && free_list_opt.has_value()) {
       FreeListType& free_list = free_list_opt->free_list_;
@@ -380,20 +394,18 @@ protected:
     if (storage == nullptr) {
       return;
     }
-
+    
     if (capacity == default_slice_size_ && free_list_opt.has_value()) {
       FreeListType& free_list = free_list_opt->free_list_;
-      if (free_list.size() < free_list_max_) {
+      if (free_list.size() <= free_list_max_) {
         free_list.emplace_back(std::move(storage));
         ASSERT(storage == nullptr);
         return;
       }
     }
-
     storage.reset();
   }
 
-  static thread_local FreeListType free_list_;
 
   /** Length of the byte array that base_ points to. This is also the offset in bytes from the start
    * of the slice to the end of the Reservable section. */

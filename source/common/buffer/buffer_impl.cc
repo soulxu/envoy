@@ -20,13 +20,14 @@ constexpr uint64_t CopyThreshold = 512;
 } // namespace
 
 thread_local absl::InlinedVector<Slice::StoragePtr, Slice::free_list_max_> Slice::free_list_;
+thread_local bool Slice::cache_allocated = false;
 
 void OwnedImpl::addImpl(const void* data, uint64_t size) {
   const char* src = static_cast<const char*>(data);
   bool new_slice_needed = slices_.empty();
   while (size != 0) {
     if (new_slice_needed) {
-      slices_.emplace_back(Slice(size, account_));
+      slices_.emplace_back(Slice(size, account_, Slice::freeList()));
     }
     uint64_t copy_size = slices_.back().append(src, size);
     src += copy_size;
@@ -69,7 +70,7 @@ void OwnedImpl::prepend(absl::string_view data) {
   bool new_slice_needed = slices_.empty();
   while (size != 0) {
     if (new_slice_needed) {
-      slices_.emplace_front(Slice(size, account_));
+      slices_.emplace_front(Slice(size, account_, Slice::freeList()));
     }
     uint64_t copy_size = slices_.front().prepend(data.data(), size);
     size -= copy_size;
