@@ -384,7 +384,7 @@ protected:
           for (uint32_t i = 0; i < free_list_max_; i++) {
             StoragePtr newstorage;
             newstorage.reset(new uint8_t[default_slice_size_]);
-            free_list.push_back(std::move(newstorage));
+            free_list.emplace_back(std::move(newstorage));
           }
           cache_allocated = true;
           return newStorage(capacity, free_list_opt);
