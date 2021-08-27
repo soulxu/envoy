@@ -384,6 +384,7 @@ protected:
           newstorage.reset(new uint8_t[default_slice_size_]);
           free_list.push_back(std::move(newstorage));
 	      }
+        return newStorage(capacity, free_list_opt);
 			}
     }
 
