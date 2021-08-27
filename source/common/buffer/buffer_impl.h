@@ -46,6 +46,7 @@ public:
     friend class Slice;
   };
   static thread_local FreeListType free_list_;
+  static thread_local bool cache_allocated;
 
   static std::atomic_int64_t total_memory_allocated_from_system;
   static std::atomic_int64_t total_memory_allocated;
@@ -379,12 +380,15 @@ protected:
         return storage;
       }
       else {
-	      for (uint32_t i = 0; i < free_list_max_; i++) {
-          StoragePtr newstorage;
-          newstorage.reset(new uint8_t[default_slice_size_]);
-          free_list.push_back(std::move(newstorage));
-	      }
-        return newStorage(capacity, free_list_opt);
+        if (!cache_allocated) {
+          for (uint32_t i = 0; i < free_list_max_; i++) {
+            StoragePtr newstorage;
+            newstorage.reset(new uint8_t[default_slice_size_]);
+            free_list.push_back(std::move(newstorage));
+          }
+          cache_allocated = true;
+          return newStorage(capacity, free_list_opt);
+        }
 			}
     }
 
