@@ -32,7 +32,7 @@ class OwnedImpl;
  * |                 |                |                      |
  * base_             data()           base_ + reservable_    base_ + capacity_
  */
-class Slice: Logger::Loggable<Logger::Id::kafka> {
+class Slice {
 public:
   using Reservation = RawSlice;
   using StoragePtr = std::unique_ptr<uint8_t[]>;
@@ -46,7 +46,10 @@ public:
     friend class Slice;
   };
   static thread_local FreeListType free_list_;
+
+  static std::atomic_int64_t total_memory_allocated_from_system;
   static std::atomic_int64_t total_memory_allocated;
+  static std::atomic_int64_t total_memory_freed_to_system;
   static std::atomic_int64_t total_memory_freed;
 
   /**
@@ -364,6 +367,7 @@ protected:
            "newStorage should only be called on values returned from sliceSize()");
     ASSERT(!free_list_opt.has_value() || &free_list_opt->free_list_ == &free_list_);
     StoragePtr storage;
+    //total_memory_allocated_from_system++;
     if (capacity == default_slice_size_ && free_list_opt.has_value()) {
       FreeListType& free_list = free_list_opt->free_list_;
       if (!free_list.empty()) {
@@ -371,13 +375,20 @@ protected:
         ASSERT(storage != nullptr);
         ASSERT(free_list.back() == nullptr);
         free_list.pop_back();
-    	ENVOY_LOG(debug, "Slice::newStorage from free list {}, free list size {}", capacity, free_list.size());
+    	  //ENVOY_LOG(debug, "Slice::newStorage from free list {}, free list size {}", capacity, free_list.size());
         return storage;
       }
+      else {
+	      for (uint32_t i = 0; i < free_list_max_; i++) {
+          StoragePtr newstorage;
+          newstorage.reset(new uint8_t[default_slice_size_]);
+          free_list.push_back(std::move(newstorage));
+	      }
+			}
     }
 
-    ENVOY_LOG(debug, "Slice::newStorage {}", capacity);
-    total_memory_allocated++;
+    //ENVOY_LOG(debug, "Slice::newStorage {}", capacity);
+    //total_memory_allocated++;
     storage.reset(new uint8_t[capacity]);
     return storage;
   }
@@ -387,19 +398,20 @@ protected:
     if (storage == nullptr) {
       return;
     }
-
+    //total_memory_freed_to_system++;
     if (capacity == default_slice_size_ && free_list_opt.has_value()) {
       FreeListType& free_list = free_list_opt->free_list_;
       if (free_list.size() < free_list_max_) {
         free_list.emplace_back(std::move(storage));
-        ENVOY_LOG(debug, "Slice::freeStorage to free list {} free_list size {}", capacity, free_list.size());
+        //ENVOY_LOG(debug, "Slice::freeStorage to free list {} free_list size {} free list max{}", capacity, free_list.size(), free_list_max_);
         ASSERT(storage == nullptr);
         return;
       }
     }
-
-    ENVOY_LOG(debug, "Slice::freeStorage {}", capacity);
-    total_memory_freed++;
+    //total_memory_freed++;
+    //ENVOY_LOG(debug, "Slice::freeStorage {}", capacity);
+    //ENVOY_LOG(debug, "total_memory_allocated_from_system = {}, total_memory_allocated = {}, total_memory_freed_to_system = {}, total_memory_freed = {}",
+    //          total_memory_allocated_from_system, total_memory_allocated, total_memory_freed_to_system, total_memory_freed);
     storage.reset();
   }
 
