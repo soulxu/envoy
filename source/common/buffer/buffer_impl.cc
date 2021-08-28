@@ -23,6 +23,7 @@ std::atomic_int64_t Slice::total_memory_allocated_from_system = 0;
 std::atomic_int64_t Slice::total_memory_allocated = 0;
 std::atomic_int64_t Slice::total_memory_freed_to_system = 0;
 std::atomic_int64_t Slice::total_memory_freed = 0;
+size_t Slice::min_size_of_cache = 50000;
 
 thread_local absl::InlinedVector<Slice::StoragePtr, Slice::free_list_max_> Slice::free_list_;
 thread_local bool Slice::cache_allocated = false;

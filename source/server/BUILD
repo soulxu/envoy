@@ -639,6 +639,7 @@ envoy_cc_library(
     deps = [
         ":connection_handler_lib",
         ":listener_hooks_lib",
+        "//source/common/buffer:buffer_lib",
         "//envoy/api:api_interface",
         "//envoy/event:dispatcher_interface",
         "//envoy/event:timer_interface",
