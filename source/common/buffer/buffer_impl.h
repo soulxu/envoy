@@ -37,7 +37,7 @@ public:
   using Reservation = RawSlice;
   using StoragePtr = std::unique_ptr<uint8_t[]>;
 
-  static constexpr uint32_t free_list_max_ = 1024;
+  static constexpr uint32_t free_list_max_ = 10240;
   using FreeListType = absl::InlinedVector<StoragePtr, free_list_max_>;
   class FreeListReference {
   private:
@@ -380,7 +380,7 @@ protected:
            "newStorage should only be called on values returned from sliceSize()");
     ASSERT(!free_list_opt.has_value() || &free_list_opt->free_list_ == &free_list_);
     StoragePtr storage;
-    total_memory_allocated++;
+    //total_memory_allocated++;
     if (capacity == default_slice_size_ && free_list_opt.has_value()) {
       FreeListType& free_list = free_list_opt->free_list_;
       if (!free_list.empty()) {
@@ -388,16 +388,16 @@ protected:
         ASSERT(storage != nullptr);
         ASSERT(free_list.back() == nullptr);
         free_list.pop_back();
-        if (free_list.size() < min_size_of_cache) {
-          min_size_of_cache = free_list.size();
-        }
-    	  ENVOY_LOG(debug, "Slice::newStorage from free list {}, free list size {}", capacity, free_list.size());
+        //if (free_list.size() < min_size_of_cache) {
+          //min_size_of_cache = free_list.size();
+        //}
+    	  //ENVOY_LOG(debug, "Slice::newStorage from free list {}, free list size {}", capacity, free_list.size());
         return storage;
       }
     }
 
-    ENVOY_LOG(debug, "Slice::newStorage {}", capacity);
-    total_memory_allocated_from_system++;
+    //ENVOY_LOG(debug, "Slice::newStorage {}", capacity);
+    //total_memory_allocated_from_system++;
     storage.reset(new uint8_t[capacity]);
     return storage;
   }
@@ -407,7 +407,7 @@ protected:
     if (storage == nullptr) {
       return;
     }
-    total_memory_freed++;
+    //total_memory_freed++;
     
     if (capacity == default_slice_size_ && free_list_opt.has_value()) {
       FreeListType& free_list = free_list_opt->free_list_;
@@ -418,10 +418,10 @@ protected:
         return;
       }
     }
-    total_memory_freed_to_system++;
-    ENVOY_LOG(debug, "Slice::freeStorage {}", capacity);
-    ENVOY_LOG(debug, "total_memory_allocated_from_system = {}, total_memory_allocated = {}, total_memory_freed_to_system = {}, total_memory_freed = {}, min_size_of_cache = {}",
-              total_memory_allocated_from_system, total_memory_allocated, total_memory_freed_to_system, total_memory_freed, min_size_of_cache);
+    //total_memory_freed_to_system++;
+    //ENVOY_LOG(debug, "Slice::freeStorage {}", capacity);
+    //ENVOY_LOG(debug, "total_memory_allocated_from_system = {}, total_memory_allocated = {}, total_memory_freed_to_system = {}, total_memory_freed = {}, min_size_of_cache = {}",
+              //total_memory_allocated_from_system, total_memory_allocated, total_memory_freed_to_system, total_memory_freed, min_size_of_cache);
     storage.reset();
   }
 

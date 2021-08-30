@@ -117,7 +117,7 @@ void WorkerImpl::stopListener(Network::ListenerConfig& listener, std::function<v
 
 void WorkerImpl::threadRoutine(GuardDog& guard_dog, const Event::PostCb& cb) {
   ENVOY_LOG(debug, "worker entering dispatch loop");
-  Buffer::Slice::initializeStorage();
+  //Buffer::Slice::initializeStorage();
   // The watch dog must be created after the dispatcher starts running and has post events flushed,
   // as this is when TLS stat scopes start working.
   dispatcher_->post([this, &guard_dog, cb]() {
