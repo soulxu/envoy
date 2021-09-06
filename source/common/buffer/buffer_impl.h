@@ -364,7 +364,7 @@ protected:
   }
 
   static bool isCachedStorage(uint8_t* s) {
-    return (s > cached_storage_.get()) && s < (cached_storage_.get() + default_cached_storage_size);
+    return (s >= cached_storage_.get()) && s < (cached_storage_.get() + default_cached_storage_size);
   }
 
   static StoragePtr newStorage(uint64_t capacity, absl::optional<FreeListReference> free_list_opt) {
