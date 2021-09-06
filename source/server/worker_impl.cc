@@ -9,6 +9,7 @@
 #include "envoy/server/configuration.h"
 #include "envoy/thread_local/thread_local.h"
 
+#include "source/common/buffer/buffer_impl.h"
 #include "source/server/connection_handler_impl.h"
 
 namespace Envoy {
@@ -121,6 +122,7 @@ void WorkerImpl::stopListener(Network::ListenerConfig& listener, std::function<v
 
 void WorkerImpl::threadRoutine(GuardDog& guard_dog, const Event::PostCb& cb) {
   ENVOY_LOG(debug, "worker entering dispatch loop");
+  Buffer::Slice::initializeCachedStorage();
   // The watch dog must be created after the dispatcher starts running and has post events flushed,
   // as this is when TLS stat scopes start working.
   dispatcher_->post([this, &guard_dog, cb]() {

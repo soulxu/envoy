@@ -649,6 +649,7 @@ envoy_cc_library(
         "//envoy/server:worker_interface",
         "//envoy/thread:thread_interface",
         "//envoy/thread_local:thread_local_interface",
+        "//source/common/buffer:buffer_lib",
     ],
 )
 
