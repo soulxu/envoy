@@ -341,7 +341,10 @@ public:
   static FreeListReference freeList() { return FreeListReference(free_list_); }
 
   static void initializeCachedStorage() {
-    cached_storage_.reset(new uint8_t[default_cached_storage_size]);
+    void *hugepage = mmap(nullptr, default_cached_storage_size, PROT_READ | PROT_WRITE,
+                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
+                 -1, 0);
+    cached_storage_.reset(static_cast<uint8_t*>(hugepage));
     auto* base = cached_storage_.get();
     for (uint32_t i = 0; i < free_list_max_; i++) {
       free_list_.emplace_back(base + (i * default_slice_size_));
