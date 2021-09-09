@@ -397,7 +397,7 @@ protected:
 
     if (isCachedStorage(storage.get())) {
       FreeListType& free_list = free_list_opt->free_list_;
-      if (free_list.size() <= free_list_max_) {
+      if (free_list.size() < free_list_max_) {
         free_list.emplace_back(storage.release());
         ASSERT(storage == nullptr);
         return;
@@ -802,7 +802,6 @@ private:
 
     ~OwnedImplReservationSlicesOwnerMultiple() override {
       while (!owned_slices_.empty()) {
-        owned_slices_.back().freeStorage(free_list_);
         owned_slices_.pop_back();
       }
     }
