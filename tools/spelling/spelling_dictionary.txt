@@ -1090,6 +1090,7 @@ setsockopt
 sig
 sigaction
 sigactions
+sigaltstack
 siginfo
 signalstack
 siloed
