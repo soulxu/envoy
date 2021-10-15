@@ -110,18 +110,22 @@ Api::IoCallUint64Result IoSocketHandleImpl::readv(uint64_t max_length, Buffer::R
 
 Api::IoCallUint64Result IoSocketHandleImpl::read(Buffer::Instance& buffer,
                                                  absl::optional<uint64_t> max_length_opt) {
-  const uint64_t max_length = max_length_opt.value_or(UINT64_MAX);
+  uint64_t max_length = max_length_opt.value_or(UINT64_MAX);
   if (max_length == 0) {
     return Api::ioCallUint64ResultNoError();
   }
   if constexpr (Event::PlatformDefaultTriggerType == Event::FileTriggerType::EmulatedEdge) {
     if (buffer_->length() > 0) {
-      auto move_length = std::min(buffer_->length(), max_length);
-      buffer.move(*buffer_);
-      if (file_event_) {
-        file_event_->registerEventIfEmulatedEdge(Event::FileReadyType::Read);
+      Api::IoCallUint64Result result = readFromPeekBuffer(buffer, max_length);
+      // If the buffer hasn't enough data, then read from real socket.
+      if (result.return_value_ < max_length) {
+        max_length = max_length - result.return_value_;
+      } else {
+        if (file_event_) {
+          file_event_->registerEventIfEmulatedEdge(Event::FileReadyType::Read);
+        }
+        return result;
       }
-      return Api::IoCallUint64Result(move_length, Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
     }
   }
   Buffer::Reservation reservation = buffer.reserveForRead();
@@ -511,44 +515,84 @@ Api::IoCallUint64Result IoSocketHandleImpl::recvmmsg(RawSliceArrays& slices, uin
   return sysCallResultToIoCallResult(result);
 }
 
+Api::IoCallUint64Result IoSocketHandleImpl::readIntoPeekBuffer(size_t length) {
+  uint64_t nread = 0;
+  while (true) {
+    Buffer::Reservation reservation = buffer_->reserveForRead();
+    Api::IoCallUint64Result result =
+        readv(std::min(reservation.length(), length), reservation.slices(), reservation.numSlices());
+    uint64_t bytes_to_commit = result.ok() ? result.return_value_ : 0;
+    reservation.commit(bytes_to_commit);
+    nread += bytes_to_commit;
+
+    if (!result.ok()) {
+      return result;
+    }
+
+    if (nread >= length) {
+      return result;
+    }
+  }
+}
+
+Api::IoCallUint64Result IoSocketHandleImpl::readFromPeekBuffer(void* buffer, size_t length) {
+  uint64_t copy_size = std::min(buffer_->length(), length);
+  buffer_->copyOut(0, copy_size, buffer);
+  buffer_->drain(copy_size);
+  return Api::IoCallUint64Result(copy_size, Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
+}
+
+Api::IoCallUint64Result IoSocketHandleImpl::readFromPeekBuffer(Buffer::Instance& buffer, size_t length) {
+  buffer_->move(buffer);
+  return Api::IoCallUint64Result(buffer.length(), Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
+}
+
+Api::IoCallUint64Result IoSocketHandleImpl::peekFromPeekBuffer(void* buffer, size_t length) {
+  uint64_t copy_size = std::min(buffer_->length(), length);
+  buffer_->copyOut(0, copy_size, buffer);
+  return Api::IoCallUint64Result(copy_size, Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
+}
+
 Api::IoCallUint64Result IoSocketHandleImpl::recv(void* buffer, size_t length, int flags) {
   if constexpr (Event::PlatformDefaultTriggerType == Event::FileTriggerType::EmulatedEdge) {
     // Mimic the MSG_PEEK by read data.
     if (flags & MSG_PEEK) {
-      // Actually, this drain the data out of socket buffer. Although the `buffer_` may
-      // already has the enough data, but we have to drain the socket to ensure there is
-      // no more `Read` event.
-      Buffer::Reservation reservation = buffer_->reserveForRead();
-      auto length_to_read = std::min(reservation.length(), length);
-      // TODO(soulxu): this should be in a while loop until eagain returned.
-      Api::IoCallUint64Result result =
-          readv(length_to_read, reservation.slices(), reservation.numSlices());
-      uint64_t bytes_to_commit = result.ok() ? result.return_value_ : 0;
-      reservation.commit(bytes_to_commit);
-      if (file_event_) {
-        file_event_->registerEventIfEmulatedEdge(Event::FileReadyType::Read);
-      }
-      // The read failed, then we return the failure also.
-      if (bytes_to_commit == 0) {
-        return result;
-      }
-      auto copy_size = std::min(buffer_->length(), length);
-      buffer_->copyOut(0, copy_size, buffer);
-      return Api::IoCallUint64Result(copy_size, Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
-      ;
-    } else {
       if (buffer_->length() > 0) {
-        auto copy_size = std::min(buffer_->length(), length);
-        buffer_->copyOut(0, copy_size, buffer);
-        buffer_->drain(copy_size);
-        if (copy_size < length) {
-          length = length - copy_size;
-        } else {
+        Api::IoCallUint64Result result = peekFromPeekBuffer(buffer, length);
+        if (result.return_value_ == length) {
+          return result;
+        }
+        length -= result.return_value_;
+      }
+
+      // If read the same length of data with `length`, then the `Read` event
+      // won't be register back again. Assume the caller won't change the max length
+      // of peek data.
+      Api::IoCallUint64Result result = readIntoPeekBuffer(length);
+      // The read failed, then return the failure directly.
+      if (!result.ok()) {
+        if (result.wouldBlock()) {
           if (file_event_) {
             file_event_->registerEventIfEmulatedEdge(Event::FileReadyType::Read);
           }
-          return Api::IoCallUint64Result(copy_size, Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
+        } else {
+          return result;
         }
+      }
+
+      return peekFromPeekBuffer(buffer, length);
+    }
+
+    if (buffer_->length() > 0) {
+      Api::IoCallUint64Result result = readFromPeekBuffer(buffer, length);
+      // If the buffer hasn't enough data, then read from real socket.
+      if (result.return_value_ < length) {
+        length = length - result.return_value_;
+      } else {
+        if (file_event_) {
+          file_event_->registerEventIfEmulatedEdge(Event::FileReadyType::Read);
+        }
+        return result;
       }
     }
   }
