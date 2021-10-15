@@ -102,6 +102,12 @@ protected:
              : Api::IoErrorPtr(new IoSocketError(result.errno_), IoSocketError::deleteIoError)));
   }
 
+  // For windows mimic MSG_PEEK
+  Api::IoCallUint64Result readIntoPeekBuffer(size_t length);
+  Api::IoCallUint64Result readFromPeekBuffer(void* buffer, size_t length);
+  Api::IoCallUint64Result readFromPeekBuffer(Buffer::Instance& buffer, size_t length);
+  Api::IoCallUint64Result peekFromPeekBuffer(void* buffer, size_t length);
+
   os_fd_t fd_;
   int socket_v6only_{false};
   const absl::optional<int> domain_;
