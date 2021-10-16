@@ -1,3 +1,5 @@
+#include "envoy/api/io_error.h"
+
 #include "source/common/http/utility.h"
 #include "source/common/network/io_socket_handle_impl.h"
 #include "source/common/network/listener_filter_buffer_impl.h"
@@ -13,11 +15,13 @@
 #include "openssl/ssl.h"
 
 using testing::_;
+using testing::ByMove;
 using testing::Eq;
 using testing::InSequence;
 using testing::Invoke;
 using testing::InvokeWithoutArgs;
 using testing::NiceMock;
+using testing::Return;
 using testing::ReturnNew;
 using testing::ReturnRef;
 using testing::SaveArg;
@@ -30,26 +34,22 @@ namespace {
 
 class TlsInspectorTest : public testing::TestWithParam<std::tuple<uint16_t, uint16_t>> {
 public:
-  TlsInspectorTest()
-      : cfg_(std::make_shared<Config>(store_)),
-        io_handle_(std::make_unique<Network::IoSocketHandleImpl>(42)) {}
+  TlsInspectorTest() : cfg_(std::make_shared<Config>(store_)) {}
 
   void init() {
     filter_ = std::make_unique<Filter>(cfg_);
 
     EXPECT_CALL(cb_, socket()).WillRepeatedly(ReturnRef(socket_));
-    EXPECT_CALL(socket_, ioHandle()).WillRepeatedly(ReturnRef(*io_handle_));
-    EXPECT_CALL(dispatcher_, createFileEvent_(_, _, Event::PlatformDefaultTriggerType,
-                                              Event::FileReadyType::Read))
-        .WillOnce(
-            DoAll(SaveArg<1>(&file_event_callback_), ReturnNew<NiceMock<Event::MockFileEvent>>()));
+    EXPECT_CALL(socket_, ioHandle()).WillRepeatedly(ReturnRef(io_handle_));
+    EXPECT_CALL(io_handle_, createFileEvent_(_, _, Event::PlatformDefaultTriggerType,
+                                             Event::FileReadyType::Read))
+        .WillOnce(SaveArg<1>(&file_event_callback_));
+
     buffer_ = std::make_unique<Network::ListenerFilterBufferImpl>(
-        *io_handle_, dispatcher_, []() {}, []() {}, cfg_->maxClientHelloSize());
+        io_handle_, dispatcher_, []() {}, []() {}, cfg_->maxClientHelloSize());
     filter_->onAccept(cb_);
   }
 
-  NiceMock<Api::MockOsSysCalls> os_sys_calls_;
-  TestThreadsafeSingletonInjector<Api::OsSysCallsImpl> os_calls_{&os_sys_calls_};
   Stats::IsolatedStoreImpl store_;
   ConfigSharedPtr cfg_;
   std::unique_ptr<Filter> filter_;
@@ -57,7 +57,7 @@ public:
   Network::MockConnectionSocket socket_;
   NiceMock<Event::MockDispatcher> dispatcher_;
   Event::FileReadyCb file_event_callback_;
-  Network::IoHandlePtr io_handle_;
+  Network::MockIoHandle io_handle_;
   std::unique_ptr<Network::ListenerFilterBufferImpl> buffer_;
 };
 
@@ -81,12 +81,13 @@ TEST_P(TlsInspectorTest, SniRegistered) {
   const std::string servername("example.com");
   std::vector<uint8_t> client_hello = Tls::Test::generateClientHello(
       std::get<0>(GetParam()), std::get<1>(GetParam()), servername, "");
-  EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
-      .WillOnce(Invoke(
-          [&client_hello](os_fd_t, void* buffer, size_t length, int) -> Api::SysCallSizeResult {
+  EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK))
+      .WillOnce(
+          Invoke([&client_hello](void* buffer, size_t length, int) -> Api::IoCallUint64Result {
             ASSERT(length >= client_hello.size());
             memcpy(buffer, client_hello.data(), client_hello.size());
-            return Api::SysCallSizeResult{ssize_t(client_hello.size()), 0};
+            return Api::IoCallUint64Result(client_hello.size(),
+                                           Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
           }));
   EXPECT_CALL(socket_, setRequestedServerName(Eq(servername)));
   EXPECT_CALL(socket_, setRequestedApplicationProtocols(_)).Times(0);
@@ -107,12 +108,13 @@ TEST_P(TlsInspectorTest, AlpnRegistered) {
                                                           Http::Utility::AlpnNames::get().Http11};
   std::vector<uint8_t> client_hello = Tls::Test::generateClientHello(
       std::get<0>(GetParam()), std::get<1>(GetParam()), "", "\x02h2\x08http/1.1");
-  EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
-      .WillOnce(Invoke(
-          [&client_hello](os_fd_t, void* buffer, size_t length, int) -> Api::SysCallSizeResult {
+  EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK))
+      .WillOnce(
+          Invoke([&client_hello](void* buffer, size_t length, int) -> Api::IoCallUint64Result {
             ASSERT(length >= client_hello.size());
             memcpy(buffer, client_hello.data(), client_hello.size());
-            return Api::SysCallSizeResult{ssize_t(client_hello.size()), 0};
+            return Api::IoCallUint64Result(client_hello.size(),
+                                           Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
           }));
   EXPECT_CALL(socket_, setRequestedServerName(_)).Times(0);
   EXPECT_CALL(socket_, setRequestedApplicationProtocols(alpn_protos));
@@ -135,18 +137,20 @@ TEST_P(TlsInspectorTest, MultipleReads) {
       std::get<0>(GetParam()), std::get<1>(GetParam()), servername, "\x02h2");
   {
     InSequence s;
-    EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
-        .WillOnce(InvokeWithoutArgs([]() -> Api::SysCallSizeResult {
-          return Api::SysCallSizeResult{ssize_t(-1), SOCKET_ERROR_AGAIN};
+    EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK))
+        .WillOnce(InvokeWithoutArgs([]() -> Api::IoCallUint64Result {
+          return Api::IoCallUint64Result(
+              -1, Api::IoErrorPtr(Network::IoSocketError::getIoSocketEagainInstance(),
+                                  Network::IoSocketError::deleteIoError));
         }));
     for (size_t i = 1; i <= client_hello.size(); i++) {
-      EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
-          .WillOnce(Invoke([&client_hello, i](os_fd_t, void* buffer, size_t length,
-                                              int) -> Api::SysCallSizeResult {
-            ASSERT(length >= client_hello.size());
-            memcpy(buffer, client_hello.data(), client_hello.size());
-            return Api::SysCallSizeResult{ssize_t(i), 0};
-          }));
+      EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK))
+          .WillOnce(Invoke(
+              [&client_hello, i](void* buffer, size_t length, int) -> Api::IoCallUint64Result {
+                ASSERT(length >= client_hello.size());
+                memcpy(buffer, client_hello.data(), client_hello.size());
+                return Api::IoCallUint64Result(i, Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
+              }));
     }
   }
 
@@ -172,12 +176,13 @@ TEST_P(TlsInspectorTest, NoExtensions) {
   init();
   std::vector<uint8_t> client_hello =
       Tls::Test::generateClientHello(std::get<0>(GetParam()), std::get<1>(GetParam()), "", "");
-  EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
-      .WillOnce(Invoke(
-          [&client_hello](os_fd_t, void* buffer, size_t length, int) -> Api::SysCallSizeResult {
+  EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK))
+      .WillOnce(
+          Invoke([&client_hello](void* buffer, size_t length, int) -> Api::IoCallUint64Result {
             ASSERT(length >= client_hello.size());
             memcpy(buffer, client_hello.data(), client_hello.size());
-            return Api::SysCallSizeResult{ssize_t(client_hello.size()), 0};
+            return Api::IoCallUint64Result(client_hello.size(),
+                                           Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
           }));
   EXPECT_CALL(socket_, setRequestedServerName(_)).Times(0);
   EXPECT_CALL(socket_, setRequestedApplicationProtocols(_)).Times(0);
@@ -203,23 +208,25 @@ TEST_P(TlsInspectorTest, ClientHelloTooBig) {
   filter_ = std::make_unique<Filter>(cfg_);
 
   EXPECT_CALL(cb_, socket()).WillRepeatedly(ReturnRef(socket_));
-  EXPECT_CALL(socket_, ioHandle()).WillRepeatedly(ReturnRef(*io_handle_));
-  EXPECT_CALL(dispatcher_,
+  EXPECT_CALL(socket_, ioHandle()).WillRepeatedly(ReturnRef(io_handle_));
+  EXPECT_CALL(io_handle_,
               createFileEvent_(_, _, Event::PlatformDefaultTriggerType, Event::FileReadyType::Read))
-      .WillOnce(
-          DoAll(SaveArg<1>(&file_event_callback_), ReturnNew<NiceMock<Event::MockFileEvent>>()));
+      .WillOnce(SaveArg<1>(&file_event_callback_));
   buffer_ = std::make_unique<Network::ListenerFilterBufferImpl>(
-      *io_handle_, dispatcher_, []() {}, []() {}, cfg_->maxClientHelloSize());
+      io_handle_, dispatcher_, []() {}, []() {}, cfg_->maxClientHelloSize());
 
   filter_->onAccept(cb_);
 
-  EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
-      .WillOnce(Invoke(
-          [=, &client_hello](os_fd_t, void* buffer, size_t length, int) -> Api::SysCallSizeResult {
+  EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK))
+      .WillOnce(
+          Invoke([=, &client_hello](void* buffer, size_t length, int) -> Api::IoCallUint64Result {
             ASSERT(length == max_size);
             memcpy(buffer, client_hello.data(), length);
-            return Api::SysCallSizeResult{ssize_t(length), 0};
+            return Api::IoCallUint64Result(length, Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
           }));
+  EXPECT_CALL(io_handle_, close())
+      .WillOnce(Return(
+          ByMove(Api::IoCallUint64Result(0, Api::IoErrorPtr(nullptr, [](Api::IoError*) {})))));
 
   // trigger the event to copy the client hello message into buffer
   file_event_callback_(Event::FileReadyType::Read);
@@ -236,13 +243,12 @@ TEST_P(TlsInspectorTest, NotSsl) {
   // Use 100 bytes of zeroes. This is not valid as a ClientHello.
   data.resize(100);
 
-  EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
-      .WillOnce(
-          Invoke([&data](os_fd_t, void* buffer, size_t length, int) -> Api::SysCallSizeResult {
-            ASSERT(length >= data.size());
-            memcpy(buffer, data.data(), data.size());
-            return Api::SysCallSizeResult{ssize_t(data.size()), 0};
-          }));
+  EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK))
+      .WillOnce(Invoke([&data](void* buffer, size_t length, int) -> Api::IoCallUint64Result {
+        ASSERT(length >= data.size());
+        memcpy(buffer, data.data(), data.size());
+        return Api::IoCallUint64Result(data.size(), Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
+      }));
   // trigger the event to copy the client hello message into buffer
   file_event_callback_(Event::FileReadyType::Read);
   auto state = filter_->onData(*buffer_);
