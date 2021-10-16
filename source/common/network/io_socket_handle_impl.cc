@@ -117,15 +117,10 @@ Api::IoCallUint64Result IoSocketHandleImpl::read(Buffer::Instance& buffer,
   if constexpr (Event::PlatformDefaultTriggerType == Event::FileTriggerType::EmulatedEdge) {
     if (buffer_->length() > 0) {
       Api::IoCallUint64Result result = readFromPeekBuffer(buffer, max_length);
-      // If the buffer hasn't enough data, then read from real socket.
-      if (result.return_value_ < max_length) {
-        max_length = max_length - result.return_value_;
-      } else {
-        if (file_event_) {
-          file_event_->registerEventIfEmulatedEdge(Event::FileReadyType::Read);
-        }
-        return result;
+      if (file_event_) {
+        file_event_->registerEventIfEmulatedEdge(Event::FileReadyType::Read);
       }
+      return result;
     }
   }
   Buffer::Reservation reservation = buffer.reserveForRead();
@@ -526,6 +521,12 @@ Api::IoCallUint64Result IoSocketHandleImpl::readIntoPeekBuffer(size_t length) {
     nread += bytes_to_commit;
 
     if (!result.ok()) {
+      if (result.wouldBlock() && nread > 0) {
+        return Api::IoCallUint64Result(nread, Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
+      }
+      return result;
+    } else if(bytes_to_commit == 0) {
+      // Remote closed.
       return result;
     }
 
@@ -543,8 +544,10 @@ Api::IoCallUint64Result IoSocketHandleImpl::readFromPeekBuffer(void* buffer, siz
 }
 
 Api::IoCallUint64Result IoSocketHandleImpl::readFromPeekBuffer(Buffer::Instance& buffer, size_t length) {
-  buffer_->move(buffer);
-  return Api::IoCallUint64Result(buffer.length(), Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
+  auto lenght_to_move = std::min(buffer_->length(), length);
+  buffer.move(*buffer_, lenght_to_move);
+  buffer_->drain(lenght_to_move);
+  return Api::IoCallUint64Result(lenght_to_move, Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
 }
 
 Api::IoCallUint64Result IoSocketHandleImpl::peekFromPeekBuffer(void* buffer, size_t length) {
@@ -575,9 +578,11 @@ Api::IoCallUint64Result IoSocketHandleImpl::recv(void* buffer, size_t length, in
           if (file_event_) {
             file_event_->registerEventIfEmulatedEdge(Event::FileReadyType::Read);
           }
-        } else {
-          return result;
         }
+        return result;
+      } else if (result.return_value_ == 0) {
+        // Remote closed;
+        return result;
       }
 
       return peekFromPeekBuffer(buffer, length);
@@ -585,15 +590,10 @@ Api::IoCallUint64Result IoSocketHandleImpl::recv(void* buffer, size_t length, in
 
     if (buffer_->length() > 0) {
       Api::IoCallUint64Result result = readFromPeekBuffer(buffer, length);
-      // If the buffer hasn't enough data, then read from real socket.
-      if (result.return_value_ < length) {
-        length = length - result.return_value_;
-      } else {
-        if (file_event_) {
-          file_event_->registerEventIfEmulatedEdge(Event::FileReadyType::Read);
-        }
-        return result;
+      if (file_event_) {
+        file_event_->registerEventIfEmulatedEdge(Event::FileReadyType::Read);
       }
+      return result;
     }
   }
   const Api::SysCallSizeResult result =
@@ -713,6 +713,9 @@ void IoSocketHandleImpl::initializeFileEvent(Event::Dispatcher& dispatcher, Even
   ASSERT(file_event_ == nullptr, "Attempting to initialize two `file_event_` for the same "
                                  "file descriptor. This is not allowed.");
   file_event_ = dispatcher.createFileEvent(fd_, cb, trigger, events);
+  if (buffer_->length() > 0) {
+    activateFileEvents(Event::FileReadyType::Read);
+  }
 }
 
 void IoSocketHandleImpl::activateFileEvents(uint32_t events) {
