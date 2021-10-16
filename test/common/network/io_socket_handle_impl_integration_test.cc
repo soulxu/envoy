@@ -222,7 +222,13 @@ TEST_P(IoSocketHandleImplPeekTest, RemoteClose2) {
   cb_ = [&]() {
     is_called = true;
     auto result = new_socket_->ioHandle().recv(buf, 5, MSG_PEEK);
+#ifdef WIN32
+    // TODO (soulxu): implement a same behavior with linux. but it should be
+    // enough for now.
     EXPECT_EQ(0, result.return_value_);
+#else
+    EXPECT_EQ(4, result.return_value_);
+#endif
     EXPECT_TRUE(result.ok());
   };
   client_connection_->write(*buffer, false);
@@ -318,12 +324,18 @@ TEST_P(IoSocketHandleImplPeekTest, RecvAfterPeek) {
 
   char buf2[5] = {'\0'};
   auto result1 = new_socket_->ioHandle().recv(buf2, 4, 0);
+#ifdef WIN32
   EXPECT_EQ(3, result1.return_value_);
+  EXPECT_EQ("abc", std::string(buf2));
 
   char buf3[5] = {'\0'};
   auto result2 = new_socket_->ioHandle().recv(buf3, 4, 0);
   EXPECT_EQ(1, result2.return_value_);
   EXPECT_EQ("d", std::string(buf3));
+#else
+  EXPECT_EQ(4, result1.return_value_);
+  EXPECT_EQ("abcd", std::string(buf2));
+#endif
 
   client_connection_->close(ConnectionCloseType::NoFlush);
 }
@@ -346,6 +358,7 @@ TEST_P(IoSocketHandleImplPeekTest, ReadAfterPeek) {
   EXPECT_TRUE(is_called);
 
   auto result = new_socket_->ioHandle().read(*read_buffer, 4);
+#ifdef WIN32
   EXPECT_EQ(3, result.return_value_);
   EXPECT_EQ("abc", read_buffer->toString());
 
@@ -353,6 +366,10 @@ TEST_P(IoSocketHandleImplPeekTest, ReadAfterPeek) {
   auto result2 = new_socket_->ioHandle().read(*read_buffer, 4);
   EXPECT_EQ(1, result2.return_value_);
   EXPECT_EQ("d", read_buffer->toString());
+#else
+  EXPECT_EQ(4, result.return_value_);
+  EXPECT_EQ("abcd", read_buffer->toString());
+#endif
 
   client_connection_->close(ConnectionCloseType::NoFlush);
 }
