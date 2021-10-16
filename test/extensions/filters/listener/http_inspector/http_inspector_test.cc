@@ -30,9 +30,8 @@ namespace {
 class HttpInspectorTest : public testing::Test {
 public:
   HttpInspectorTest()
-      : cfg_(std::make_shared<Config>(store_)),
-        io_handle_(std::make_unique<Network::IoSocketHandleImpl>(42)) {}
-  ~HttpInspectorTest() override { io_handle_->close(); }
+      : cfg_(std::make_shared<Config>(store_)) {}
+  ~HttpInspectorTest() override { }
 
   void init() {
     filter_ = std::make_unique<Filter>(cfg_);
@@ -40,14 +39,13 @@ public:
     EXPECT_CALL(cb_, socket()).WillRepeatedly(ReturnRef(socket_));
     EXPECT_CALL(socket_, detectedTransportProtocol()).WillRepeatedly(Return("raw_buffer"));
     EXPECT_CALL(cb_, dispatcher()).WillRepeatedly(ReturnRef(dispatcher_));
-    EXPECT_CALL(testing::Const(socket_), ioHandle()).WillRepeatedly(ReturnRef(*io_handle_));
-    EXPECT_CALL(socket_, ioHandle()).WillRepeatedly(ReturnRef(*io_handle_));
-    EXPECT_CALL(dispatcher_, createFileEvent_(_, _, Event::PlatformDefaultTriggerType,
-                                              Event::FileReadyType::Read))
-        .WillOnce(
-            DoAll(SaveArg<1>(&file_event_callback_), ReturnNew<NiceMock<Event::MockFileEvent>>()));
+    EXPECT_CALL(testing::Const(socket_), ioHandle()).WillRepeatedly(ReturnRef(io_handle_));
+    EXPECT_CALL(socket_, ioHandle()).WillRepeatedly(ReturnRef(io_handle_));
+    EXPECT_CALL(io_handle_, createFileEvent_(_, _, Event::PlatformDefaultTriggerType,
+                                             Event::FileReadyType::Read))
+        .WillOnce(SaveArg<1>(&file_event_callback_));
     buffer_ = std::make_unique<Network::ListenerFilterBufferImpl>(
-        *io_handle_, dispatcher_, []() {}, []() {}, filter_->maxReadBytes());
+        io_handle_, dispatcher_, []() {}, []() {}, filter_->maxReadBytes());
   }
 
   void testHttpInspectMultipleReadsSuccess(absl::string_view header, bool http2 = false) {
@@ -56,28 +54,29 @@ public:
     {
       InSequence s;
 
-      EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK)).WillOnce(InvokeWithoutArgs([]() {
-        return Api::SysCallSizeResult{ssize_t(-1), SOCKET_ERROR_AGAIN};
+      EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK)).WillOnce(InvokeWithoutArgs([]() {
+        return Api::IoCallUint64Result(-1, Api::IoErrorPtr(Network::IoSocketError::getIoSocketEagainInstance(),
+                                                     Network::IoSocketError::deleteIoError));
       }));
 
       if (http2) {
         for (size_t i = 1; i <= data.size(); i++) {
-          EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
+          EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK))
               .WillOnce(Invoke(
-                  [&data, i](os_fd_t, void* buffer, size_t length, int) -> Api::SysCallSizeResult {
+                  [&data, i](void* buffer, size_t length, int) -> Api::IoCallUint64Result {
                     ASSERT(length >= i);
                     memcpy(buffer, data.data(), i);
-                    return Api::SysCallSizeResult{ssize_t(i), 0};
+                    return Api::IoCallUint64Result(i, Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
                   }));
         }
       } else {
         for (size_t i = 1; i <= header.size(); i++) {
-          EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
-              .WillOnce(Invoke([&header, i](os_fd_t, void* buffer, size_t length,
-                                            int) -> Api::SysCallSizeResult {
+          EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK))
+              .WillOnce(Invoke([&header, i](void* buffer, size_t length,
+                                            int) -> Api::IoCallUint64Result {
                 ASSERT(length >= i);
                 memcpy(buffer, header.data(), i);
-                return Api::SysCallSizeResult{ssize_t(i), 0};
+                return Api::IoCallUint64Result(i, Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
               }));
         }
       }
@@ -106,28 +105,29 @@ public:
     {
       InSequence s;
 
-      EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK)).WillOnce(InvokeWithoutArgs([]() {
-        return Api::SysCallSizeResult{ssize_t(-1), SOCKET_ERROR_AGAIN};
+      EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK)).WillOnce(InvokeWithoutArgs([]() {
+        return Api::IoCallUint64Result(-1, Api::IoErrorPtr(Network::IoSocketError::getIoSocketEagainInstance(),
+                                                     Network::IoSocketError::deleteIoError));
       }));
 
       if (alpn == Http::Utility::AlpnNames::get().Http2c) {
         for (size_t i = 1; i <= 24; i++) {
-          EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
+          EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK))
               .WillOnce(Invoke(
-                  [&data, i](os_fd_t, void* buffer, size_t length, int) -> Api::SysCallSizeResult {
+                  [&data, i](void* buffer, size_t length, int) -> Api::IoCallUint64Result {
                     ASSERT(length >= i);
                     memcpy(buffer, data.data(), i);
-                    return Api::SysCallSizeResult{ssize_t(i), 0};
+                    return Api::IoCallUint64Result(i, Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
                   }));
         }
       } else {
         for (size_t i = 1; i <= header.size(); i++) {
-          EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
-              .WillOnce(Invoke([&header, i](os_fd_t, void* buffer, size_t length,
-                                            int) -> Api::SysCallSizeResult {
+          EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK))
+              .WillOnce(Invoke([&header, i](void* buffer, size_t length,
+                                            int) -> Api::IoCallUint64Result {
                 ASSERT(length >= i);
                 memcpy(buffer, header.data(), i);
-                return Api::SysCallSizeResult{ssize_t(i), 0};
+                return Api::IoCallUint64Result(i, Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
               }));
         }
       }
@@ -159,20 +159,20 @@ public:
     init();
     std::vector<uint8_t> data = Hex::decode(std::string(header));
     if (alpn == Http::Utility::AlpnNames::get().Http2c) {
-      EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
+      EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK))
           .WillOnce(
-              Invoke([&data](os_fd_t, void* buffer, size_t length, int) -> Api::SysCallSizeResult {
+              Invoke([&data](void* buffer, size_t length, int) -> Api::IoCallUint64Result {
                 ASSERT(length >= data.size());
                 memcpy(buffer, data.data(), data.size());
-                return Api::SysCallSizeResult{ssize_t(data.size()), 0};
+                return Api::IoCallUint64Result(data.size(), Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
               }));
     } else {
-      EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
+      EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK))
           .WillOnce(Invoke(
-              [&header](os_fd_t, void* buffer, size_t length, int) -> Api::SysCallSizeResult {
+              [&header](void* buffer, size_t length, int) -> Api::IoCallUint64Result {
                 ASSERT(length >= header.size());
                 memcpy(buffer, header.data(), header.size());
-                return Api::SysCallSizeResult{ssize_t(header.size()), 0};
+                return Api::IoCallUint64Result(header.size(), Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
               }));
     }
     const std::vector<absl::string_view> alpn_protos{alpn};
@@ -198,20 +198,20 @@ public:
     init();
     std::vector<uint8_t> data = Hex::decode(std::string(header));
     if (http2) {
-      EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
+      EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK))
           .WillOnce(
-              Invoke([&data](os_fd_t, void* buffer, size_t length, int) -> Api::SysCallSizeResult {
+              Invoke([&data](void* buffer, size_t length, int) -> Api::IoCallUint64Result {
                 ASSERT(length >= data.size());
                 memcpy(buffer, data.data(), data.size());
-                return Api::SysCallSizeResult{ssize_t(data.size()), 0};
+                return Api::IoCallUint64Result(data.size(), Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
               }));
     } else {
-      EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
+      EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK))
           .WillOnce(Invoke(
-              [&header](os_fd_t, void* buffer, size_t length, int) -> Api::SysCallSizeResult {
+              [&header](void* buffer, size_t length, int) -> Api::IoCallUint64Result {
                 ASSERT(length >= header.size());
                 memcpy(buffer, header.data(), header.size());
-                return Api::SysCallSizeResult{ssize_t(header.size()), 0};
+                return Api::IoCallUint64Result(header.size(), Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
               }));
     }
 
@@ -225,8 +225,6 @@ public:
     EXPECT_EQ(1, cfg_->stats().http_not_found_.value());
   }
 
-  NiceMock<Api::MockOsSysCalls> os_sys_calls_;
-  TestThreadsafeSingletonInjector<Api::OsSysCallsImpl> os_calls_{&os_sys_calls_};
   Stats::IsolatedStoreImpl store_;
   ConfigSharedPtr cfg_;
   std::unique_ptr<Filter> filter_;
@@ -234,7 +232,7 @@ public:
   Network::MockConnectionSocket socket_;
   NiceMock<Event::MockDispatcher> dispatcher_;
   Event::FileReadyCb file_event_callback_;
-  Network::IoHandlePtr io_handle_;
+  Network::MockIoHandle io_handle_;
   std::unique_ptr<Network::ListenerFilterBufferImpl> buffer_;
 };
 
@@ -242,7 +240,7 @@ TEST_F(HttpInspectorTest, SkipHttpInspectForTLS) {
   filter_ = std::make_unique<Filter>(cfg_);
 
   EXPECT_CALL(cb_, socket()).WillRepeatedly(ReturnRef(socket_));
-  EXPECT_CALL(socket_, ioHandle()).WillRepeatedly(ReturnRef(*io_handle_));
+  EXPECT_CALL(socket_, ioHandle()).WillRepeatedly(ReturnRef(io_handle_));
   EXPECT_CALL(socket_, detectedTransportProtocol()).WillRepeatedly(Return("TLS"));
   EXPECT_EQ(filter_->onAccept(cb_), Network::FilterStatus::Continue);
 }
@@ -333,12 +331,12 @@ TEST_F(HttpInspectorTest, InvalidConnectionPreface) {
 
   const std::string header = "505249202a20485454502f322e300d0a";
   std::vector<uint8_t> data = Hex::decode(std::string(header));
-  EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
+  EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK))
       .WillOnce(
-          Invoke([&data](os_fd_t, void* buffer, size_t length, int) -> Api::SysCallSizeResult {
+          Invoke([&data](void* buffer, size_t length, int) -> Api::IoCallUint64Result {
             ASSERT(length >= data.size());
             memcpy(buffer, data.data(), data.size());
-            return Api::SysCallSizeResult{ssize_t(data.size()), 0};
+            return Api::IoCallUint64Result(data.size(), Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
           }));
 
   EXPECT_CALL(socket_, setRequestedApplicationProtocols(_)).Times(0);
@@ -393,8 +391,9 @@ TEST_F(HttpInspectorTest, Http1WithLargeRequestLine) {
   {
     InSequence s;
 
-    EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK)).WillOnce(InvokeWithoutArgs([]() {
-      return Api::SysCallSizeResult{ssize_t(-1), SOCKET_ERROR_AGAIN};
+    EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK)).WillOnce(InvokeWithoutArgs([]() {
+      return Api::IoCallUint64Result(-1, Api::IoErrorPtr(Network::IoSocketError::getIoSocketEagainInstance(),
+                                                     Network::IoSocketError::deleteIoError));
     }));
 
     uint64_t num_loops = Config::MAX_INSPECT_SIZE;
@@ -404,10 +403,10 @@ TEST_F(HttpInspectorTest, Http1WithLargeRequestLine) {
 #endif
 
     auto ctr = std::make_shared<size_t>(1);
-    EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
+    EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK))
         .Times(num_loops)
-        .WillRepeatedly(Invoke([&data, ctr, num_loops](os_fd_t, void* buffer, size_t length,
-                                                       int) -> Api::SysCallSizeResult {
+        .WillRepeatedly(Invoke([&data, ctr, num_loops](void* buffer, size_t length,
+                                                       int) -> Api::IoCallUint64Result {
           size_t len = (*ctr);
           if (num_loops == 2) {
             ASSERT(*ctr != 3);
@@ -416,7 +415,7 @@ TEST_F(HttpInspectorTest, Http1WithLargeRequestLine) {
           ASSERT(length >= len);
           memcpy(buffer, data.data(), len);
           *ctr += 1;
-          return Api::SysCallSizeResult{ssize_t(len), 0};
+          return Api::IoCallUint64Result(len, Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
         }));
   }
 
@@ -445,17 +444,17 @@ TEST_F(HttpInspectorTest, Http1WithLargeHeader) {
   {
     InSequence s;
 
-    EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK)).WillOnce(InvokeWithoutArgs([]() {
-      return Api::SysCallSizeResult{ssize_t(-1), SOCKET_ERROR_AGAIN};
+    EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK)).WillOnce(InvokeWithoutArgs([]() {
+      return Api::IoCallUint64Result(-1, Api::IoErrorPtr(Network::IoSocketError::getIoSocketEagainInstance(),
+                                                     Network::IoSocketError::deleteIoError));
     }));
-
     for (size_t i = 1; i <= 20; i++) {
-      EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
+      EXPECT_CALL(io_handle_, recv(_, _, MSG_PEEK))
           .WillOnce(Invoke(
-              [&data, i](os_fd_t, void* buffer, size_t length, int) -> Api::SysCallSizeResult {
+              [&data, i](void* buffer, size_t length, int) -> Api::IoCallUint64Result {
                 ASSERT(length >= data.size());
                 memcpy(buffer, data.data(), i);
-                return Api::SysCallSizeResult{ssize_t(i), 0};
+                return Api::IoCallUint64Result(i, Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
               }));
     }
   }
