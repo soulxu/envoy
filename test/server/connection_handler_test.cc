@@ -29,6 +29,7 @@
 #include "gtest/gtest.h"
 
 using testing::_;
+using testing::ByMove;
 using testing::InSequence;
 using testing::Invoke;
 using testing::MockFunction;
@@ -1101,8 +1102,31 @@ TEST_F(ConnectionHandlerTest, ContinueOnListenerFilterTimeout) {
   EXPECT_CALL(*accepted_socket, ioHandle())
       .WillRepeatedly(ReturnRef(io_handle))
       .RetiresOnSaturation();
+  EXPECT_CALL(dispatcher_, createFileEvent_(_, _, _, _))
+    .WillOnce(Return(new NiceMock<Event::MockFileEvent>)).RetiresOnSaturation();
 
   std::string data = "test";
+#ifdef WIN32
+  EXPECT_CALL(os_sys_calls_, readv(42, _, _))
+      .WillOnce(
+          Invoke([&data](os_fd_t fd, const iovec* iov, int iovcnt) -> Api::SysCallSizeResult {
+            auto data_size = data.size();
+            auto base = data.data();
+            for (auto i = 0; i < iovcnt; i++) {
+              auto copy_size = std::min(iov[i].iov_len, data_size);
+              memcpy(iov[i].iov_base, base, copy_size);
+              data_size -= copy_size;
+              base += copy_size;
+              if (data_size <= 0) {
+                break;
+              }
+            }
+            ASSERT(data_size <= 0);
+            return Api::SysCallSizeResult{ssize_t(data.size()), 0};
+          }))
+      .WillOnce(Return(Api::SysCallSizeResult{-1, SOCKET_ERROR_AGAIN}));
+  
+#else
   EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
       .WillOnce(
           Invoke([&data](os_fd_t, void* buffer, size_t length, int) -> Api::SysCallSizeResult {
@@ -1110,7 +1134,7 @@ TEST_F(ConnectionHandlerTest, ContinueOnListenerFilterTimeout) {
             memcpy(buffer, data.data(), data.size());
             return Api::SysCallSizeResult{ssize_t(data.size()), 0};
           }));
-
+#endif
   EXPECT_CALL(*test_filter, onAccept(_))
       .WillOnce(Invoke([&](Network::ListenerFilterCallbacks&) -> Network::FilterStatus {
         return Network::FilterStatus::StopIteration;
@@ -1141,6 +1165,9 @@ TEST_F(ConnectionHandlerTest, ContinueOnListenerFilterTimeout) {
 
   // Make sure we continued to try create connection.
   EXPECT_EQ(1UL, stats_store_.counter("no_filter_chain_match").value());
+
+  EXPECT_CALL(dispatcher_, createFileEvent_(_, _, _, _))
+    .WillOnce(Return(new NiceMock<Event::MockFileEvent>));
 
   EXPECT_CALL(*listener, onDestroy());
 
@@ -1176,7 +1203,31 @@ TEST_F(ConnectionHandlerTest, ListenerFilterTimeoutResetOnSuccess) {
   EXPECT_CALL(*accepted_socket, ioHandle())
       .WillRepeatedly(ReturnRef(io_handle))
       .RetiresOnSaturation();
+  EXPECT_CALL(dispatcher_, createFileEvent_(_, _, _, _))
+    .WillOnce(Return(new NiceMock<Event::MockFileEvent>)).RetiresOnSaturation();
+
   std::string data = "test";
+#ifdef WIN32
+  EXPECT_CALL(os_sys_calls_, readv(42, _, _))
+      .WillOnce(
+          Invoke([&data](os_fd_t fd, const iovec* iov, int iovcnt) -> Api::SysCallSizeResult {
+            auto data_size = data.size();
+            auto base = data.data();
+            for (auto i = 0; i < iovcnt; i++) {
+              auto copy_size = std::min(iov[i].iov_len, data_size);
+              memcpy(iov[i].iov_base, base, copy_size);
+              data_size -= copy_size;
+              base += copy_size;
+              if (data_size <= 0) {
+                break;
+              }
+            }
+            ASSERT(data_size <= 0);
+            return Api::SysCallSizeResult{ssize_t(data.size()), 0};
+          }))
+      .WillOnce(Return(Api::SysCallSizeResult{-1, SOCKET_ERROR_AGAIN}));
+  
+#else
   EXPECT_CALL(os_sys_calls_, recv(42, _, _, MSG_PEEK))
       .WillOnce(
           Invoke([&data](os_fd_t, void* buffer, size_t length, int) -> Api::SysCallSizeResult {
@@ -1184,6 +1235,7 @@ TEST_F(ConnectionHandlerTest, ListenerFilterTimeoutResetOnSuccess) {
             memcpy(buffer, data.data(), data.size());
             return Api::SysCallSizeResult{ssize_t(data.size()), 0};
           }));
+#endif
   EXPECT_CALL(*test_filter, onAccept(_))
       .WillOnce(Invoke([&](Network::ListenerFilterCallbacks& cb) -> Network::FilterStatus {
         listener_filter_cb = &cb;
@@ -1206,6 +1258,9 @@ TEST_F(ConnectionHandlerTest, ListenerFilterTimeoutResetOnSuccess) {
   EXPECT_CALL(*access_log_, log(_, _, _, _));
   EXPECT_CALL(*timeout, disableTimer());
   listener_filter_cb->continueFilterChain(true);
+
+  EXPECT_CALL(dispatcher_, createFileEvent_(_, _, _, _))
+      .WillOnce(Return(new NiceMock<Event::MockFileEvent>));
 
   EXPECT_CALL(*listener, onDestroy());
 
