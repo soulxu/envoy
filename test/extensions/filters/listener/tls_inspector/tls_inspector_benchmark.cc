@@ -62,6 +62,18 @@ public:
     return Api::SysCallSizeResult{ssize_t(client_hello_.size()), 0};
   }
 
+  Api::SysCallSizeResult readv(os_fd_t, const iovec* iov, int num_iov) override {
+    auto data_size = client_hello_.size();
+    auto base = client_hello_.data();
+    for(auto i = 0; i < num_iov && data_size > 0; i++) {
+      auto copy_size = std::min(iov[i].iov_len, data_size);
+      memcpy(iov[i].iov_base, base, copy_size);
+      data_size -= copy_size;
+      base += copy_size;
+    }
+    return Api::SysCallSizeResult{ssize_t(client_hello_.size()), 0};
+  }
+
   const std::vector<uint8_t> client_hello_;
 };
 
