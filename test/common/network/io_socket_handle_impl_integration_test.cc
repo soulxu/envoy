@@ -374,6 +374,48 @@ TEST_P(IoSocketHandleImplPeekTest, ReadAfterPeek) {
   client_connection_->close(ConnectionCloseType::NoFlush);
 }
 
+TEST_P(IoSocketHandleImplPeekTest, ReadvAfterPeek) {
+  initialize();
+  bool is_called = false;
+  std::unique_ptr<Buffer::Instance> buffer = std::make_unique<Buffer::OwnedImpl>();
+  buffer->add("abcd");
+  std::unique_ptr<Buffer::Instance> read_buffer = std::make_unique<Buffer::OwnedImpl>();
+  char buf[5] = {'\0'};
+  cb_ = [&]() {
+    is_called = true;
+    auto result = new_socket_->ioHandle().recv(buf, 3, MSG_PEEK);
+    EXPECT_EQ(3, result.return_value_);
+    EXPECT_EQ("abc", std::string(buf));
+  };
+  client_connection_->write(*buffer, false);
+  dispatcher_->run(Event::Dispatcher::RunType::NonBlock);
+  EXPECT_TRUE(is_called);
+
+  Buffer::Reservation reservation = read_buffer->reserveForRead();
+  auto result = new_socket_->ioHandle().readv(reservation.length(),
+                                              reservation.slices(), reservation.numSlices());
+  uint64_t bytes_to_commit = result.ok() ? result.return_value_ : 0;
+  reservation.commit(bytes_to_commit);
+#ifdef WIN32
+  EXPECT_EQ(3, result.return_value_);
+  EXPECT_EQ("abc", read_buffer->toString());
+
+  read_buffer->drain(read_buffer->length());
+  Buffer::Reservation reservation2 = read_buffer->reserveForRead();
+  auto result2 = new_socket_->ioHandle().readv(reservation2.length(),
+                                               reservation2.slices(), reservation2.numSlices());
+  uint64_t bytes_to_commit2 = result2.ok() ? result2.return_value_ : 0;
+  reservation2.commit(bytes_to_commit2);
+  EXPECT_EQ(1, result2.return_value_);
+  EXPECT_EQ("d", read_buffer->toString());
+#else
+  EXPECT_EQ(4, result.return_value_);
+  EXPECT_EQ("abcd", read_buffer->toString());
+#endif
+
+  client_connection_->close(ConnectionCloseType::NoFlush);
+}
+
 } // namespace
 } // namespace Network
 } // namespace Envoy
