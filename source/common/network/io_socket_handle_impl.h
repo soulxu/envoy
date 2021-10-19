@@ -106,7 +106,12 @@ protected:
   Api::IoCallUint64Result readIntoPeekBuffer(size_t length);
   Api::IoCallUint64Result readFromPeekBuffer(void* buffer, size_t length);
   Api::IoCallUint64Result readFromPeekBuffer(Buffer::Instance& buffer, size_t length);
+  Api::IoCallUint64Result readvFromPeekBuffer(uint64_t max_length, Buffer::RawSlice* slices,
+                                              uint64_t num_slice);
   Api::IoCallUint64Result peekFromPeekBuffer(void* buffer, size_t length);
+
+  Api::IoCallUint64Result readv_(uint64_t max_length, Buffer::RawSlice* slices,
+                                 uint64_t num_slice);
 
   os_fd_t fd_;
   int socket_v6only_{false};

@@ -83,6 +83,20 @@ bool IoSocketHandleImpl::isOpen() const { return SOCKET_VALID(fd_); }
 
 Api::IoCallUint64Result IoSocketHandleImpl::readv(uint64_t max_length, Buffer::RawSlice* slices,
                                                   uint64_t num_slice) {
+  if constexpr (Event::PlatformDefaultTriggerType == Event::FileTriggerType::EmulatedEdge) {
+    if (buffer_->length() > 0) {
+      Api::IoCallUint64Result result = readvFromPeekBuffer(max_length, slices, num_slice);
+      if (file_event_) {
+        file_event_->registerEventIfEmulatedEdge(Event::FileReadyType::Read);
+      }
+      return result;
+    }
+  }
+  return readv_(max_length, slices, num_slice);
+}
+
+Api::IoCallUint64Result IoSocketHandleImpl::readv_(uint64_t max_length, Buffer::RawSlice* slices,
+                                                  uint64_t num_slice) {
   absl::FixedArray<iovec> iov(num_slice);
   uint64_t num_slices_to_read = 0;
   uint64_t num_bytes_to_read = 0;
@@ -93,6 +107,7 @@ Api::IoCallUint64Result IoSocketHandleImpl::readv(uint64_t max_length, Buffer::R
     iov[num_slices_to_read].iov_len = slice_length;
     num_bytes_to_read += slice_length;
   }
+
   ASSERT(num_bytes_to_read <= max_length);
   auto result = sysCallResultToIoCallResult(Api::OsSysCallsSingleton::get().readv(
       fd_, iov.begin(), static_cast<int>(num_slices_to_read)));
@@ -124,7 +139,7 @@ Api::IoCallUint64Result IoSocketHandleImpl::read(Buffer::Instance& buffer,
     }
   }
   Buffer::Reservation reservation = buffer.reserveForRead();
-  Api::IoCallUint64Result result = readv(std::min(reservation.length(), max_length),
+  Api::IoCallUint64Result result = readv_(std::min(reservation.length(), max_length),
                                          reservation.slices(), reservation.numSlices());
   uint64_t bytes_to_commit = result.ok() ? result.return_value_ : 0;
   ASSERT(bytes_to_commit <= max_length);
@@ -514,7 +529,7 @@ Api::IoCallUint64Result IoSocketHandleImpl::readIntoPeekBuffer(size_t length) {
   uint64_t nread = 0;
   while (true) {
     Buffer::Reservation reservation = buffer_->reserveForRead();
-    Api::IoCallUint64Result result = readv(std::min(reservation.length(), length),
+    Api::IoCallUint64Result result = readv_(std::min(reservation.length(), length),
                                            reservation.slices(), reservation.numSlices());
     uint64_t bytes_to_commit = result.ok() ? result.return_value_ : 0;
     reservation.commit(bytes_to_commit);
@@ -541,6 +556,21 @@ Api::IoCallUint64Result IoSocketHandleImpl::readFromPeekBuffer(void* buffer, siz
   buffer_->copyOut(0, copy_size, buffer);
   buffer_->drain(copy_size);
   return Api::IoCallUint64Result(copy_size, Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
+}
+
+Api::IoCallUint64Result IoSocketHandleImpl::readvFromPeekBuffer(uint64_t max_length, Buffer::RawSlice* slices,
+                                              uint64_t num_slice) {        
+  uint64_t total_length_to_read = std::min(max_length, buffer_->length());                
+  uint64_t num_slices_to_read = 0;
+  uint64_t num_bytes_to_read = 0;
+  for (; num_slices_to_read < num_slice && num_bytes_to_read < total_length_to_read; num_slices_to_read++) {
+    auto length_to_copy = std::min(slices[num_slices_to_read].len_,
+                                   total_length_to_read - num_bytes_to_read);
+    buffer_->copyOut(num_bytes_to_read, length_to_copy, slices[num_slices_to_read].mem_);
+    num_bytes_to_read += length_to_copy;
+  }
+  buffer_->drain(num_bytes_to_read);
+  return Api::IoCallUint64Result(num_bytes_to_read, Api::IoErrorPtr(nullptr, [](Api::IoError*) {}));
 }
 
 Api::IoCallUint64Result IoSocketHandleImpl::readFromPeekBuffer(Buffer::Instance& buffer,
@@ -597,6 +627,7 @@ Api::IoCallUint64Result IoSocketHandleImpl::recv(void* buffer, size_t length, in
       return result;
     }
   }
+
   const Api::SysCallSizeResult result =
       Api::OsSysCallsSingleton::get().recv(fd_, buffer, length, flags);
   auto io_result = sysCallResultToIoCallResult(result);
@@ -713,6 +744,7 @@ void IoSocketHandleImpl::initializeFileEvent(Event::Dispatcher& dispatcher, Even
                                              Event::FileTriggerType trigger, uint32_t events) {
   ASSERT(file_event_ == nullptr, "Attempting to initialize two `file_event_` for the same "
                                  "file descriptor. This is not allowed.");
+
   file_event_ = dispatcher.createFileEvent(fd_, cb, trigger, events);
   if (buffer_->length() > 0) {
     activateFileEvents(Event::FileReadyType::Read);
@@ -730,6 +762,9 @@ void IoSocketHandleImpl::activateFileEvents(uint32_t events) {
 void IoSocketHandleImpl::enableFileEvents(uint32_t events) {
   if (file_event_) {
     file_event_->setEnabled(events);
+    if ((events & Event::FileReadyType::Read) && (buffer_->length() > 0)) {
+      activateFileEvents(Event::FileReadyType::Read);
+    }
   } else {
     ENVOY_BUG(false, "Null file_event_");
   }
