@@ -36,7 +36,17 @@ message ListenerCollection {
   repeated xds.core.v3.CollectionEntry entries = 1;
 }
 
-// [#next-free-field: 32]
+message ListenAddresses {
+  // Optional prefix to use on listener stats. If empty, the stats will be rooted at
+  // `listener.<address as string>.`. If non-empty, stats will be rooted at
+  // `listener.<stat_prefix>.`.
+  string stat_prefix = 1;
+
+  // The address that the listener should listen on.
+  core.v3.Address address = 2 [(validate.rules).message = {required: true}];
+}
+
+// [#next-free-field: 33]
 message Listener {
   option (udpa.annotations.versioning).previous_message_type = "envoy.api.v2.Listener";
 
@@ -103,13 +113,21 @@ message Listener {
 
   // The address that the listener should listen on. In general, the address must be unique, though
   // that is governed by the bind rules of the OS. E.g., multiple listeners can listen on port 0 on
+  // Linux as the actual port will be allocated by the OS. This is deprecated, using `addresses` instead.
+  core.v3.Address address = 2
+      [deprecated = true, (envoy.annotations.deprecated_at_minor_version) = "3.0"];
+
+  // A list of addresses that the listener should listen on. All the addresses in
+  // a listener should have same socket type (e.g TCP, UDP, internal). In general, the address must be unique, though
+  // that is governed by the bind rules of the OS. E.g., multiple listeners can listen on port 0 on
   // Linux as the actual port will be allocated by the OS.
-  core.v3.Address address = 2 [(validate.rules).message = {required: true}];
+  repeated ListenAddresses addresses = 32;
 
   // Optional prefix to use on listener stats. If empty, the stats will be rooted at
   // `listener.<address as string>.`. If non-empty, stats will be rooted at
   // `listener.<stat_prefix>.`.
-  string stat_prefix = 28;
+  string stat_prefix = 28
+      [deprecated = true, (envoy.annotations.deprecated_at_minor_version) = "3.0"];
 
   // A list of filter chains to consider for this listener. The
   // :ref:`FilterChain <envoy_v3_api_msg_config.listener.v3.FilterChain>` with the most specific
