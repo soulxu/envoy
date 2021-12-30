@@ -26,7 +26,7 @@ class ActiveTcpListener final : public Network::TcpListenerCallbacks,
                                 public Network::BalancedConnectionHandler {
 public:
   ActiveTcpListener(Network::TcpConnectionHandler& parent, Network::ListenerConfig& config,
-                    uint32_t worker_index);
+                    Network::SocketSharedPtr&& socket);
   ActiveTcpListener(Network::TcpConnectionHandler& parent, Network::ListenerPtr&& listener,
                     Network::ListenerConfig& config);
   ~ActiveTcpListener() override;

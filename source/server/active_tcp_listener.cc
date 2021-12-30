@@ -13,12 +13,13 @@ namespace Envoy {
 namespace Server {
 
 ActiveTcpListener::ActiveTcpListener(Network::TcpConnectionHandler& parent,
-                                     Network::ListenerConfig& config, uint32_t worker_index)
-    : OwnedActiveStreamListenerBase(parent, parent.dispatcher(),
-                                    parent.dispatcher().createListener(
-                                        config.listenSocketFactory().getListenSocket(worker_index),
-                                        *this, config.bindToPort(), config.ignoreGlobalConnLimit()),
-                                    config),
+                                     Network::ListenerConfig& config,
+                                     Network::SocketSharedPtr&& socket)
+    : OwnedActiveStreamListenerBase(
+          parent, parent.dispatcher(),
+          parent.dispatcher().createListener(std::move(socket), *this, config.bindToPort(),
+                                             config.ignoreGlobalConnLimit()),
+          config),
       tcp_conn_handler_(parent) {
   config.connectionBalancer().registerHandler(*this);
 }
