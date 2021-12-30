@@ -216,6 +216,7 @@ public:
    * according to given config.
    * @param worker_index The index of the worker this listener is being created on.
    * @param parent is the owner of the created ActiveListener objects.
+   * @param listen_socket_ptr is the UDP socket.
    * @param dispatcher is used to create actual UDP listener.
    * @param config provides information needed to create ActiveUdpListener and
    * UdpListener objects.
@@ -223,6 +224,7 @@ public:
    */
   virtual ConnectionHandler::ActiveUdpListenerPtr
   createActiveUdpListener(uint32_t worker_index, UdpConnectionHandler& parent,
+                          Network::SocketSharedPtr&& listen_socket_ptr,
                           Event::Dispatcher& dispatcher, Network::ListenerConfig& config) PURE;
 
   /**
