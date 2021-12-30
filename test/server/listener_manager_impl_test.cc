@@ -3653,6 +3653,7 @@ TEST_F(ListenerManagerImplWithRealFiltersTest, SingleFilterChainWithInvalidDesti
 
 TEST_F(ListenerManagerImplWithRealFiltersTest, SingleFilterChainWithInvalidServerNamesMatch) {
   const std::string yaml = TestEnvironment::substitute(R"EOF(
+    name: test_listener
     address:
       socket_address: { address: 127.0.0.1, port_value: 1234 }
     listener_filters:
@@ -3665,12 +3666,13 @@ TEST_F(ListenerManagerImplWithRealFiltersTest, SingleFilterChainWithInvalidServe
 
   EXPECT_THROW_WITH_MESSAGE(manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml), "", true),
                             EnvoyException,
-                            "error adding listener '127.0.0.1:1234': partial wildcards are not "
+                            "error adding listener 'test_listener': partial wildcards are not "
                             "supported in \"server_names\"");
 }
 
 TEST_F(ListenerManagerImplWithRealFiltersTest, MultipleFilterChainsWithSameMatch) {
   const std::string yaml = TestEnvironment::substitute(R"EOF(
+    name: test_listener
     address:
       socket_address: { address: 127.0.0.1, port_value: 1234 }
     listener_filters:
@@ -3687,13 +3689,14 @@ TEST_F(ListenerManagerImplWithRealFiltersTest, MultipleFilterChainsWithSameMatch
 
   EXPECT_THROW_WITH_MESSAGE(manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml), "", true),
                             EnvoyException,
-                            "error adding listener '127.0.0.1:1234': filter chain 'bar' has "
+                            "error adding listener 'test_listener': filter chain 'bar' has "
                             "the same matching rules defined as 'foo'");
 }
 
 TEST_F(ListenerManagerImplWithRealFiltersTest,
        MultipleFilterChainsWithSameMatchPlusUnimplementedFields) {
   const std::string yaml = TestEnvironment::substitute(R"EOF(
+    name: test_listener
     address:
       socket_address: { address: 127.0.0.1, port_value: 1234 }
     listener_filters:
@@ -3711,11 +3714,12 @@ TEST_F(ListenerManagerImplWithRealFiltersTest,
 
   EXPECT_THROW_WITH_MESSAGE(
       manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml), "", true), EnvoyException,
-      "error adding listener '127.0.0.1:1234': filter chain 'bar' contains unimplemented fields");
+      "error adding listener 'test_listener': filter chain 'bar' contains unimplemented fields");
 }
 
 TEST_F(ListenerManagerImplWithRealFiltersTest, MultipleFilterChainsWithOverlappingRules) {
   const std::string yaml = TestEnvironment::substitute(R"EOF(
+    name: test_listener
     address:
       socket_address: { address: 127.0.0.1, port_value: 1234 }
     listener_filters:
@@ -3730,7 +3734,7 @@ TEST_F(ListenerManagerImplWithRealFiltersTest, MultipleFilterChainsWithOverlappi
 
   EXPECT_THROW_WITH_MESSAGE(manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml), "", true),
                             EnvoyException,
-                            "error adding listener '127.0.0.1:1234': multiple filter chains with "
+                            "error adding listener 'test_listener': multiple filter chains with "
                             "overlapping matching rules are defined");
 }
 

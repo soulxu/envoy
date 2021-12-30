@@ -137,9 +137,7 @@ public:
   NiceMock<MockFilterChainFactoryBuilder> filter_chain_factory_builder_;
   NiceMock<Server::Configuration::MockFactoryContext> parent_context_;
   // Test target.
-  FilterChainManagerImpl filter_chain_manager_{
-      std::make_shared<Network::Address::Ipv4Instance>("127.0.0.1", 1234), parent_context_,
-      init_manager_};
+  FilterChainManagerImpl filter_chain_manager_{"test", parent_context_, init_manager_};
 };
 
 TEST_F(FilterChainManagerImplTest, FilterChainMatchNothing) {
@@ -213,9 +211,8 @@ TEST_F(FilterChainManagerImplTest, DuplicateContextsAreNotBuilt) {
       std::vector<const envoy::config::listener::v3::FilterChain*>{&filter_chain_messages[0]},
       nullptr, filter_chain_factory_builder_, filter_chain_manager_);
 
-  FilterChainManagerImpl new_filter_chain_manager{
-      std::make_shared<Network::Address::Ipv4Instance>("127.0.0.1", 1234), parent_context_,
-      init_manager_, filter_chain_manager_};
+  FilterChainManagerImpl new_filter_chain_manager{"test", parent_context_, init_manager_,
+                                                  filter_chain_manager_};
   // The new filter chain manager maintains 3 filter chains, but only 2 filter chain context is
   // built because it reuse the filter chain context in the previous filter chain manager
   EXPECT_CALL(filter_chain_factory_builder_, buildFilterChain(_, _)).Times(2);

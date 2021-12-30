@@ -321,8 +321,7 @@ ListenerImpl::ListenerImpl(const envoy::config::listener::v3::Listener& config,
       listener_factory_context_(std::make_shared<PerListenerFactoryContextImpl>(
           parent.server_, validation_visitor_, config, this, *this,
           parent.factory_.createDrainManager(config.drain_type()))),
-      filter_chain_manager_(address_, listener_factory_context_->parentFactoryContext(),
-                            initManager()),
+      filter_chain_manager_(name, listener_factory_context_->parentFactoryContext(), initManager()),
       reuse_port_(getReusePortOrDefault(parent_.server_, config_)),
       cx_limit_runtime_key_("envoy.resource_limits.listener." + config_.name() +
                             ".connection_limit"),
@@ -413,7 +412,7 @@ ListenerImpl::ListenerImpl(ListenerImpl& origin,
       connection_balancer_(origin.connection_balancer_),
       listener_factory_context_(std::make_shared<PerListenerFactoryContextImpl>(
           origin.listener_factory_context_->listener_factory_context_base_, this, *this)),
-      filter_chain_manager_(address_, origin.listener_factory_context_->parentFactoryContext(),
+      filter_chain_manager_(name, origin.listener_factory_context_->parentFactoryContext(),
                             initManager(), origin.filter_chain_manager_),
       reuse_port_(origin.reuse_port_),
       local_init_watcher_(fmt::format("Listener-local-init-watcher {}", name),

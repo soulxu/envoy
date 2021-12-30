@@ -148,11 +148,11 @@ bool PerFilterChainFactoryContextImpl::isQuicListener() const {
   return parent_context_.isQuicListener();
 }
 
-FilterChainManagerImpl::FilterChainManagerImpl(
-    const Network::Address::InstanceConstSharedPtr& address,
-    Configuration::FactoryContext& factory_context, Init::Manager& init_manager,
-    const FilterChainManagerImpl& parent_manager)
-    : address_(address), parent_context_(factory_context), origin_(&parent_manager),
+FilterChainManagerImpl::FilterChainManagerImpl(absl::string_view listener_name,
+                                               Configuration::FactoryContext& factory_context,
+                                               Init::Manager& init_manager,
+                                               const FilterChainManagerImpl& parent_manager)
+    : listener_name_(listener_name), parent_context_(factory_context), origin_(&parent_manager),
       init_manager_(init_manager) {}
 
 bool FilterChainManagerImpl::isWildcardServerName(const std::string& name) {
@@ -174,13 +174,13 @@ void FilterChainManagerImpl::addFilterChains(
     if (!filter_chain_match.address_suffix().empty() || filter_chain_match.has_suffix_len()) {
       throw EnvoyException(fmt::format("error adding listener '{}': filter chain '{}' contains "
                                        "unimplemented fields",
-                                       address_->asString(), filter_chain->name()));
+                                       listener_name_, filter_chain->name()));
     }
     const auto& matching_iter = filter_chains.find(filter_chain_match);
     if (matching_iter != filter_chains.end()) {
       throw EnvoyException(fmt::format("error adding listener '{}': filter chain '{}' has "
                                        "the same matching rules defined as '{}'",
-                                       address_->asString(), filter_chain->name(),
+                                       listener_name_, filter_chain->name(),
                                        matching_iter->second));
     }
     filter_chains.insert({filter_chain_match, filter_chain->name()});
@@ -210,7 +210,7 @@ void FilterChainManagerImpl::addFilterChains(
         throw EnvoyException(
             fmt::format("error adding listener '{}': partial wildcards are not supported in "
                         "\"server_names\"",
-                        address_->asString()));
+                        listener_name_));
       }
       server_names.push_back(absl::AsciiStrToLower(server_name));
     }
@@ -438,7 +438,7 @@ void FilterChainManagerImpl::addFilterChainForSourcePorts(
     // FilterChainMatches.
     throw EnvoyException(fmt::format("error adding listener '{}': multiple filter chains with "
                                      "overlapping matching rules are defined",
-                                     address_->asString()));
+                                     listener_name_));
   }
 }
 
