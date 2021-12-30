@@ -965,12 +965,13 @@ void ListenerManagerImpl::setNewOrDrainingSocketFactory(
   // sure we are not duplicating the address. This avoids ambiguity about which non-binding
   // listener is used or even worse for the binding to port != 0 and reuse port case multiple
   // different listeners receiving connections destined for the same port.
+  // TODO (soulxu): to support multiple addresses.
   if ((!listener.bindToPort() || listener.config().address().socket_address().port_value() != 0) &&
       (hasListenerWithCompatibleAddress(warming_listeners_, listener) ||
        hasListenerWithCompatibleAddress(active_listeners_, listener))) {
     const std::string message =
         fmt::format("error adding listener: '{}' has duplicate address '{}' as existing listener",
-                    name, listener.address()->asString());
+                    name, listener.addresses()[0]->asString());
     ENVOY_LOG(warn, "{}", message);
     throw EnvoyException(message);
   }
@@ -1024,9 +1025,11 @@ Network::ListenSocketFactoryPtr ListenerManagerImpl::createListenSocketFactory(
   TRY_ASSERT_MAIN_THREAD {
     Network::SocketCreationOptions creation_options;
     creation_options.mptcp_enabled_ = listener.mptcpEnabled();
+    // TODO (soulxu): to support multiple addresses.
     return std::make_unique<ListenSocketFactoryImpl>(
-        factory_, listener.address(), socket_type, listener.listenSocketOptions(), listener.name(),
-        listener.tcpBacklogSize(), bind_type, creation_options, server_.options().concurrency());
+        factory_, listener.addresses()[0], socket_type, listener.listenSocketOptions(),
+        listener.name(), listener.tcpBacklogSize(), bind_type, creation_options,
+        server_.options().concurrency());
   }
   END_TRY
   catch (const EnvoyException& e) {
