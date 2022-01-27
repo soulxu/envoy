@@ -39,12 +39,6 @@ public:
 
   static constexpr uint32_t free_list_max_ = Buffer::Reservation::MAX_SLICES_;
   using FreeListType = absl::InlinedVector<StoragePtr, free_list_max_>;
-  class FreeListReference {
-  private:
-    FreeListReference(FreeListType& free_list) : free_list_(free_list) {}
-    FreeListType& free_list_;
-    friend class Slice;
-  };
 
   /**
    * Create an empty Slice with 0 capacity.
@@ -342,8 +336,6 @@ public:
   }
 
   static constexpr uint32_t default_slice_size_ = 16384;
-
-  static FreeListReference freeList() { return FreeListReference(free_list_); }
 
 protected:
   /**
@@ -782,7 +774,7 @@ private:
 
   struct OwnedImplReservationSlicesOwnerMultiple : public OwnedImplReservationSlicesOwner {
     // Optimization: get the thread_local freeList() once per Reservation, outside the loop.
-    OwnedImplReservationSlicesOwnerMultiple() : free_list_(Slice::freeList()) {}
+    OwnedImplReservationSlicesOwnerMultiple() {}
 
     ~OwnedImplReservationSlicesOwnerMultiple() override {
       while (!owned_slices_.empty()) {
@@ -792,7 +784,6 @@ private:
     }
     absl::Span<Slice> ownedSlices() override { return absl::MakeSpan(owned_slices_); }
 
-    Slice::FreeListReference free_list_;
     absl::InlinedVector<Slice, Buffer::Reservation::MAX_SLICES_> owned_slices_;
   };
 
