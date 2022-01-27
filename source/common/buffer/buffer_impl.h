@@ -356,12 +356,14 @@ protected:
            "newStorage should only be called on values returned from sliceSize()");
 
     StoragePtr storage;
-    if (capacity == default_slice_size_ && !free_list_.empty()) {
-      storage = std::move(free_list_.back());
-      ASSERT(storage != nullptr);
-      ASSERT(free_list_.back() == nullptr);
-      free_list_.pop_back();
-      return storage;
+    if (capacity == default_slice_size_ ) {
+      if (!free_list_.empty()) {
+        storage = std::move(free_list_.back());
+        ASSERT(storage != nullptr);
+        ASSERT(free_list_.back() == nullptr);
+        free_list_.pop_back();
+        return storage;
+      }
     }
 
     storage.reset(new uint8_t[capacity]);
@@ -373,10 +375,12 @@ protected:
       return;
     }
 
-    if (capacity == default_slice_size_ && free_list_.size() < free_list_max_) {
-      free_list_.emplace_back(std::move(storage));
-      ASSERT(storage == nullptr);
-      return;
+    if (capacity == default_slice_size_) {
+      if (free_list_.size() < free_list_max_) {
+        free_list_.emplace_back(std::move(storage));
+        ASSERT(storage == nullptr);
+        return;
+      }
     }
 
     storage.reset();
