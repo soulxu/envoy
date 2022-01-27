@@ -59,9 +59,8 @@ public:
    * @param account the account to charge.
    * @param freelist to search for the backing storage, if any.
    */
-  Slice(uint64_t min_capacity, BufferMemoryAccountSharedPtr account,
-        absl::optional<FreeListReference> free_list = absl::nullopt)
-      : capacity_(sliceSize(min_capacity)), storage_(newStorage(capacity_, free_list)),
+  Slice(uint64_t min_capacity, BufferMemoryAccountSharedPtr account)
+      : capacity_(sliceSize(min_capacity)), storage_(newStorage(capacity_)),
         base_(storage_.get()), data_(0), reservable_(0) {
     if (account) {
       account->charge(capacity_);
@@ -122,9 +121,9 @@ public:
     freeStorage(std::move(storage_), capacity_);
   }
 
-  void freeStorage(FreeListReference free_list) {
+  void freeStorage() {
     callAndClearDrainTrackersAndCharges();
-    freeStorage(std::move(storage_), capacity_, free_list);
+    freeStorage(std::move(storage_), capacity_);
   }
 
   /**
@@ -358,42 +357,34 @@ protected:
     return num_pages * PageSize;
   }
 
-  static StoragePtr newStorage(uint64_t capacity, absl::optional<FreeListReference> free_list_opt) {
+  static StoragePtr newStorage(uint64_t capacity) {
     ASSERT(sliceSize(default_slice_size_) == default_slice_size_,
            "default_slice_size_ incompatible with sliceSize()");
     ASSERT(sliceSize(capacity) == capacity,
            "newStorage should only be called on values returned from sliceSize()");
-    ASSERT(!free_list_opt.has_value() || &free_list_opt->free_list_ == &free_list_);
 
     StoragePtr storage;
-    if (capacity == default_slice_size_ && free_list_opt.has_value()) {
-      FreeListType& free_list = free_list_opt->free_list_;
-      if (!free_list.empty()) {
-        storage = std::move(free_list.back());
-        ASSERT(storage != nullptr);
-        ASSERT(free_list.back() == nullptr);
-        free_list.pop_back();
-        return storage;
-      }
+    if (capacity == default_slice_size_ && !free_list_.empty()) {
+      storage = std::move(free_list_.back());
+      ASSERT(storage != nullptr);
+      ASSERT(free_list_.back() == nullptr);
+      free_list_.pop_back();
+      return storage;
     }
 
     storage.reset(new uint8_t[capacity]);
     return storage;
   }
 
-  static void freeStorage(StoragePtr storage, uint64_t capacity,
-                          absl::optional<FreeListReference> free_list_opt = absl::nullopt) {
+  static void freeStorage(StoragePtr storage, uint64_t capacity) {
     if (storage == nullptr) {
       return;
     }
 
-    if (capacity == default_slice_size_ && free_list_opt.has_value()) {
-      FreeListType& free_list = free_list_opt->free_list_;
-      if (free_list.size() < free_list_max_) {
-        free_list.emplace_back(std::move(storage));
-        ASSERT(storage == nullptr);
-        return;
-      }
+    if (capacity == default_slice_size_ && free_list_.size() < free_list_max_) {
+      free_list_.emplace_back(std::move(storage));
+      ASSERT(storage == nullptr);
+      return;
     }
 
     storage.reset();
@@ -795,7 +786,7 @@ private:
 
     ~OwnedImplReservationSlicesOwnerMultiple() override {
       while (!owned_slices_.empty()) {
-        owned_slices_.back().freeStorage(free_list_);
+        owned_slices_.back().freeStorage();
         owned_slices_.pop_back();
       }
     }
