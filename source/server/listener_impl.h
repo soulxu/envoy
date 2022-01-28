@@ -402,11 +402,11 @@ private:
   // Helpers for constructor.
   void buildAccessLog();
   void buildInternalListener();
-  void validateConfig(Network::Socket::Type socket_type);
-  void buildUdpListenerFactory(Network::Socket::Type socket_type, uint32_t concurrency);
-  void buildListenSocketOptions(Network::Socket::Type socket_type);
-  void createListenerFilterFactories(Network::Socket::Type socket_type);
-  void validateFilterChains(Network::Socket::Type socket_type);
+  void validateConfig();
+  void buildUdpListenerFactory(uint32_t concurrency);
+  void buildListenSocketOptions();
+  void createListenerFilterFactories();
+  void validateFilterChains();
   void buildFilterChains();
   void buildSocketOptions();
   void buildOriginalDstListenerFilter();
@@ -419,6 +419,7 @@ private:
 
   ListenerManagerImpl& parent_;
   std::vector<Network::Address::InstanceConstSharedPtr> addresses_;
+  Network::Socket::Type socket_type_;
 
   Network::ListenSocketFactoryPtr socket_factory_;
   const bool bind_to_port_;

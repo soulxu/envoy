@@ -353,14 +353,15 @@ ListenerImpl::ListenerImpl(const envoy::config::listener::v3::Listener& config,
   }
 
   // All the addresses should be same socket type, so get the first address's socket type is enough.
-  auto socket_type = config.has_address()
-                         ? Network::Utility::protobufAddressSocketType(config.address())
-                         : Network::Utility::protobufAddressSocketType(config.addresses(0).address());
+  socket_type_ = config.has_address()
+                     ? Network::Utility::protobufAddressSocketType(config.address())
+                     : Network::Utility::protobufAddressSocketType(config.addresses(0).address());
   if (config.has_address()) {
     addresses_.emplace_back(Network::Address::resolveProtoAddress(config.address()));
   } else if (config.addresses_size() > 0) {
     for (auto i = 0; i < config.addresses_size(); i++) {
-      if (socket_type != Network::Utility::protobufAddressSocketType(config.addresses(i).address())) {
+      if (socket_type_ !=
+          Network::Utility::protobufAddressSocketType(config.addresses(i).address())) {
         throw EnvoyException(
             fmt::format("listener {}: has different socket type. The listener only "
                         "support same socke type for all the addresses.",
@@ -382,15 +383,15 @@ ListenerImpl::ListenerImpl(const envoy::config::listener::v3::Listener& config,
   }
 
   buildAccessLog();
-  validateConfig(socket_type);
+  validateConfig();
   // buildUdpListenerFactory() must come before buildListenSocketOptions() because the UDP
   // listener factory can provide additional options.
-  buildUdpListenerFactory(socket_type, concurrency);
-  buildListenSocketOptions(socket_type);
-  createListenerFilterFactories(socket_type);
-  validateFilterChains(socket_type);
+  buildUdpListenerFactory(concurrency);
+  buildListenSocketOptions();
+  createListenerFilterFactories();
+  validateFilterChains();
   buildFilterChains();
-  if (socket_type != Network::Socket::Type::Datagram) {
+  if (socket_type_ != Network::Socket::Type::Datagram) {
     buildSocketOptions();
     buildOriginalDstListenerFilter();
     buildProxyProtocolListenerFilter();
@@ -410,8 +411,8 @@ ListenerImpl::ListenerImpl(ListenerImpl& origin,
                            const std::string& version_info, ListenerManagerImpl& parent,
                            const std::string& name, bool added_via_api, bool workers_started,
                            uint64_t hash)
-    : parent_(parent), addresses_(origin.addresses_), bind_to_port_(shouldBindToPort(config)),
-      mptcp_enabled_(config.enable_mptcp()),
+    : parent_(parent), addresses_(origin.addresses_), socket_type_(origin.socket_type_),
+      bind_to_port_(shouldBindToPort(config)), mptcp_enabled_(config.enable_mptcp()),
       hand_off_restored_destination_connections_(
           PROTOBUF_GET_WRAPPED_OR_DEFAULT(config, use_original_dst, false)),
       per_connection_buffer_limit_bytes_(
@@ -447,14 +448,13 @@ ListenerImpl::ListenerImpl(ListenerImpl& origin,
       transport_factory_context_(origin.transport_factory_context_),
       quic_stat_names_(parent_.quicStatNames()) {
   buildAccessLog();
-  auto socket_type = Network::Utility::protobufAddressSocketType(config.address());
-  validateConfig(socket_type);
-  buildListenSocketOptions(socket_type);
-  createListenerFilterFactories(socket_type);
-  validateFilterChains(socket_type);
+  validateConfig();
+  buildListenSocketOptions();
+  createListenerFilterFactories();
+  validateFilterChains();
   buildFilterChains();
   buildInternalListener();
-  if (socket_type == Network::Socket::Type::Stream) {
+  if (socket_type_ == Network::Socket::Type::Stream) {
     // Apply the options below only for TCP.
     buildSocketOptions();
     buildOriginalDstListenerFilter();
@@ -463,9 +463,9 @@ ListenerImpl::ListenerImpl(ListenerImpl& origin,
   }
 }
 
-void ListenerImpl::validateConfig(Network::Socket::Type socket_type) {
+void ListenerImpl::validateConfig() {
   if (mptcp_enabled_) {
-    if (socket_type != Network::Socket::Type::Stream) {
+    if (socket_type_ != Network::Socket::Type::Stream) {
       throw EnvoyException(
           fmt::format("listener {}:[{}]: enable_mptcp can only be used with TCP listeners", name_,
                       absl::StrJoin(addresses_, ",", AddressStrFormatter())));
@@ -527,9 +527,8 @@ void ListenerImpl::buildInternalListener() {
   }
 }
 
-void ListenerImpl::buildUdpListenerFactory(Network::Socket::Type socket_type,
-                                           uint32_t concurrency) {
-  if (socket_type != Network::Socket::Type::Datagram) {
+void ListenerImpl::buildUdpListenerFactory(uint32_t concurrency) {
+  if (socket_type_ != Network::Socket::Type::Datagram) {
     return;
   }
   if (!reuse_port_ && concurrency > 1) {
@@ -572,7 +571,7 @@ void ListenerImpl::buildUdpListenerFactory(Network::Socket::Type socket_type,
   }
 }
 
-void ListenerImpl::buildListenSocketOptions(Network::Socket::Type socket_type) {
+void ListenerImpl::buildListenSocketOptions() {
   // The process-wide `signal()` handling may fail to handle SIGPIPE if overridden
   // in the process (i.e., on a mobile client). Some OSes support handling it at the socket layer:
   if (ENVOY_SOCKET_SO_NOSIGPIPE.hasValue()) {
@@ -591,7 +590,7 @@ void ListenerImpl::buildListenSocketOptions(Network::Socket::Type socket_type) {
     addListenSocketOptions(
         Network::SocketOptionFactory::buildLiteralOptions(config_.socket_options()));
   }
-  if (socket_type == Network::Socket::Type::Datagram) {
+  if (socket_type_ == Network::Socket::Type::Datagram) {
     // Needed for recvmsg to return destination address in IP header.
     addListenSocketOptions(Network::SocketOptionFactory::buildIpPacketInfoOptions());
     // Needed to return receive buffer overflown indicator.
@@ -609,9 +608,9 @@ void ListenerImpl::buildListenSocketOptions(Network::Socket::Type socket_type) {
   }
 }
 
-void ListenerImpl::createListenerFilterFactories(Network::Socket::Type socket_type) {
+void ListenerImpl::createListenerFilterFactories() {
   if (!config_.listener_filters().empty()) {
-    switch (socket_type) {
+    switch (socket_type_) {
     case Network::Socket::Type::Datagram:
       udp_listener_filter_factories_ = parent_.factory_.createUdpListenerFilterFactoryList(
           config_.listener_filters(), *listener_factory_context_);
@@ -626,9 +625,9 @@ void ListenerImpl::createListenerFilterFactories(Network::Socket::Type socket_ty
   }
 }
 
-void ListenerImpl::validateFilterChains(Network::Socket::Type socket_type) {
+void ListenerImpl::validateFilterChains() {
   if (config_.filter_chains().empty() && !config_.has_default_filter_chain() &&
-      (socket_type == Network::Socket::Type::Stream ||
+      (socket_type_ == Network::Socket::Type::Stream ||
        !udp_listener_config_->listener_factory_->isTransportConnectionless())) {
     // If we got here, this is a tcp listener or connection-oriented udp listener, so ensure there
     // is a filter chain specified
@@ -969,10 +968,20 @@ bool ListenerImpl::getReusePortOrDefault(Server::Instance& server,
 }
 
 bool ListenerImpl::hasCompatibleAddress(const ListenerImpl& other) const {
-  // TODO (soulxu): to support multiple addresses.
-  return *addresses()[0] == *other.addresses()[0] &&
-         Network::Utility::protobufAddressSocketType(config_.address()) ==
-             Network::Utility::protobufAddressSocketType(other.config_.address());
+  if ((socket_type_ != other.socket_type_) || (addresses().size() != other.addresses().size())) {
+    return false;
+  }
+
+  auto& other_addresses = other.addresses();
+  for (auto& addr : addresses()) {
+    if (std::none_of(other_addresses.begin(), other_addresses.end(),
+                     [&addr](const Network::Address::InstanceConstSharedPtr& other_addr) {
+                       return *other_addr == *addr;
+                     })) {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool ListenerMessageUtil::filterChainOnlyChange(const envoy::config::listener::v3::Listener& lhs,
