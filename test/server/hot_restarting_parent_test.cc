@@ -54,8 +54,10 @@ TEST_F(HotRestartingParentTest, GetListenSocketsForChildNotBindPort) {
   EXPECT_CALL(server_, listenerManager()).WillOnce(ReturnRef(listener_manager));
   EXPECT_CALL(listener_manager, listeners(ListenerManager::ListenerState::ACTIVE))
       .WillOnce(Return(listeners));
-  EXPECT_CALL(listener_config, listenSocketFactory());
-  EXPECT_CALL(listener_config.socket_factory_, localAddress());
+  EXPECT_CALL(listener_config, listenSocketFactories());
+  EXPECT_CALL(
+      *static_cast<Network::MockListenSocketFactory*>(listener_config.socket_factories_[0].get()),
+      localAddress());
   EXPECT_CALL(listener_config, bindToPort()).WillOnce(Return(false));
 
   HotRestartMessage::Request request;

@@ -46,10 +46,12 @@ public:
         connection_handler_(new Server::ConnectionHandlerImpl(*dispatcher_, absl::nullopt)),
         name_("proxy"), filter_chain_(Network::Test::createEmptyFilterChainWithRawBufferSockets()),
         init_manager_(nullptr) {
-    EXPECT_CALL(socket_factory_, socketType()).WillOnce(Return(Network::Socket::Type::Stream));
-    EXPECT_CALL(socket_factory_, localAddress())
+    auto socket_factory = std::make_unique<Network::MockListenSocketFactory>();
+    EXPECT_CALL(*socket_factory, socketType()).WillOnce(Return(Network::Socket::Type::Stream));
+    EXPECT_CALL(*socket_factory, localAddress())
         .WillRepeatedly(ReturnRef(socket_->connectionInfoProvider().localAddress()));
-    EXPECT_CALL(socket_factory_, getListenSocket(_)).WillOnce(Return(socket_));
+    EXPECT_CALL(*socket_factory, getListenSocket(_)).WillOnce(Return(socket_));
+    socket_factories_.emplace_back(std::move(socket_factory));
     connection_handler_->addListener(absl::nullopt, *this);
     conn_ = dispatcher_->createClientConnection(socket_->connectionInfoProvider().localAddress(),
                                                 Network::Address::InstanceConstSharedPtr(),
@@ -60,7 +62,9 @@ public:
   // Network::ListenerConfig
   Network::FilterChainManager& filterChainManager() override { return *this; }
   Network::FilterChainFactory& filterChainFactory() override { return factory_; }
-  Network::ListenSocketFactory& listenSocketFactory() override { return socket_factory_; }
+  std::vector<Network::ListenSocketFactoryPtr>& listenSocketFactories() override {
+    return socket_factories_;
+  }
   bool bindToPort() override { return true; }
   bool handOffRestoredDestinationConnections() const override { return false; }
   uint32_t perConnectionBufferLimitBytes() const override { return 0; }
@@ -166,7 +170,7 @@ public:
   Api::ApiPtr api_;
   Event::DispatcherPtr dispatcher_;
   std::shared_ptr<Network::TcpListenSocket> socket_;
-  Network::MockListenSocketFactory socket_factory_;
+  std::vector<Network::ListenSocketFactoryPtr> socket_factories_;
   Network::NopConnectionBalancerImpl connection_balancer_;
   Network::ConnectionHandlerPtr connection_handler_;
   Network::MockFilterChainFactory factory_;

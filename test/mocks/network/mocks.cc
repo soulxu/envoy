@@ -35,10 +35,12 @@ MockUdpListenerConfig::~MockUdpListenerConfig() = default;
 MockListenerConfig::MockListenerConfig()
     : socket_(std::make_shared<testing::NiceMock<MockListenSocket>>()) {
   ON_CALL(*this, filterChainFactory()).WillByDefault(ReturnRef(filter_chain_factory_));
-  ON_CALL(*this, listenSocketFactory()).WillByDefault(ReturnRef(socket_factory_));
-  ON_CALL(socket_factory_, localAddress())
+  auto socket_factory = std::make_unique<MockListenSocketFactory>();
+  ON_CALL(*socket_factory, localAddress())
       .WillByDefault(ReturnRef(socket_->connectionInfoProvider().localAddress()));
-  ON_CALL(socket_factory_, getListenSocket(_)).WillByDefault(Return(socket_));
+  ON_CALL(*socket_factory, getListenSocket(_)).WillByDefault(Return(socket_));
+  socket_factories_.emplace_back(std::move(socket_factory));
+  ON_CALL(*this, listenSocketFactories()).WillByDefault(ReturnRef(socket_factories_));
   ON_CALL(*this, listenerScope()).WillByDefault(ReturnRef(scope_));
   ON_CALL(*this, name()).WillByDefault(ReturnRef(name_));
 }

@@ -404,6 +404,11 @@ ListenerImpl::ListenerImpl(const envoy::config::listener::v3::Listener& config,
     // with their parent's initManager.
     parent_.server_.initManager().add(listener_init_target_);
   }
+
+  // In the end, expected same numbers of socket factory with addresses.
+  for (uint i = 0; i < addresses_.size(); i++) {
+    socket_factories_.emplace_back(nullptr);
+  }
 }
 
 ListenerImpl::ListenerImpl(ListenerImpl& origin,
@@ -460,6 +465,10 @@ ListenerImpl::ListenerImpl(ListenerImpl& origin,
     buildOriginalDstListenerFilter();
     buildProxyProtocolListenerFilter();
     open_connections_ = origin.open_connections_;
+  }
+  // In the end, expected same numbers of socket factory with addresses.
+  for (uint i = 0; i < addresses_.size(); i++) {
+    socket_factories_.emplace_back(nullptr);
   }
 }
 
@@ -860,9 +869,23 @@ ListenerImpl::~ListenerImpl() {
 
 Init::Manager& ListenerImpl::initManager() { return *dynamic_init_manager_; }
 
-void ListenerImpl::setSocketFactory(Network::ListenSocketFactoryPtr&& socket_factory) {
-  ASSERT(!socket_factory_);
-  socket_factory_ = std::move(socket_factory);
+void ListenerImpl::setSocketFactory(const Network::Address::InstanceConstSharedPtr& address,
+                                    Network::ListenSocketFactoryPtr&& socket_factory) {
+  for (uint32_t i = 0; i < addresses_.size(); i++) {
+    if (*addresses_[i] == *address) {
+      // If the socket factory already set for the address, it could be
+      // the address with 0 port. then looking for next address.
+      if (socket_factories_[i] != nullptr) {
+        // Ensure we only have this case for 0 port address.
+        ASSERT(address->ip() && address->ip()->port() == 0);
+        continue;
+      }
+      socket_factories_[i] = std::move(socket_factory);
+      return;
+    }
+  }
+  // Enusre not set a factory for non-existed address.
+  NOT_REACHED_GCOVR_EXCL_LINE;
 }
 
 bool ListenerImpl::supportUpdateFilterChain(const envoy::config::listener::v3::Listener& config,

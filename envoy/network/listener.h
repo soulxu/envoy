@@ -137,9 +137,9 @@ public:
   virtual FilterChainFactory& filterChainFactory() PURE;
 
   /**
-   * @return ListenSocketFactory& the factory to create listen socket.
+   * @return std::vector<ListenSocketFactory>& the factories to create listen sockets.
    */
-  virtual ListenSocketFactory& listenSocketFactory() PURE;
+  virtual std::vector<ListenSocketFactoryPtr>& listenSocketFactories() PURE;
 
   /**
    * @return bool specifies whether the listener should actually listen on the port.

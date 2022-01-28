@@ -292,11 +292,9 @@ private:
    */
   ListenerList::iterator getListenerByName(ListenerList& listeners, const std::string& name);
 
-  void setNewOrDrainingSocketFactory(const std::string& name,
-                                     const envoy::config::core::v3::Address& proto_address,
-                                     ListenerImpl& listener);
+  void setNewOrDrainingSocketFactory(const std::string& name, ListenerImpl& listener);
   Network::ListenSocketFactoryPtr
-  createListenSocketFactory(const envoy::config::core::v3::Address& proto_address,
+  createListenSocketFactory(const Network::Address::InstanceConstSharedPtr& address,
                             ListenerImpl& listener);
 
   void maybeCloseSocketsForListener(ListenerImpl& listener);
