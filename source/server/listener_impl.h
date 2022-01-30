@@ -250,6 +250,7 @@ public:
   uint32_t tcpBacklogSize() const override;
   Init::Manager& initManager() override;
   bool ignoreGlobalConnLimit() const override;
+  ListenerConfig& perAddressConfig() override;
 
 private:
   ListenerImpl& listener_impl_;
@@ -389,7 +390,7 @@ public:
   void createUdpListenerFilterChain(Network::UdpListenerFilterManager& udp_listener,
                                     Network::UdpReadFilterCallbacks& callbacks) override;
 
-  Network::ListenerConfig& perAddressConfig() { return *per_address_listener_config_; }
+  Network::ListenerConfig& perAddressConfig() override { return *per_address_listener_config_; }
 
   SystemTime last_updated_;
 

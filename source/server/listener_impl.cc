@@ -346,6 +346,8 @@ bool PerAddressListenerConfig::ignoreGlobalConnLimit() const {
   return listener_impl_.ignoreGlobalConnLimit();
 }
 
+Network::ListenerConfig& PerAddressListenerConfig::perAddressConfig() { PANIC("not implemented"); }
+
 ListenerImpl::ListenerImpl(const envoy::config::listener::v3::Listener& config,
                            const std::string& version_info, ListenerManagerImpl& parent,
                            const std::string& name, bool added_via_api, bool workers_started,

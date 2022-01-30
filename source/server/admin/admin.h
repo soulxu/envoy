@@ -378,6 +378,7 @@ private:
     uint32_t tcpBacklogSize() const override { return ENVOY_TCP_BACKLOG_SIZE; }
     Init::Manager& initManager() override { return *init_manager_; }
     bool ignoreGlobalConnLimit() const override { return ignore_global_conn_limit_; }
+    ListenerConfig& perAddressConfig() override { return *this; }
 
     AdminImpl& parent_;
     const std::string name_;

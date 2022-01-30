@@ -236,6 +236,11 @@ public:
    * limit.
    */
   virtual bool ignoreGlobalConnLimit() const PURE;
+
+  /**
+   * Return the ListenerConfig specific for the address.
+   */
+  virtual ListenerConfig& perAddressConfig() PURE;
 };
 
 /**
