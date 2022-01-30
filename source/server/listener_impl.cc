@@ -276,6 +276,76 @@ Init::Manager& ListenerCommonFactoryContext::initManager() { PANIC("not implemen
 Server::DrainManager& ListenerCommonFactoryContext::drainManager() { return *drain_manager_; }
 Stats::Scope& ListenerCommonFactoryContext::listenerScope() { return *listener_scope_; }
 
+Network::FilterChainManager& PerAddressListenerConfig::filterChainManager() {
+  return listener_impl_.filterChainManager();
+}
+
+Network::FilterChainFactory& PerAddressListenerConfig::filterChainFactory() {
+  return listener_impl_.filterChainFactory();
+}
+
+std::vector<Network::ListenSocketFactoryPtr>& PerAddressListenerConfig::listenSocketFactories() {
+  return listener_impl_.listenSocketFactories();
+}
+
+bool PerAddressListenerConfig::bindToPort() { return listener_impl_.bindToPort(); }
+
+bool PerAddressListenerConfig::handOffRestoredDestinationConnections() const {
+  return listener_impl_.handOffRestoredDestinationConnections();
+}
+
+uint32_t PerAddressListenerConfig::perConnectionBufferLimitBytes() const {
+  return listener_impl_.perConnectionBufferLimitBytes();
+}
+
+std::chrono::milliseconds PerAddressListenerConfig::listenerFiltersTimeout() const {
+  return listener_impl_.listenerFiltersTimeout();
+}
+
+bool PerAddressListenerConfig::continueOnListenerFiltersTimeout() const {
+  return listener_impl_.continueOnListenerFiltersTimeout();
+}
+
+Stats::Scope& PerAddressListenerConfig::listenerScope() { return listener_impl_.listenerScope(); }
+
+uint64_t PerAddressListenerConfig::listenerTag() const { return listener_impl_.listenerTag(); }
+
+const std::string& PerAddressListenerConfig::name() const { return listener_impl_.name(); }
+
+Network::UdpListenerConfigOptRef PerAddressListenerConfig::udpListenerConfig() {
+  return listener_impl_.udpListenerConfig();
+}
+
+Network::InternalListenerConfigOptRef PerAddressListenerConfig::internalListenerConfig() {
+  return listener_impl_.internalListenerConfig();
+}
+
+envoy::config::core::v3::TrafficDirection PerAddressListenerConfig::direction() const {
+  return listener_impl_.direction();
+}
+
+Network::ConnectionBalancer& PerAddressListenerConfig::connectionBalancer() {
+  return listener_impl_.connectionBalancer();
+}
+
+ResourceLimit& PerAddressListenerConfig::openConnections() {
+  return listener_impl_.openConnections();
+}
+
+const std::vector<AccessLog::InstanceSharedPtr>& PerAddressListenerConfig::accessLogs() const {
+  return listener_impl_.accessLogs();
+}
+
+uint32_t PerAddressListenerConfig::tcpBacklogSize() const {
+  return listener_impl_.tcpBacklogSize();
+}
+
+Init::Manager& PerAddressListenerConfig::initManager() { return listener_impl_.initManager(); }
+
+bool PerAddressListenerConfig::ignoreGlobalConnLimit() const {
+  return listener_impl_.ignoreGlobalConnLimit();
+}
+
 ListenerImpl::ListenerImpl(const envoy::config::listener::v3::Listener& config,
                            const std::string& version_info, ListenerManagerImpl& parent,
                            const std::string& name, bool added_via_api, bool workers_started,
@@ -307,6 +377,7 @@ ListenerImpl::ListenerImpl(const envoy::config::listener::v3::Listener& config,
           parent.factory_.createDrainManager(config.drain_type()), config)),
       listener_factory_context_(std::make_shared<PerAddressFactoryContextImpl>(
           listener_common_factory_context_, config, this, *this)),
+      per_address_listener_config_(std::make_shared<PerAddressListenerConfig>(*this)),
       filter_chain_manager_(name, *listener_factory_context_, initManager()),
       reuse_port_(getReusePortOrDefault(parent_.server_, config_)),
       cx_limit_runtime_key_("envoy.resource_limits.listener." + config_.name() +
@@ -429,6 +500,7 @@ ListenerImpl::ListenerImpl(ListenerImpl& origin,
       listener_common_factory_context_(origin.listener_common_factory_context_),
       listener_factory_context_(std::make_shared<PerAddressFactoryContextImpl>(
           listener_common_factory_context_, config, this, *this)),
+      per_address_listener_config_(std::make_shared<PerAddressListenerConfig>(*this)),
       filter_chain_manager_(name, *listener_factory_context_, initManager(),
                             origin.filter_chain_manager_),
       reuse_port_(origin.reuse_port_),

@@ -223,6 +223,38 @@ private:
   ListenerImpl& listener_impl_;
 };
 
+class PerAddressListenerConfig : public Network::ListenerConfig {
+public:
+  PerAddressListenerConfig(ListenerImpl& listener_impl) : listener_impl_(listener_impl) {}
+
+  Network::FilterChainManager& filterChainManager() override;
+
+  Network::FilterChainFactory& filterChainFactory() override;
+
+  std::vector<Network::ListenSocketFactoryPtr>& listenSocketFactories() override;
+
+  bool bindToPort() override;
+  bool handOffRestoredDestinationConnections() const override;
+  uint32_t perConnectionBufferLimitBytes() const override;
+  std::chrono::milliseconds listenerFiltersTimeout() const override;
+  bool continueOnListenerFiltersTimeout() const override;
+  Stats::Scope& listenerScope() override;
+  uint64_t listenerTag() const override;
+  const std::string& name() const override;
+  Network::UdpListenerConfigOptRef udpListenerConfig() override;
+  Network::InternalListenerConfigOptRef internalListenerConfig() override;
+  envoy::config::core::v3::TrafficDirection direction() const override;
+  Network::ConnectionBalancer& connectionBalancer() override;
+  ResourceLimit& openConnections() override;
+  const std::vector<AccessLog::InstanceSharedPtr>& accessLogs() const override;
+  uint32_t tcpBacklogSize() const override;
+  Init::Manager& initManager() override;
+  bool ignoreGlobalConnLimit() const override;
+
+private:
+  ListenerImpl& listener_impl_;
+};
+
 /**
  * Maps proto config to runtime config for a listener with a network filter chain.
  */
@@ -357,6 +389,8 @@ public:
   void createUdpListenerFilterChain(Network::UdpListenerFilterManager& udp_listener,
                                     Network::UdpReadFilterCallbacks& callbacks) override;
 
+  Network::ListenerConfig& perAddressConfig() { return *per_address_listener_config_; }
+
   SystemTime last_updated_;
 
 private:
@@ -455,6 +489,7 @@ private:
   Network::ConnectionBalancerSharedPtr connection_balancer_;
   std::shared_ptr<ListenerCommonFactoryContext> listener_common_factory_context_;
   std::shared_ptr<PerAddressFactoryContextImpl> listener_factory_context_;
+  std::shared_ptr<PerAddressListenerConfig> per_address_listener_config_;
   FilterChainManagerImpl filter_chain_manager_;
   const bool reuse_port_;
 
