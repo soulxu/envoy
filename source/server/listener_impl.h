@@ -150,7 +150,7 @@ private:
   Stats::ScopePtr global_scope_;
   ProtobufMessage::ValidationVisitor& validation_visitor_;
   const Server::DrainManagerPtr drain_manager_;
-  Stats::ScopePtr listener_scope_; // Stats with listener named scope.
+  std::vector<Stats::ScopePtr> listener_scopes_;
 };
 
 // TODO(lambdai): Strip the interface since ListenerFactoryContext only need to support

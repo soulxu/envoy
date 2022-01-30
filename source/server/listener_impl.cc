@@ -215,12 +215,27 @@ ListenerCommonFactoryContext::ListenerCommonFactoryContext(
     Envoy::Server::Instance& server, ProtobufMessage::ValidationVisitor& validation_visitor,
     DrainManagerPtr drain_manager, const envoy::config::listener::v3::Listener& config_message)
     : server_(server), global_scope_(server.stats().createScope("")),
-      validation_visitor_(validation_visitor), drain_manager_(std::move(drain_manager)),
-      listener_scope_(server_.stats().createScope(fmt::format(
+      validation_visitor_(validation_visitor), drain_manager_(std::move(drain_manager)) {
+  if (config_message.has_address()) {
+    listener_scopes_.emplace_back(server_.stats().createScope(fmt::format(
+        "listener.{}.",
+        !config_message.stat_prefix().empty()
+            ? config_message.stat_prefix()
+            : Network::Address::resolveProtoAddress(config_message.address())->asString())));
+  } else {
+    if (!config_message.stat_prefix().empty()) {
+      throw EnvoyException(fmt::format("listener: only onf of `stat` and `addresses` can be set."));
+    }
+    for (auto i = 0; i < config_message.addresses_size(); i++) {
+      listener_scopes_.emplace_back(server_.stats().createScope(fmt::format(
           "listener.{}.",
-          !config_message.stat_prefix().empty()
-              ? config_message.stat_prefix()
-              : Network::Address::resolveProtoAddress(config_message.address())->asString()))) {}
+          !config_message.addresses(i).stat_prefix().empty()
+              ? config_message.addresses(i).stat_prefix()
+              : Network::Address::resolveProtoAddress(config_message.addresses(i).address())
+                    ->asString())));
+    }
+  }
+}
 
 AccessLog::AccessLogManager& ListenerCommonFactoryContext::accessLogManager() {
   return server_.accessLogManager();
@@ -274,7 +289,7 @@ ListenerCommonFactoryContext::getTransportSocketFactoryContext() const {
 Init::Manager& ListenerCommonFactoryContext::initManager() { PANIC("not implemented"); }
 
 Server::DrainManager& ListenerCommonFactoryContext::drainManager() { return *drain_manager_; }
-Stats::Scope& ListenerCommonFactoryContext::listenerScope() { return *listener_scope_; }
+Stats::Scope& ListenerCommonFactoryContext::listenerScope() { return *listener_scopes_[0]; }
 
 Network::FilterChainManager& PerAddressListenerConfig::filterChainManager() {
   return listener_impl_.filterChainManager();
