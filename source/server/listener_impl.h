@@ -334,7 +334,9 @@ public:
   bool hasCompatibleAddress(const ListenerImpl& other) const;
 
   // Network::ListenerConfig
-  Network::FilterChainManager& filterChainManager() override { return filter_chain_manager_; }
+  Network::FilterChainManager& filterChainManager() override {
+    return *per_address_contexts_[0].filter_chain_manager_;
+  }
   Network::FilterChainFactory& filterChainFactory() override { return *this; }
   std::vector<Network::ListenSocketFactoryPtr>& listenSocketFactories() override {
     return socket_factories_;
@@ -353,7 +355,9 @@ public:
   bool continueOnListenerFiltersTimeout() const override {
     return continue_on_listener_filters_timeout_;
   }
-  Stats::Scope& listenerScope() override { return listener_factory_context_->listenerScope(); }
+  Stats::Scope& listenerScope() override {
+    return listener_common_factory_context_->listenerScope();
+  }
   uint64_t listenerTag() const override { return listener_tag_; }
   const std::string& name() const override { return name_; }
   Network::UdpListenerConfigOptRef udpListenerConfig() override {
@@ -390,7 +394,9 @@ public:
   void createUdpListenerFilterChain(Network::UdpListenerFilterManager& udp_listener,
                                     Network::UdpReadFilterCallbacks& callbacks) override;
 
-  Network::ListenerConfig& perAddressConfig() override { return *per_address_listener_config_; }
+  Network::ListenerConfig& perAddressConfig() override {
+    return *per_address_contexts_[0].per_address_listener_config_;
+  }
 
   SystemTime last_updated_;
 
@@ -424,6 +430,14 @@ private:
     void operator()(std::string* out, const Network::Address::InstanceConstSharedPtr& instance) {
       out->append(instance->asString());
     }
+  };
+
+  struct PerAddressContext {
+    std::shared_ptr<PerAddressFactoryContextImpl> listener_factory_context_;
+    std::shared_ptr<PerAddressListenerConfig> per_address_listener_config_;
+    std::unique_ptr<FilterChainManagerImpl> filter_chain_manager_;
+    std::shared_ptr<Server::Configuration::TransportSocketFactoryContextImpl>
+        transport_factory_context_;
   };
 
   /**
@@ -489,9 +503,7 @@ private:
   std::unique_ptr<Network::InternalListenerConfig> internal_listener_config_;
   Network::ConnectionBalancerSharedPtr connection_balancer_;
   std::shared_ptr<ListenerCommonFactoryContext> listener_common_factory_context_;
-  std::shared_ptr<PerAddressFactoryContextImpl> listener_factory_context_;
-  std::shared_ptr<PerAddressListenerConfig> per_address_listener_config_;
-  FilterChainManagerImpl filter_chain_manager_;
+  std::vector<PerAddressContext> per_address_contexts_;
   const bool reuse_port_;
 
   // Per-listener connection limits are only specified via runtime.
@@ -505,8 +517,6 @@ private:
   // Important: local_init_watcher_ must be the last field in the class to avoid unexpected watcher
   // callback during the destroy of ListenerImpl.
   Init::WatcherImpl local_init_watcher_;
-  std::shared_ptr<Server::Configuration::TransportSocketFactoryContextImpl>
-      transport_factory_context_;
 
   Quic::QuicStatNames& quic_stat_names_;
 

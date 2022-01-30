@@ -392,15 +392,11 @@ ListenerImpl::ListenerImpl(const envoy::config::listener::v3::Listener& config,
       listener_common_factory_context_(std::make_shared<ListenerCommonFactoryContext>(
           parent.server_, validation_visitor_,
           parent.factory_.createDrainManager(config.drain_type()), config)),
-      listener_factory_context_(std::make_shared<PerAddressFactoryContextImpl>(
-          listener_common_factory_context_, config, this, *this)),
-      per_address_listener_config_(std::make_shared<PerAddressListenerConfig>(*this)),
-      filter_chain_manager_(name, *listener_factory_context_, initManager()),
       reuse_port_(getReusePortOrDefault(parent_.server_, config_)),
       cx_limit_runtime_key_("envoy.resource_limits.listener." + config_.name() +
                             ".connection_limit"),
       open_connections_(std::make_shared<BasicResourceLimitImpl>(
-          std::numeric_limits<uint64_t>::max(), listener_factory_context_->runtime(),
+          std::numeric_limits<uint64_t>::max(), listener_common_factory_context_->runtime(),
           cx_limit_runtime_key_)),
       local_init_watcher_(fmt::format("Listener-local-init-watcher {}", name),
                           [this] {
@@ -412,13 +408,6 @@ ListenerImpl::ListenerImpl(const envoy::config::listener::v3::Listener& config,
                               listener_init_target_.ready();
                             }
                           }),
-      transport_factory_context_(
-          std::make_shared<Server::Configuration::TransportSocketFactoryContextImpl>(
-              parent_.server_.admin(), parent_.server_.sslContextManager(), listenerScope(),
-              parent_.server_.clusterManager(), parent_.server_.localInfo(),
-              parent_.server_.dispatcher(), parent_.server_.stats(),
-              parent_.server_.singletonManager(), parent_.server_.threadLocal(),
-              validation_visitor_, parent_.server_.api(), parent_.server_.options())),
       quic_stat_names_(parent_.quicStatNames()) {
 
   if (config.has_address() && config.addresses_size() > 0) {
@@ -447,8 +436,24 @@ ListenerImpl::ListenerImpl(const envoy::config::listener::v3::Listener& config,
     throw EnvoyException(fmt::format("listener {}: `addresses` must be set", name_));
   }
 
+  ENVOY_LOG(debug, "#####1");
+  for (uint i = 0; i < addresses_.size(); i++) {
+    auto per_address_factory_context = std::make_shared<PerAddressFactoryContextImpl>(
+        listener_common_factory_context_, config, this, *this);
+    per_address_contexts_.emplace_back(PerAddressContext(
+        {per_address_factory_context, std::make_shared<PerAddressListenerConfig>(*this),
+         std::make_unique<FilterChainManagerImpl>(name, *per_address_factory_context,
+                                                  initManager()),
+         std::make_shared<Server::Configuration::TransportSocketFactoryContextImpl>(
+             parent_.server_.admin(), parent_.server_.sslContextManager(), listenerScope(),
+             parent_.server_.clusterManager(), parent_.server_.localInfo(),
+             parent_.server_.dispatcher(), parent_.server_.stats(),
+             parent_.server_.singletonManager(), parent_.server_.threadLocal(), validation_visitor_,
+             parent_.server_.api(), parent_.server_.options())}));
+  }
+  ENVOY_LOG(debug, "#####2");
   const absl::optional<std::string> runtime_val =
-      listener_factory_context_->runtime().snapshot().get(cx_limit_runtime_key_);
+      listener_common_factory_context_->runtime().snapshot().get(cx_limit_runtime_key_);
   if (runtime_val && runtime_val->empty()) {
     ENVOY_LOG(warn,
               "Listener connection limit runtime key {} is empty. There are currently no "
@@ -515,19 +520,22 @@ ListenerImpl::ListenerImpl(ListenerImpl& origin,
       udp_listener_config_(origin.udp_listener_config_),
       connection_balancer_(origin.connection_balancer_),
       listener_common_factory_context_(origin.listener_common_factory_context_),
-      listener_factory_context_(std::make_shared<PerAddressFactoryContextImpl>(
-          listener_common_factory_context_, config, this, *this)),
-      per_address_listener_config_(std::make_shared<PerAddressListenerConfig>(*this)),
-      filter_chain_manager_(name, *listener_factory_context_, initManager(),
-                            origin.filter_chain_manager_),
       reuse_port_(origin.reuse_port_),
       local_init_watcher_(fmt::format("Listener-local-init-watcher {}", name),
                           [this] {
                             ASSERT(workers_started_);
                             parent_.inPlaceFilterChainUpdate(*this);
                           }),
-      transport_factory_context_(origin.transport_factory_context_),
       quic_stat_names_(parent_.quicStatNames()) {
+  for (auto _ : addresses_) {
+    auto per_address_factory_context = std::make_shared<PerAddressFactoryContextImpl>(
+        listener_common_factory_context_, config, this, *this);
+    per_address_contexts_.emplace_back(PerAddressContext(
+        {per_address_factory_context, std::make_shared<PerAddressListenerConfig>(*this),
+         std::make_unique<FilterChainManagerImpl>(name, *per_address_factory_context,
+                                                  initManager()),
+         origin.per_address_contexts_[0].transport_factory_context_}));
+  }
   buildAccessLog();
   validateConfig();
   buildListenSocketOptions();
@@ -698,11 +706,11 @@ void ListenerImpl::createListenerFilterFactories() {
     switch (socket_type_) {
     case Network::Socket::Type::Datagram:
       udp_listener_filter_factories_ = parent_.factory_.createUdpListenerFilterFactoryList(
-          config_.listener_filters(), *listener_factory_context_);
+          config_.listener_filters(), *per_address_contexts_[0].listener_factory_context_);
       break;
     case Network::Socket::Type::Stream:
       listener_filter_factories_ = parent_.factory_.createListenerFilterFactoryList(
-          config_.listener_filters(), *listener_factory_context_);
+          config_.listener_filters(), *per_address_contexts_[0].listener_factory_context_);
       break;
     default:
       NOT_REACHED_GCOVR_EXCL_LINE;
@@ -744,12 +752,13 @@ void ListenerImpl::validateFilterChains() {
 }
 
 void ListenerImpl::buildFilterChains() {
-  transport_factory_context_->setInitManager(*dynamic_init_manager_);
-  ListenerFilterChainFactoryBuilder builder(*this, *transport_factory_context_);
-  filter_chain_manager_.addFilterChains(
+  per_address_contexts_[0].transport_factory_context_->setInitManager(*dynamic_init_manager_);
+  ListenerFilterChainFactoryBuilder builder(*this,
+                                            *per_address_contexts_[0].transport_factory_context_);
+  per_address_contexts_[0].filter_chain_manager_->addFilterChains(
       config_.filter_chains(),
       config_.has_default_filter_chain() ? &config_.default_filter_chain() : nullptr, builder,
-      filter_chain_manager_);
+      *per_address_contexts_[0].filter_chain_manager_);
 }
 
 void ListenerImpl::buildSocketOptions() {
@@ -794,7 +803,7 @@ void ListenerImpl::buildOriginalDstListenerFilter() {
 
     listener_filter_factories_.push_back(factory.createListenerFilterFactoryFromProto(
         Envoy::ProtobufWkt::Empty(),
-        /*listener_filter_matcher=*/nullptr, *listener_factory_context_));
+        /*listener_filter_matcher=*/nullptr, *per_address_contexts_[0].listener_factory_context_));
   }
 }
 
@@ -809,7 +818,7 @@ void ListenerImpl::buildProxyProtocolListenerFilter() {
             "envoy.filters.listener.proxy_protocol");
     listener_filter_factories_.push_back(factory.createListenerFilterFactoryFromProto(
         envoy::extensions::filters::listener::proxy_protocol::v3::ProxyProtocol(),
-        /*listener_filter_matcher=*/nullptr, *listener_factory_context_));
+        /*listener_filter_matcher=*/nullptr, *per_address_contexts_[0].listener_factory_context_));
   }
 }
 
@@ -932,7 +941,7 @@ void ListenerImpl::debugLog(const std::string& message) {
 }
 
 void ListenerImpl::initialize() {
-  last_updated_ = listener_factory_context_->timeSource().systemTime();
+  last_updated_ = listener_common_factory_context_->timeSource().systemTime();
   // If workers have already started, we shift from using the global init manager to using a local
   // per listener init manager. See ~ListenerImpl() for why we gate the onListenerWarmed() call
   // by resetting the watcher.
@@ -1017,10 +1026,14 @@ ListenerImpl::newListenerWithFilterChain(const envoy::config::listener::v3::List
 
 void ListenerImpl::diffFilterChain(const ListenerImpl& another_listener,
                                    std::function<void(Network::DrainableFilterChain&)> callback) {
-  for (const auto& message_and_filter_chain : filter_chain_manager_.filterChainsByMessage()) {
-    if (another_listener.filter_chain_manager_.filterChainsByMessage().find(
-            message_and_filter_chain.first) ==
-        another_listener.filter_chain_manager_.filterChainsByMessage().end()) {
+  for (const auto& message_and_filter_chain :
+       per_address_contexts_[0].filter_chain_manager_->filterChainsByMessage()) {
+    if (another_listener.per_address_contexts_[0]
+            .filter_chain_manager_->filterChainsByMessage()
+            .find(message_and_filter_chain.first) ==
+        another_listener.per_address_contexts_[0]
+            .filter_chain_manager_->filterChainsByMessage()
+            .end()) {
       // The filter chain exists in `this` listener but not in the listener passed in.
       callback(*message_and_filter_chain.second);
     }
@@ -1028,11 +1041,14 @@ void ListenerImpl::diffFilterChain(const ListenerImpl& another_listener,
   // Filter chain manager maintains an optional default filter chain besides the filter chains
   // indexed by message.
   if (auto eq = MessageUtil();
-      filter_chain_manager_.defaultFilterChainMessage().has_value() &&
-      (!another_listener.filter_chain_manager_.defaultFilterChainMessage().has_value() ||
-       !eq(*another_listener.filter_chain_manager_.defaultFilterChainMessage(),
-           *filter_chain_manager_.defaultFilterChainMessage()))) {
-    callback(*filter_chain_manager_.defaultFilterChain());
+      per_address_contexts_[0].filter_chain_manager_->defaultFilterChainMessage().has_value() &&
+      (!another_listener.per_address_contexts_[0]
+            .filter_chain_manager_->defaultFilterChainMessage()
+            .has_value() ||
+       !eq(*another_listener.per_address_contexts_[0]
+                .filter_chain_manager_->defaultFilterChainMessage(),
+           *per_address_contexts_[0].filter_chain_manager_->defaultFilterChainMessage()))) {
+    callback(*per_address_contexts_[0].filter_chain_manager_->defaultFilterChain());
   }
 }
 
