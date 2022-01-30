@@ -211,86 +211,70 @@ void ListenSocketFactoryImpl::doFinalPreWorkerInit() {
 #endif
 }
 
-ListenerFactoryContextBaseImpl::ListenerFactoryContextBaseImpl(
+ListenerCommonFactoryContext::ListenerCommonFactoryContext(
     Envoy::Server::Instance& server, ProtobufMessage::ValidationVisitor& validation_visitor,
-    const envoy::config::listener::v3::Listener& config, DrainManagerPtr drain_manager)
-    : server_(server), metadata_(config.metadata()), typed_metadata_(config.metadata()),
-      direction_(config.traffic_direction()), global_scope_(server.stats().createScope("")),
-      listener_scope_(server_.stats().createScope(
-          fmt::format("listener.{}.",
-                      !config.stat_prefix().empty()
-                          ? config.stat_prefix()
-                          : Network::Address::resolveProtoAddress(config.address())->asString()))),
+    DrainManagerPtr drain_manager, const envoy::config::listener::v3::Listener& config_message)
+    : server_(server), global_scope_(server.stats().createScope("")),
       validation_visitor_(validation_visitor), drain_manager_(std::move(drain_manager)),
-      is_quic_(config.udp_listener_config().has_quic_options()) {}
+      listener_scope_(server_.stats().createScope(fmt::format(
+          "listener.{}.",
+          !config_message.stat_prefix().empty()
+              ? config_message.stat_prefix()
+              : Network::Address::resolveProtoAddress(config_message.address())->asString()))) {}
 
-AccessLog::AccessLogManager& ListenerFactoryContextBaseImpl::accessLogManager() {
+AccessLog::AccessLogManager& ListenerCommonFactoryContext::accessLogManager() {
   return server_.accessLogManager();
 }
-Upstream::ClusterManager& ListenerFactoryContextBaseImpl::clusterManager() {
+Upstream::ClusterManager& ListenerCommonFactoryContext::clusterManager() {
   return server_.clusterManager();
 }
-Event::Dispatcher& ListenerFactoryContextBaseImpl::mainThreadDispatcher() {
+Event::Dispatcher& ListenerCommonFactoryContext::mainThreadDispatcher() {
   return server_.dispatcher();
 }
-const Server::Options& ListenerFactoryContextBaseImpl::options() { return server_.options(); }
-Grpc::Context& ListenerFactoryContextBaseImpl::grpcContext() { return server_.grpcContext(); }
-bool ListenerFactoryContextBaseImpl::healthCheckFailed() { return server_.healthCheckFailed(); }
-Http::Context& ListenerFactoryContextBaseImpl::httpContext() { return server_.httpContext(); }
-Router::Context& ListenerFactoryContextBaseImpl::routerContext() { return server_.routerContext(); }
-const LocalInfo::LocalInfo& ListenerFactoryContextBaseImpl::localInfo() const {
+const Server::Options& ListenerCommonFactoryContext::options() { return server_.options(); }
+Grpc::Context& ListenerCommonFactoryContext::grpcContext() { return server_.grpcContext(); }
+bool ListenerCommonFactoryContext::healthCheckFailed() { return server_.healthCheckFailed(); }
+Http::Context& ListenerCommonFactoryContext::httpContext() { return server_.httpContext(); }
+Router::Context& ListenerCommonFactoryContext::routerContext() { return server_.routerContext(); }
+const LocalInfo::LocalInfo& ListenerCommonFactoryContext::localInfo() const {
   return server_.localInfo();
 }
-Envoy::Runtime::Loader& ListenerFactoryContextBaseImpl::runtime() { return server_.runtime(); }
-Stats::Scope& ListenerFactoryContextBaseImpl::scope() { return *global_scope_; }
-Singleton::Manager& ListenerFactoryContextBaseImpl::singletonManager() {
+Envoy::Runtime::Loader& ListenerCommonFactoryContext::runtime() { return server_.runtime(); }
+Stats::Scope& ListenerCommonFactoryContext::scope() { return *global_scope_; }
+Singleton::Manager& ListenerCommonFactoryContext::singletonManager() {
   return server_.singletonManager();
 }
-OverloadManager& ListenerFactoryContextBaseImpl::overloadManager() {
+OverloadManager& ListenerCommonFactoryContext::overloadManager() {
   return server_.overloadManager();
 }
-ThreadLocal::Instance& ListenerFactoryContextBaseImpl::threadLocal() {
-  return server_.threadLocal();
+ThreadLocal::Instance& ListenerCommonFactoryContext::threadLocal() { return server_.threadLocal(); }
+Admin& ListenerCommonFactoryContext::admin() { return server_.admin(); }
+TimeSource& ListenerCommonFactoryContext::timeSource() { return api().timeSource(); }
+ProtobufMessage::ValidationContext& ListenerCommonFactoryContext::messageValidationContext() {
+  return getServerFactoryContext().messageValidationContext();
 }
-Admin& ListenerFactoryContextBaseImpl::admin() { return server_.admin(); }
-const envoy::config::core::v3::Metadata& ListenerFactoryContextBaseImpl::listenerMetadata() const {
-  return metadata_;
-};
-const Envoy::Config::TypedMetadata& ListenerFactoryContextBaseImpl::listenerTypedMetadata() const {
-  return typed_metadata_;
-}
-envoy::config::core::v3::TrafficDirection ListenerFactoryContextBaseImpl::direction() const {
-  return direction_;
-};
-TimeSource& ListenerFactoryContextBaseImpl::timeSource() { return api().timeSource(); }
-ProtobufMessage::ValidationContext& ListenerFactoryContextBaseImpl::messageValidationContext() {
-  return server_.messageValidationContext();
-}
-ProtobufMessage::ValidationVisitor& ListenerFactoryContextBaseImpl::messageValidationVisitor() {
+ProtobufMessage::ValidationVisitor& ListenerCommonFactoryContext::messageValidationVisitor() {
   return validation_visitor_;
 }
-Api::Api& ListenerFactoryContextBaseImpl::api() { return server_.api(); }
-ServerLifecycleNotifier& ListenerFactoryContextBaseImpl::lifecycleNotifier() {
+Api::Api& ListenerCommonFactoryContext::api() { return server_.api(); }
+ServerLifecycleNotifier& ListenerCommonFactoryContext::lifecycleNotifier() {
   return server_.lifecycleNotifier();
 }
-ProcessContextOptRef ListenerFactoryContextBaseImpl::processContext() {
+ProcessContextOptRef ListenerCommonFactoryContext::processContext() {
   return server_.processContext();
 }
-Configuration::ServerFactoryContext&
-ListenerFactoryContextBaseImpl::getServerFactoryContext() const {
+Configuration::ServerFactoryContext& ListenerCommonFactoryContext::getServerFactoryContext() const {
   return server_.serverFactoryContext();
 }
 Configuration::TransportSocketFactoryContext&
-ListenerFactoryContextBaseImpl::getTransportSocketFactoryContext() const {
+ListenerCommonFactoryContext::getTransportSocketFactoryContext() const {
   return server_.transportSocketFactoryContext();
 }
-Stats::Scope& ListenerFactoryContextBaseImpl::listenerScope() { return *listener_scope_; }
-bool ListenerFactoryContextBaseImpl::isQuicListener() const { return is_quic_; }
-Network::DrainDecision& ListenerFactoryContextBaseImpl::drainDecision() { return *this; }
-Server::DrainManager& ListenerFactoryContextBaseImpl::drainManager() { return *drain_manager_; }
 
-// Must be overridden
-Init::Manager& ListenerFactoryContextBaseImpl::initManager() { PANIC("not implemented"); }
+Init::Manager& ListenerCommonFactoryContext::initManager() { PANIC("not implemented"); }
+
+Server::DrainManager& ListenerCommonFactoryContext::drainManager() { return *drain_manager_; }
+Stats::Scope& ListenerCommonFactoryContext::listenerScope() { return *listener_scope_; }
 
 ListenerImpl::ListenerImpl(const envoy::config::listener::v3::Listener& config,
                            const std::string& version_info, ListenerManagerImpl& parent,
@@ -318,10 +302,12 @@ ListenerImpl::ListenerImpl(const envoy::config::listener::v3::Listener& config,
       listener_filters_timeout_(
           PROTOBUF_GET_MS_OR_DEFAULT(config, listener_filters_timeout, 15000)),
       continue_on_listener_filters_timeout_(config.continue_on_listener_filters_timeout()),
-      listener_factory_context_(std::make_shared<PerListenerFactoryContextImpl>(
-          parent.server_, validation_visitor_, config, this, *this,
-          parent.factory_.createDrainManager(config.drain_type()))),
-      filter_chain_manager_(name, listener_factory_context_->parentFactoryContext(), initManager()),
+      listener_common_factory_context_(std::make_shared<ListenerCommonFactoryContext>(
+          parent.server_, validation_visitor_,
+          parent.factory_.createDrainManager(config.drain_type()), config)),
+      listener_factory_context_(std::make_shared<PerAddressFactoryContextImpl>(
+          listener_common_factory_context_, config, this, *this)),
+      filter_chain_manager_(name, *listener_factory_context_, initManager()),
       reuse_port_(getReusePortOrDefault(parent_.server_, config_)),
       cx_limit_runtime_key_("envoy.resource_limits.listener." + config_.name() +
                             ".connection_limit"),
@@ -440,10 +426,11 @@ ListenerImpl::ListenerImpl(ListenerImpl& origin,
       continue_on_listener_filters_timeout_(config.continue_on_listener_filters_timeout()),
       udp_listener_config_(origin.udp_listener_config_),
       connection_balancer_(origin.connection_balancer_),
-      listener_factory_context_(std::make_shared<PerListenerFactoryContextImpl>(
-          origin.listener_factory_context_->listener_factory_context_base_, this, *this)),
-      filter_chain_manager_(name, origin.listener_factory_context_->parentFactoryContext(),
-                            initManager(), origin.filter_chain_manager_),
+      listener_common_factory_context_(origin.listener_common_factory_context_),
+      listener_factory_context_(std::make_shared<PerAddressFactoryContextImpl>(
+          listener_common_factory_context_, config, this, *this)),
+      filter_chain_manager_(name, *listener_factory_context_, initManager(),
+                            origin.filter_chain_manager_),
       reuse_port_(origin.reuse_port_),
       local_init_watcher_(fmt::format("Listener-local-init-watcher {}", name),
                           [this] {
@@ -497,7 +484,7 @@ void ListenerImpl::validateConfig() {
 void ListenerImpl::buildAccessLog() {
   for (const auto& access_log : config_.access_log()) {
     AccessLog::InstanceSharedPtr current_access_log =
-        AccessLog::AccessLogFactory::fromProto(access_log, *listener_factory_context_);
+        AccessLog::AccessLogFactory::fromProto(access_log, *listener_common_factory_context_);
     access_logs_.push_back(current_access_log);
   }
 }
@@ -737,91 +724,101 @@ void ListenerImpl::buildProxyProtocolListenerFilter() {
   }
 }
 
-AccessLog::AccessLogManager& PerListenerFactoryContextImpl::accessLogManager() {
-  return listener_factory_context_base_->accessLogManager();
+PerAddressFactoryContextImpl::PerAddressFactoryContextImpl(
+    std::shared_ptr<ListenerCommonFactoryContext> listener_common_factory_context,
+    const envoy::config::listener::v3::Listener& config_message,
+    const Network::ListenerConfig* listener_config, ListenerImpl& listener_impl)
+    : listener_common_factory_context_(listener_common_factory_context),
+      metadata_(config_message.metadata()), typed_metadata_(config_message.metadata()),
+      direction_(config_message.traffic_direction()),
+
+      is_quic_(config_message.udp_listener_config().has_quic_options()),
+      listener_config_(listener_config), listener_impl_(listener_impl) {}
+
+AccessLog::AccessLogManager& PerAddressFactoryContextImpl::accessLogManager() {
+  return listener_common_factory_context_->accessLogManager();
 }
-Upstream::ClusterManager& PerListenerFactoryContextImpl::clusterManager() {
-  return listener_factory_context_base_->clusterManager();
+Upstream::ClusterManager& PerAddressFactoryContextImpl::clusterManager() {
+  return listener_common_factory_context_->clusterManager();
 }
-Event::Dispatcher& PerListenerFactoryContextImpl::mainThreadDispatcher() {
-  return listener_factory_context_base_->mainThreadDispatcher();
+Event::Dispatcher& PerAddressFactoryContextImpl::mainThreadDispatcher() {
+  return listener_common_factory_context_->mainThreadDispatcher();
 }
-const Server::Options& PerListenerFactoryContextImpl::options() {
-  return listener_factory_context_base_->options();
+const Server::Options& PerAddressFactoryContextImpl::options() {
+  return listener_common_factory_context_->options();
 }
-Network::DrainDecision& PerListenerFactoryContextImpl::drainDecision() { PANIC("not implemented"); }
-Grpc::Context& PerListenerFactoryContextImpl::grpcContext() {
-  return listener_factory_context_base_->grpcContext();
+Network::DrainDecision& PerAddressFactoryContextImpl::drainDecision() { return *this; }
+Grpc::Context& PerAddressFactoryContextImpl::grpcContext() {
+  return listener_common_factory_context_->grpcContext();
 }
-bool PerListenerFactoryContextImpl::healthCheckFailed() {
-  return listener_factory_context_base_->healthCheckFailed();
+bool PerAddressFactoryContextImpl::healthCheckFailed() {
+  return listener_common_factory_context_->healthCheckFailed();
 }
-Http::Context& PerListenerFactoryContextImpl::httpContext() {
-  return listener_factory_context_base_->httpContext();
+Http::Context& PerAddressFactoryContextImpl::httpContext() {
+  return listener_common_factory_context_->httpContext();
 }
-Router::Context& PerListenerFactoryContextImpl::routerContext() {
-  return listener_factory_context_base_->routerContext();
+Router::Context& PerAddressFactoryContextImpl::routerContext() {
+  return listener_common_factory_context_->routerContext();
 }
-const LocalInfo::LocalInfo& PerListenerFactoryContextImpl::localInfo() const {
-  return listener_factory_context_base_->localInfo();
+const LocalInfo::LocalInfo& PerAddressFactoryContextImpl::localInfo() const {
+  return listener_common_factory_context_->localInfo();
 }
-Envoy::Runtime::Loader& PerListenerFactoryContextImpl::runtime() {
-  return listener_factory_context_base_->runtime();
+Envoy::Runtime::Loader& PerAddressFactoryContextImpl::runtime() {
+  return listener_common_factory_context_->runtime();
 }
-Stats::Scope& PerListenerFactoryContextImpl::scope() {
-  return listener_factory_context_base_->scope();
+Stats::Scope& PerAddressFactoryContextImpl::scope() {
+  return listener_common_factory_context_->scope();
 }
-Singleton::Manager& PerListenerFactoryContextImpl::singletonManager() {
-  return listener_factory_context_base_->singletonManager();
+Singleton::Manager& PerAddressFactoryContextImpl::singletonManager() {
+  return listener_common_factory_context_->singletonManager();
 }
-OverloadManager& PerListenerFactoryContextImpl::overloadManager() {
-  return listener_factory_context_base_->overloadManager();
+OverloadManager& PerAddressFactoryContextImpl::overloadManager() {
+  return listener_common_factory_context_->overloadManager();
 }
-ThreadLocal::Instance& PerListenerFactoryContextImpl::threadLocal() {
-  return listener_factory_context_base_->threadLocal();
+ThreadLocal::Instance& PerAddressFactoryContextImpl::threadLocal() {
+  return listener_common_factory_context_->threadLocal();
 }
-Admin& PerListenerFactoryContextImpl::admin() { return listener_factory_context_base_->admin(); }
-const envoy::config::core::v3::Metadata& PerListenerFactoryContextImpl::listenerMetadata() const {
-  return listener_factory_context_base_->listenerMetadata();
+Admin& PerAddressFactoryContextImpl::admin() { return listener_common_factory_context_->admin(); }
+const envoy::config::core::v3::Metadata& PerAddressFactoryContextImpl::listenerMetadata() const {
+  return metadata_;
 };
-const Envoy::Config::TypedMetadata& PerListenerFactoryContextImpl::listenerTypedMetadata() const {
-  return listener_factory_context_base_->listenerTypedMetadata();
+const Envoy::Config::TypedMetadata& PerAddressFactoryContextImpl::listenerTypedMetadata() const {
+  return typed_metadata_;
 }
-envoy::config::core::v3::TrafficDirection PerListenerFactoryContextImpl::direction() const {
-  return listener_factory_context_base_->direction();
+envoy::config::core::v3::TrafficDirection PerAddressFactoryContextImpl::direction() const {
+  return direction_;
 };
-TimeSource& PerListenerFactoryContextImpl::timeSource() { return api().timeSource(); }
-const Network::ListenerConfig& PerListenerFactoryContextImpl::listenerConfig() const {
+TimeSource& PerAddressFactoryContextImpl::timeSource() {
+  return listener_common_factory_context_->timeSource();
+}
+const Network::ListenerConfig& PerAddressFactoryContextImpl::listenerConfig() const {
   return *listener_config_;
 }
-ProtobufMessage::ValidationContext& PerListenerFactoryContextImpl::messageValidationContext() {
-  return getServerFactoryContext().messageValidationContext();
+ProtobufMessage::ValidationContext& PerAddressFactoryContextImpl::messageValidationContext() {
+  return listener_common_factory_context_->messageValidationContext();
 }
-ProtobufMessage::ValidationVisitor& PerListenerFactoryContextImpl::messageValidationVisitor() {
-  return listener_factory_context_base_->messageValidationVisitor();
+ProtobufMessage::ValidationVisitor& PerAddressFactoryContextImpl::messageValidationVisitor() {
+  return listener_common_factory_context_->messageValidationVisitor();
 }
-Api::Api& PerListenerFactoryContextImpl::api() { return listener_factory_context_base_->api(); }
-ServerLifecycleNotifier& PerListenerFactoryContextImpl::lifecycleNotifier() {
-  return listener_factory_context_base_->lifecycleNotifier();
+Api::Api& PerAddressFactoryContextImpl::api() { return listener_common_factory_context_->api(); }
+ServerLifecycleNotifier& PerAddressFactoryContextImpl::lifecycleNotifier() {
+  return listener_common_factory_context_->lifecycleNotifier();
 }
-ProcessContextOptRef PerListenerFactoryContextImpl::processContext() {
-  return listener_factory_context_base_->processContext();
+ProcessContextOptRef PerAddressFactoryContextImpl::processContext() {
+  return listener_common_factory_context_->processContext();
 }
-Configuration::ServerFactoryContext&
-PerListenerFactoryContextImpl::getServerFactoryContext() const {
-  return listener_factory_context_base_->getServerFactoryContext();
+Configuration::ServerFactoryContext& PerAddressFactoryContextImpl::getServerFactoryContext() const {
+  return listener_common_factory_context_->getServerFactoryContext();
 }
 Configuration::TransportSocketFactoryContext&
-PerListenerFactoryContextImpl::getTransportSocketFactoryContext() const {
-  return listener_factory_context_base_->getTransportSocketFactoryContext();
+PerAddressFactoryContextImpl::getTransportSocketFactoryContext() const {
+  return listener_common_factory_context_->getTransportSocketFactoryContext();
 }
-Stats::Scope& PerListenerFactoryContextImpl::listenerScope() {
-  return listener_factory_context_base_->listenerScope();
+Stats::Scope& PerAddressFactoryContextImpl::listenerScope() {
+  return listener_common_factory_context_->listenerScope();
 }
-bool PerListenerFactoryContextImpl::isQuicListener() const {
-  return listener_factory_context_base_->isQuicListener();
-}
-Init::Manager& PerListenerFactoryContextImpl::initManager() { return listener_impl_.initManager(); }
+bool PerAddressFactoryContextImpl::isQuicListener() const { return is_quic_; }
+Init::Manager& PerAddressFactoryContextImpl::initManager() { return listener_impl_.initManager(); }
 
 bool ListenerImpl::createNetworkFilterChain(
     Network::Connection& connection,
