@@ -38,13 +38,14 @@ void ActiveUdpListenerBase::post(Network::UdpRecvData&& data) {
   auto data_to_post = std::make_shared<Network::UdpRecvData>();
   *data_to_post = std::move(data);
 
-  udp_listener_->dispatcher().post(
-      [data_to_post, tag = config_->listenerTag(), &parent = parent_]() {
-        Network::UdpListenerCallbacksOptRef listener = parent.getUdpListenerCallbacks(tag);
-        if (listener.has_value()) {
-          listener->get().onDataWorker(std::move(*data_to_post));
-        }
-      });
+  udp_listener_->dispatcher().post([data_to_post, tag = config_->listenerTag(), &parent = parent_,
+                                    &listen_socket = listen_socket_]() {
+    Network::UdpListenerCallbacksOptRef listener =
+        parent.getUdpListenerCallbacks(tag, listen_socket.connectionInfoProvider().localAddress());
+    if (listener.has_value()) {
+      listener->get().onDataWorker(std::move(*data_to_post));
+    }
+  });
 }
 
 void ActiveUdpListenerBase::onData(Network::UdpRecvData&& data) {

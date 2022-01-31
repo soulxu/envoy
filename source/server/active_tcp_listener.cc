@@ -155,7 +155,8 @@ void ActiveTcpListener::post(Network::ConnectionSocketPtr&& socket) {
   dispatcher().post([socket_to_rebalance, tag = config_->listenerTag(),
                      &tcp_conn_handler = tcp_conn_handler_,
                      handoff = config_->handOffRestoredDestinationConnections()]() {
-    auto balanced_handler = tcp_conn_handler.getBalancedHandlerByTag(tag);
+    auto balanced_handler = tcp_conn_handler.getBalancedHandlerByTag(
+        tag, socket_to_rebalance->socket->connectionInfoProvider().localAddress());
     if (balanced_handler.has_value()) {
       balanced_handler->get().onAcceptWorker(std::move(socket_to_rebalance->socket), handoff, true);
       return;

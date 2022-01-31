@@ -12,6 +12,8 @@
 
 #include "source/common/common/interval_value.h"
 
+#include "address.h"
+
 namespace Envoy {
 namespace Network {
 
@@ -176,10 +178,13 @@ public:
   /**
    * Obtain the rebalancer of the tcp listener.
    * @param listener_tag supplies the tag of the tcp listener that was passed to addListener().
+   * @param address the address the listener is listening on.
    * @return BalancedConnectionHandlerOptRef the balancer attached to the listener. `nullopt` if
    * listener doesn't exist or rebalancer doesn't exist.
    */
-  virtual BalancedConnectionHandlerOptRef getBalancedHandlerByTag(uint64_t listener_tag) PURE;
+  virtual BalancedConnectionHandlerOptRef
+  getBalancedHandlerByTag(uint64_t listener_tag,
+                          const Network::Address::InstanceConstSharedPtr& address) PURE;
 
   /**
    * Obtain the rebalancer of the tcp listener.
@@ -201,7 +206,9 @@ public:
    * absl::nullopt for non-UDP listeners and for ``listener_tag`` values that have already been
    * removed.
    */
-  virtual UdpListenerCallbacksOptRef getUdpListenerCallbacks(uint64_t listener_tag) PURE;
+  virtual UdpListenerCallbacksOptRef
+  getUdpListenerCallbacks(uint64_t listener_tag,
+                          const Network::Address::InstanceConstSharedPtr& address) PURE;
 };
 
 /**

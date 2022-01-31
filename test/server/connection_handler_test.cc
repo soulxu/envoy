@@ -380,6 +380,7 @@ TEST_F(ConnectionHandlerTest, RemoveListenerDuringRebalance) {
   Event::PostCb post_cb;
   EXPECT_CALL(dispatcher_, post(_)).WillOnce(SaveArg<0>(&post_cb));
   Network::MockConnectionSocket* connection = new NiceMock<Network::MockConnectionSocket>();
+  connection->connection_info_provider_->setLocalAddress(local_address_);
   current_handler->incNumConnections();
 #ifndef NDEBUG
   EXPECT_CALL(*access_log_, log(_, _, _, _));

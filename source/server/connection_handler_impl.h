@@ -60,12 +60,16 @@ public:
 
   // Network::TcpConnectionHandler
   Event::Dispatcher& dispatcher() override { return dispatcher_; }
-  Network::BalancedConnectionHandlerOptRef getBalancedHandlerByTag(uint64_t listener_tag) override;
+  Network::BalancedConnectionHandlerOptRef
+  getBalancedHandlerByTag(uint64_t listener_tag,
+                          const Network::Address::InstanceConstSharedPtr& address) override;
   Network::BalancedConnectionHandlerOptRef
   getBalancedHandlerByAddress(const Network::Address::Instance& address) override;
 
   // Network::UdpConnectionHandler
-  Network::UdpListenerCallbacksOptRef getUdpListenerCallbacks(uint64_t listener_tag) override;
+  Network::UdpListenerCallbacksOptRef
+  getUdpListenerCallbacks(uint64_t listener_tag,
+                          const Network::Address::InstanceConstSharedPtr& address) override;
 
   // Network::InternalListenerManager
   Network::InternalListenerOptRef
@@ -88,14 +92,13 @@ private:
     UdpListenerCallbacksOptRef udpListener();
     ActiveInternalListenerOptRef internalListener();
   };
-  using ActiveListenerDetailsOptRef = absl::optional<std::reference_wrapper<ActiveListenerDetails>>;
-  ActiveListenerDetailsOptRef findActiveListenerByTag(uint64_t listener_tag);
 
   // This has a value on worker threads, and no value on the main thread.
   const absl::optional<uint32_t> worker_index_;
   Event::Dispatcher& dispatcher_;
   const std::string per_handler_stat_prefix_;
-  absl::flat_hash_map<uint64_t, std::shared_ptr<ActiveListenerDetails>> listener_map_by_tag_;
+  absl::flat_hash_map<uint64_t, std::vector<std::shared_ptr<ActiveListenerDetails>>>
+      listener_map_by_tag_;
   absl::flat_hash_map<std::string, std::shared_ptr<ActiveListenerDetails>>
       tcp_listener_map_by_address_;
   absl::flat_hash_map<std::string, std::shared_ptr<ActiveListenerDetails>>
