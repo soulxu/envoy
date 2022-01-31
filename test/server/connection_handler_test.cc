@@ -157,7 +157,7 @@ public:
       open_connections_.setMax(num_connections);
     }
     void clearMaxConnections() { open_connections_.resetMax(); }
-    Network::ListenerConfig& perAddressConfig() override { return *this; }
+    Network::ListenerConfig& perAddressConfig(int) override { return *this; }
 
     ConnectionHandlerTest& parent_;
     std::shared_ptr<NiceMock<Network::MockListenSocket>> socket_;

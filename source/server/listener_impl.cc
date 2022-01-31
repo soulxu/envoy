@@ -289,15 +289,15 @@ ListenerCommonFactoryContext::getTransportSocketFactoryContext() const {
 Init::Manager& ListenerCommonFactoryContext::initManager() { PANIC("not implemented"); }
 
 Server::DrainManager& ListenerCommonFactoryContext::drainManager() { return *drain_manager_; }
-Stats::Scope& ListenerCommonFactoryContext::listenerScope() { return *listener_scopes_[0]; }
+Stats::Scope& ListenerCommonFactoryContext::listenerScope(int address_index) {
+  return *listener_scopes_[address_index];
+}
 
 Network::FilterChainManager& PerAddressListenerConfig::filterChainManager() {
-  return listener_impl_.filterChainManager();
+  return listener_impl_.filterChainManager(address_index_);
 }
 
-Network::FilterChainFactory& PerAddressListenerConfig::filterChainFactory() {
-  return listener_impl_.filterChainFactory();
-}
+Network::FilterChainFactory& PerAddressListenerConfig::filterChainFactory() { return *this; }
 
 std::vector<Network::ListenSocketFactoryPtr>& PerAddressListenerConfig::listenSocketFactories() {
   return listener_impl_.listenSocketFactories();
@@ -321,7 +321,9 @@ bool PerAddressListenerConfig::continueOnListenerFiltersTimeout() const {
   return listener_impl_.continueOnListenerFiltersTimeout();
 }
 
-Stats::Scope& PerAddressListenerConfig::listenerScope() { return listener_impl_.listenerScope(); }
+Stats::Scope& PerAddressListenerConfig::listenerScope() {
+  return listener_impl_.listenerScope(address_index_);
+}
 
 uint64_t PerAddressListenerConfig::listenerTag() const { return listener_impl_.listenerTag(); }
 
@@ -361,7 +363,22 @@ bool PerAddressListenerConfig::ignoreGlobalConnLimit() const {
   return listener_impl_.ignoreGlobalConnLimit();
 }
 
-Network::ListenerConfig& PerAddressListenerConfig::perAddressConfig() { PANIC("not implemented"); }
+Network::ListenerConfig& PerAddressListenerConfig::perAddressConfig(int) {
+  PANIC("not implemented");
+}
+
+bool PerAddressListenerConfig::createNetworkFilterChain(
+    Network::Connection& connection, const std::vector<Network::FilterFactoryCb>& factories) {
+  return listener_impl_.createNetworkFilterChain(connection, factories);
+}
+
+bool PerAddressListenerConfig::createListenerFilterChain(Network::ListenerFilterManager& manager) {
+  return listener_impl_.createListenerFilterChain(manager, address_index_);
+}
+void PerAddressListenerConfig::createUdpListenerFilterChain(
+    Network::UdpListenerFilterManager& udp_listener, Network::UdpReadFilterCallbacks& callbacks) {
+  listener_impl_.createUdpListenerFilterChain(udp_listener, callbacks, address_index_);
+}
 
 ListenerImpl::ListenerImpl(const envoy::config::listener::v3::Listener& config,
                            const std::string& version_info, ListenerManagerImpl& parent,
@@ -436,22 +453,24 @@ ListenerImpl::ListenerImpl(const envoy::config::listener::v3::Listener& config,
     throw EnvoyException(fmt::format("listener {}: `addresses` must be set", name_));
   }
 
-  ENVOY_LOG(debug, "#####1");
   for (uint i = 0; i < addresses_.size(); i++) {
     auto per_address_factory_context = std::make_shared<PerAddressFactoryContextImpl>(
-        listener_common_factory_context_, config, this, *this);
+        listener_common_factory_context_, config, this, *this, i);
     per_address_contexts_.emplace_back(PerAddressContext(
-        {per_address_factory_context, std::make_shared<PerAddressListenerConfig>(*this),
+        {per_address_factory_context,
+         std::make_shared<PerAddressListenerConfig>(*this, i),
          std::make_unique<FilterChainManagerImpl>(name, *per_address_factory_context,
                                                   initManager()),
          std::make_shared<Server::Configuration::TransportSocketFactoryContextImpl>(
-             parent_.server_.admin(), parent_.server_.sslContextManager(), listenerScope(),
+             parent_.server_.admin(), parent_.server_.sslContextManager(), listenerScope(i),
              parent_.server_.clusterManager(), parent_.server_.localInfo(),
              parent_.server_.dispatcher(), parent_.server_.stats(),
              parent_.server_.singletonManager(), parent_.server_.threadLocal(), validation_visitor_,
-             parent_.server_.api(), parent_.server_.options())}));
+             parent_.server_.api(), parent_.server_.options()),
+         {},
+         {}}));
   }
-  ENVOY_LOG(debug, "#####2");
+
   const absl::optional<std::string> runtime_val =
       listener_common_factory_context_->runtime().snapshot().get(cx_limit_runtime_key_);
   if (runtime_val && runtime_val->empty()) {
@@ -527,14 +546,17 @@ ListenerImpl::ListenerImpl(ListenerImpl& origin,
                             parent_.inPlaceFilterChainUpdate(*this);
                           }),
       quic_stat_names_(parent_.quicStatNames()) {
-  for (auto _ : addresses_) {
+  for (uint i = 0; i < addresses_.size(); i++) {
     auto per_address_factory_context = std::make_shared<PerAddressFactoryContextImpl>(
-        listener_common_factory_context_, config, this, *this);
-    per_address_contexts_.emplace_back(PerAddressContext(
-        {per_address_factory_context, std::make_shared<PerAddressListenerConfig>(*this),
-         std::make_unique<FilterChainManagerImpl>(name, *per_address_factory_context,
-                                                  initManager()),
-         origin.per_address_contexts_[0].transport_factory_context_}));
+        listener_common_factory_context_, config, this, *this, i);
+    per_address_contexts_.emplace_back(
+        PerAddressContext({per_address_factory_context,
+                           std::make_shared<PerAddressListenerConfig>(*this, i),
+                           std::make_unique<FilterChainManagerImpl>(
+                               name, *per_address_factory_context, initManager()),
+                           origin.per_address_contexts_[i].transport_factory_context_,
+                           {},
+                           {}}));
   }
   buildAccessLog();
   validateConfig();
@@ -703,17 +725,21 @@ void ListenerImpl::buildListenSocketOptions() {
 
 void ListenerImpl::createListenerFilterFactories() {
   if (!config_.listener_filters().empty()) {
-    switch (socket_type_) {
-    case Network::Socket::Type::Datagram:
-      udp_listener_filter_factories_ = parent_.factory_.createUdpListenerFilterFactoryList(
-          config_.listener_filters(), *per_address_contexts_[0].listener_factory_context_);
-      break;
-    case Network::Socket::Type::Stream:
-      listener_filter_factories_ = parent_.factory_.createListenerFilterFactoryList(
-          config_.listener_filters(), *per_address_contexts_[0].listener_factory_context_);
-      break;
-    default:
-      NOT_REACHED_GCOVR_EXCL_LINE;
+    for (uint i = 0; i < addresses_.size(); i++) {
+      switch (socket_type_) {
+      case Network::Socket::Type::Datagram:
+        per_address_contexts_[i].udp_listener_filter_factories_ =
+            parent_.factory_.createUdpListenerFilterFactoryList(
+                config_.listener_filters(), *per_address_contexts_[i].listener_factory_context_);
+        break;
+      case Network::Socket::Type::Stream:
+        per_address_contexts_[i].listener_filter_factories_ =
+            parent_.factory_.createListenerFilterFactoryList(
+                config_.listener_filters(), *per_address_contexts_[i].listener_factory_context_);
+        break;
+      default:
+        NOT_REACHED_GCOVR_EXCL_LINE;
+      }
     }
   }
 }
@@ -752,13 +778,15 @@ void ListenerImpl::validateFilterChains() {
 }
 
 void ListenerImpl::buildFilterChains() {
-  per_address_contexts_[0].transport_factory_context_->setInitManager(*dynamic_init_manager_);
-  ListenerFilterChainFactoryBuilder builder(*this,
-                                            *per_address_contexts_[0].transport_factory_context_);
-  per_address_contexts_[0].filter_chain_manager_->addFilterChains(
-      config_.filter_chains(),
-      config_.has_default_filter_chain() ? &config_.default_filter_chain() : nullptr, builder,
-      *per_address_contexts_[0].filter_chain_manager_);
+  for (uint i = 0; i < addresses_.size(); i++) {
+    per_address_contexts_[i].transport_factory_context_->setInitManager(*dynamic_init_manager_);
+    ListenerFilterChainFactoryBuilder builder(*this,
+                                              *per_address_contexts_[i].transport_factory_context_);
+    per_address_contexts_[i].filter_chain_manager_->addFilterChains(
+        config_.filter_chains(),
+        config_.has_default_filter_chain() ? &config_.default_filter_chain() : nullptr, builder,
+        *per_address_contexts_[i].filter_chain_manager_);
+  }
 }
 
 void ListenerImpl::buildSocketOptions() {
@@ -801,9 +829,13 @@ void ListenerImpl::buildOriginalDstListenerFilter() {
         Config::Utility::getAndCheckFactoryByName<Configuration::NamedListenerFilterConfigFactory>(
             "envoy.filters.listener.original_dst");
 
-    listener_filter_factories_.push_back(factory.createListenerFilterFactoryFromProto(
-        Envoy::ProtobufWkt::Empty(),
-        /*listener_filter_matcher=*/nullptr, *per_address_contexts_[0].listener_factory_context_));
+    for (uint i = 0; i < addresses_.size(); i++) {
+      per_address_contexts_[i].listener_filter_factories_.push_back(
+          factory.createListenerFilterFactoryFromProto(
+              Envoy::ProtobufWkt::Empty(),
+              /*listener_filter_matcher=*/nullptr,
+              *per_address_contexts_[i].listener_factory_context_));
+    }
   }
 }
 
@@ -816,22 +848,27 @@ void ListenerImpl::buildProxyProtocolListenerFilter() {
     auto& factory =
         Config::Utility::getAndCheckFactoryByName<Configuration::NamedListenerFilterConfigFactory>(
             "envoy.filters.listener.proxy_protocol");
-    listener_filter_factories_.push_back(factory.createListenerFilterFactoryFromProto(
-        envoy::extensions::filters::listener::proxy_protocol::v3::ProxyProtocol(),
-        /*listener_filter_matcher=*/nullptr, *per_address_contexts_[0].listener_factory_context_));
+    for (uint i = 0; i < addresses_.size(); i++) {
+      per_address_contexts_[i].listener_filter_factories_.push_back(
+          factory.createListenerFilterFactoryFromProto(
+              envoy::extensions::filters::listener::proxy_protocol::v3::ProxyProtocol(),
+              /*listener_filter_matcher=*/nullptr,
+              *per_address_contexts_[i].listener_factory_context_));
+    }
   }
 }
 
 PerAddressFactoryContextImpl::PerAddressFactoryContextImpl(
     std::shared_ptr<ListenerCommonFactoryContext> listener_common_factory_context,
     const envoy::config::listener::v3::Listener& config_message,
-    const Network::ListenerConfig* listener_config, ListenerImpl& listener_impl)
+    const Network::ListenerConfig* listener_config, ListenerImpl& listener_impl, int address_index)
     : listener_common_factory_context_(listener_common_factory_context),
       metadata_(config_message.metadata()), typed_metadata_(config_message.metadata()),
       direction_(config_message.traffic_direction()),
 
       is_quic_(config_message.udp_listener_config().has_quic_options()),
-      listener_config_(listener_config), listener_impl_(listener_impl) {}
+      listener_config_(listener_config), listener_impl_(listener_impl),
+      address_index_(address_index) {}
 
 AccessLog::AccessLogManager& PerAddressFactoryContextImpl::accessLogManager() {
   return listener_common_factory_context_->accessLogManager();
@@ -913,7 +950,7 @@ PerAddressFactoryContextImpl::getTransportSocketFactoryContext() const {
   return listener_common_factory_context_->getTransportSocketFactoryContext();
 }
 Stats::Scope& PerAddressFactoryContextImpl::listenerScope() {
-  return listener_common_factory_context_->listenerScope();
+  return listener_common_factory_context_->listenerScope(address_index_);
 }
 bool PerAddressFactoryContextImpl::isQuicListener() const { return is_quic_; }
 Init::Manager& PerAddressFactoryContextImpl::initManager() { return listener_impl_.initManager(); }
@@ -924,14 +961,26 @@ bool ListenerImpl::createNetworkFilterChain(
   return Configuration::FilterChainUtility::buildFilterChain(connection, filter_factories);
 }
 
-bool ListenerImpl::createListenerFilterChain(Network::ListenerFilterManager& manager) {
-  return Configuration::FilterChainUtility::buildFilterChain(manager, listener_filter_factories_);
+bool ListenerImpl::createListenerFilterChain(Network::ListenerFilterManager&) {
+  PANIC("not implemented");
+}
+
+void ListenerImpl::createUdpListenerFilterChain(Network::UdpListenerFilterManager&,
+                                                Network::UdpReadFilterCallbacks&) {
+  PANIC("not implemented");
+}
+
+bool ListenerImpl::createListenerFilterChain(Network::ListenerFilterManager& manager,
+                                             int address_index) {
+  return Configuration::FilterChainUtility::buildFilterChain(
+      manager, per_address_contexts_[address_index].listener_filter_factories_);
 }
 
 void ListenerImpl::createUdpListenerFilterChain(Network::UdpListenerFilterManager& manager,
-                                                Network::UdpReadFilterCallbacks& callbacks) {
-  Configuration::FilterChainUtility::buildUdpFilterChain(manager, callbacks,
-                                                         udp_listener_filter_factories_);
+                                                Network::UdpReadFilterCallbacks& callbacks,
+                                                int address_index) {
+  Configuration::FilterChainUtility::buildUdpFilterChain(
+      manager, callbacks, per_address_contexts_[address_index].udp_listener_filter_factories_);
 }
 
 void ListenerImpl::debugLog(const std::string& message) {

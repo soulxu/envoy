@@ -221,7 +221,12 @@ protected:
     }
     socket_->connection_info_provider_->setDirectRemoteAddressForTest(direct_remote_address_);
 
-    return manager_->listeners().back().get().filterChainManager().findFilterChain(*socket_);
+    return manager_->listeners()
+        .back()
+        .get()
+        .perAddressConfig(0)
+        .filterChainManager()
+        .findFilterChain(*socket_);
   }
 
   /**

@@ -540,7 +540,13 @@ filter_chains:
   EXPECT_CALL(listener_factory_,
               createListenSocket(_, _, _, ListenerComponentFactory::BindType::NoBind, _, 0));
   manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml), "", true);
-  manager_->listeners().front().get().listenerScope().counterFromString("foo").inc();
+  manager_->listeners()
+      .front()
+      .get()
+      .perAddressConfig(0)
+      .listenerScope()
+      .counterFromString("foo")
+      .inc();
 
   EXPECT_EQ(1UL, server_.stats_store_.counterFromString("bar").value());
   EXPECT_EQ(1UL, server_.stats_store_.counterFromString("listener.127.0.0.1_1234.foo").value());
@@ -2394,7 +2400,13 @@ filter_chains:
   )EOF";
 
   manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml), "", true);
-  manager_->listeners().front().get().listenerScope().counterFromString("foo").inc();
+  manager_->listeners()
+      .front()
+      .get()
+      .perAddressConfig(0)
+      .listenerScope()
+      .counterFromString("foo")
+      .inc();
 
   EXPECT_EQ(1UL, server_.stats_store_.counterFromString("listener.[__1]_10000.foo").value());
 }
@@ -2411,7 +2423,13 @@ filter_chains:
   )EOF";
 
   manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml), "", true);
-  manager_->listeners().front().get().listenerScope().counterFromString("foo").inc();
+  manager_->listeners()
+      .front()
+      .get()
+      .perAddressConfig(0)
+      .listenerScope()
+      .counterFromString("foo")
+      .inc();
 
   EXPECT_EQ(1UL, server_.stats_store_.counterFromString("listener.test_prefix.foo").value());
 }
@@ -4029,7 +4047,7 @@ TEST_F(ListenerManagerImplWithRealFiltersTest, OriginalDstFilter) {
   manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml), "", true);
   EXPECT_EQ(1U, manager_->listeners().size());
 
-  Network::ListenerConfig& listener = manager_->listeners().back().get();
+  Network::ListenerConfig& listener = manager_->listeners().back().get().perAddressConfig(0);
 
   Network::FilterChainFactory& filterChainFactory = listener.filterChainFactory();
   Network::MockListenerFilterManager manager;
@@ -4113,7 +4131,7 @@ TEST_F(ListenerManagerImplWithRealFiltersTest, OriginalDstTestFilterOutbound) {
   manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml), "", true);
   EXPECT_EQ(1U, manager_->listeners().size());
 
-  Network::ListenerConfig& listener = manager_->listeners().back().get();
+  Network::ListenerConfig& listener = manager_->listeners().back().get().perAddressConfig(0);
 
   Network::FilterChainFactory& filterChainFactory = listener.filterChainFactory();
   Network::MockListenerFilterManager manager;
@@ -4168,7 +4186,7 @@ TEST_F(ListenerManagerImplWithRealFiltersTest, OriginalDstFilterStopsIteration) 
   manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml), "", true);
   EXPECT_EQ(1U, manager_->listeners().size());
 
-  Network::ListenerConfig& listener = manager_->listeners().back().get();
+  Network::ListenerConfig& listener = manager_->listeners().back().get().perAddressConfig(0);
 
   Network::FilterChainFactory& filterChainFactory = listener.filterChainFactory();
   Network::MockListenerFilterManager manager;
@@ -4218,7 +4236,7 @@ TEST_F(ListenerManagerImplWithRealFiltersTest, OriginalDstTestFilterInbound) {
   manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml), "", true);
   EXPECT_EQ(1U, manager_->listeners().size());
 
-  Network::ListenerConfig& listener = manager_->listeners().back().get();
+  Network::ListenerConfig& listener = manager_->listeners().back().get().perAddressConfig(0);
 
   Network::FilterChainFactory& filterChainFactory = listener.filterChainFactory();
   Network::MockListenerFilterManager manager;
@@ -4299,7 +4317,7 @@ TEST_F(ListenerManagerImplWithRealFiltersTest, OriginalDstTestFilterIPv6) {
   manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml), "", true);
   EXPECT_EQ(1U, manager_->listeners().size());
 
-  Network::ListenerConfig& listener = manager_->listeners().back().get();
+  Network::ListenerConfig& listener = manager_->listeners().back().get().perAddressConfig(0);
 
   Network::FilterChainFactory& filterChainFactory = listener.filterChainFactory();
   Network::MockListenerFilterManager manager;
@@ -5828,8 +5846,9 @@ address:
           .get()
           .udpListenerConfig()
           ->packetWriterFactory()
-          .createUdpPacketWriter(listen_socket->ioHandle(),
-                                 manager_->listeners()[0].get().listenerScope());
+          .createUdpPacketWriter(
+              listen_socket->ioHandle(),
+              manager_->listeners()[0].get().perAddressConfig(0).listenerScope());
   EXPECT_FALSE(udp_packet_writer->isBatchMode());
 }
 

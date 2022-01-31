@@ -137,7 +137,7 @@ public:
   Configuration::ServerFactoryContext& getServerFactoryContext() const;
   Configuration::TransportSocketFactoryContext& getTransportSocketFactoryContext() const;
 
-  Stats::Scope& listenerScope();
+  Stats::Scope& listenerScope(int address_index);
   bool isQuicListener() const;
 
   Envoy::Server::Instance& server() { return server_; }
@@ -162,7 +162,8 @@ public:
   PerAddressFactoryContextImpl(
       std::shared_ptr<ListenerCommonFactoryContext> listener_common_factory_context,
       const envoy::config::listener::v3::Listener& config_message,
-      const Network::ListenerConfig* listener_config, ListenerImpl& listener_impl);
+      const Network::ListenerConfig* listener_config, ListenerImpl& listener_impl,
+      int address_index);
 
   // FactoryContext
   AccessLog::AccessLogManager& accessLogManager() override;
@@ -221,11 +222,14 @@ private:
   bool is_quic_;
   const Network::ListenerConfig* listener_config_;
   ListenerImpl& listener_impl_;
+  int address_index_;
 };
 
-class PerAddressListenerConfig : public Network::ListenerConfig {
+class PerAddressListenerConfig : public Network::ListenerConfig,
+                                 public Network::FilterChainFactory {
 public:
-  PerAddressListenerConfig(ListenerImpl& listener_impl) : listener_impl_(listener_impl) {}
+  PerAddressListenerConfig(ListenerImpl& listener_impl, int address_index)
+      : listener_impl_(listener_impl), address_index_(address_index) {}
 
   Network::FilterChainManager& filterChainManager() override;
 
@@ -250,10 +254,18 @@ public:
   uint32_t tcpBacklogSize() const override;
   Init::Manager& initManager() override;
   bool ignoreGlobalConnLimit() const override;
-  ListenerConfig& perAddressConfig() override;
+  ListenerConfig& perAddressConfig(int address_index) override;
+
+  // FilterChainFactory
+  bool createNetworkFilterChain(Network::Connection& connection,
+                                const std::vector<Network::FilterFactoryCb>& factories) override;
+  bool createListenerFilterChain(Network::ListenerFilterManager& manager) override;
+  void createUdpListenerFilterChain(Network::UdpListenerFilterManager& udp_listener,
+                                    Network::UdpReadFilterCallbacks& callbacks) override;
 
 private:
   ListenerImpl& listener_impl_;
+  int address_index_;
 };
 
 /**
@@ -333,9 +345,10 @@ public:
   // Check whether a new listener can share sockets with this listener.
   bool hasCompatibleAddress(const ListenerImpl& other) const;
 
+  Network::FilterChainManager& filterChainManager() override { PANIC("not implemented"); }
   // Network::ListenerConfig
-  Network::FilterChainManager& filterChainManager() override {
-    return *per_address_contexts_[0].filter_chain_manager_;
+  Network::FilterChainManager& filterChainManager(int address_index) {
+    return *per_address_contexts_[address_index].filter_chain_manager_;
   }
   Network::FilterChainFactory& filterChainFactory() override { return *this; }
   std::vector<Network::ListenSocketFactoryPtr>& listenSocketFactories() override {
@@ -355,8 +368,9 @@ public:
   bool continueOnListenerFiltersTimeout() const override {
     return continue_on_listener_filters_timeout_;
   }
-  Stats::Scope& listenerScope() override {
-    return listener_common_factory_context_->listenerScope();
+  Stats::Scope& listenerScope() override { PANIC("not implemented"); }
+  Stats::Scope& listenerScope(int address_index) {
+    return listener_common_factory_context_->listenerScope(address_index);
   }
   uint64_t listenerTag() const override { return listener_tag_; }
   const std::string& name() const override { return name_; }
@@ -394,8 +408,12 @@ public:
   void createUdpListenerFilterChain(Network::UdpListenerFilterManager& udp_listener,
                                     Network::UdpReadFilterCallbacks& callbacks) override;
 
-  Network::ListenerConfig& perAddressConfig() override {
-    return *per_address_contexts_[0].per_address_listener_config_;
+  bool createListenerFilterChain(Network::ListenerFilterManager& manager, int address_index);
+  void createUdpListenerFilterChain(Network::UdpListenerFilterManager& udp_listener,
+                                    Network::UdpReadFilterCallbacks& callbacks, int address_index);
+
+  Network::ListenerConfig& perAddressConfig(int address_index) override {
+    return *per_address_contexts_[address_index].per_address_listener_config_;
   }
 
   SystemTime last_updated_;
@@ -438,6 +456,8 @@ private:
     std::unique_ptr<FilterChainManagerImpl> filter_chain_manager_;
     std::shared_ptr<Server::Configuration::TransportSocketFactoryContextImpl>
         transport_factory_context_;
+    std::vector<Network::ListenerFilterFactoryCb> listener_filter_factories_;
+    std::vector<Network::UdpListenerFilterFactoryCb> udp_listener_filter_factories_;
   };
 
   /**
@@ -490,8 +510,6 @@ private:
   // RdsRouteConfigSubscription::init_target_, so the listener can wait for route configs.
   std::unique_ptr<Init::Manager> dynamic_init_manager_;
 
-  std::vector<Network::ListenerFilterFactoryCb> listener_filter_factories_;
-  std::vector<Network::UdpListenerFilterFactoryCb> udp_listener_filter_factories_;
   std::vector<AccessLog::InstanceSharedPtr> access_logs_;
   DrainManagerPtr local_drain_manager_;
   const envoy::config::listener::v3::Listener config_;

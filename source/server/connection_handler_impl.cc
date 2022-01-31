@@ -35,7 +35,7 @@ void ConnectionHandlerImpl::addListener(absl::optional<uint64_t> overridden_list
     ActiveListenerDetailsOptRef listener_detail =
         findActiveListenerByTag(overridden_listener.value());
     ASSERT(listener_detail.has_value());
-    listener_detail->get().listener_->updateListenerConfig(config);
+    listener_detail->get().listener_->updateListenerConfig(config.perAddressConfig(0));
     return;
   }
 
@@ -44,27 +44,28 @@ void ConnectionHandlerImpl::addListener(absl::optional<uint64_t> overridden_list
     if (overridden_listener.has_value()) {
       if (auto iter = listener_map_by_tag_.find(overridden_listener.value());
           iter != listener_map_by_tag_.end()) {
-        iter->second->internalListener()->get().updateListenerConfig(config);
+        iter->second->internalListener()->get().updateListenerConfig(config.perAddressConfig(0));
         return;
       }
       NOT_REACHED_GCOVR_EXCL_LINE;
     }
     auto internal_listener =
-        std::make_unique<ActiveInternalListener>(*this, dispatcher(), config.perAddressConfig());
+        std::make_unique<ActiveInternalListener>(*this, dispatcher(), config.perAddressConfig(0));
     details->typed_listener_ = *internal_listener;
     details->listener_ = std::move(internal_listener);
   } else if (config.listenSocketFactories()[0]->socketType() == Network::Socket::Type::Stream) {
     if (!support_udp_in_place_filter_chain_update && overridden_listener.has_value()) {
       if (auto iter = listener_map_by_tag_.find(overridden_listener.value());
           iter != listener_map_by_tag_.end()) {
-        iter->second->tcpListener()->get().updateListenerConfig(config);
+        iter->second->tcpListener()->get().updateListenerConfig(config.perAddressConfig(0));
         return;
       }
       NOT_REACHED_GCOVR_EXCL_LINE;
     }
+
     // worker_index_ doesn't have a value on the main thread for the admin server.
     auto tcp_listener =
-        std::make_unique<ActiveTcpListener>(*this, config.perAddressConfig(),
+        std::make_unique<ActiveTcpListener>(*this, config.perAddressConfig(0),
                                             config.listenSocketFactories()[0]->getListenSocket(
                                                 worker_index_.has_value() ? *worker_index_ : 0));
     details->typed_listener_ = *tcp_listener;
@@ -76,7 +77,7 @@ void ConnectionHandlerImpl::addListener(absl::optional<uint64_t> overridden_list
         config.udpListenerConfig()->listenerFactory().createActiveUdpListener(
             *worker_index_, *this,
             config.listenSocketFactories()[0]->getListenSocket(*worker_index_), dispatcher_,
-            config.perAddressConfig());
+            config.perAddressConfig(0));
     details->typed_listener_ = *udp_listener;
     details->listener_ = std::move(udp_listener);
   }

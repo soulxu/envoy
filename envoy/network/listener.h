@@ -240,7 +240,7 @@ public:
   /**
    * Return the ListenerConfig specific for the address.
    */
-  virtual ListenerConfig& perAddressConfig() PURE;
+  virtual ListenerConfig& perAddressConfig(int address_index) PURE;
 };
 
 /**

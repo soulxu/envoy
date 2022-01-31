@@ -125,8 +125,9 @@ udp_listener_config:
           .get()
           .udpListenerConfig()
           ->packetWriterFactory()
-          .createUdpPacketWriter(listen_socket->ioHandle(),
-                                 manager_->listeners()[0].get().listenerScope());
+          .createUdpPacketWriter(
+              listen_socket->ioHandle(),
+              manager_->listeners()[0].get().perAddressConfig(0).listenerScope());
   EXPECT_EQ(udp_packet_writer->isBatchMode(), Api::OsSysCallsSingleton::get().supportsUdpGso());
 
   // No filter chain found with non-matching transport protocol.
