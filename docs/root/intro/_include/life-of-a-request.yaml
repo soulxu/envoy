@@ -3,11 +3,12 @@ static_resources:
   listeners:
   # There is a single listener bound to port 443.
   - name: listener_https
-    address:
-      socket_address:
-        protocol: TCP
-        address: 0.0.0.0
-        port_value: 443
+    addresses:
+    - address:
+        socket_address:
+          protocol: TCP
+          address: 0.0.0.0
+          port_value: 443
     # A single listener filter exists for TLS inspector.
     listener_filters:
     - name: "envoy.filters.listener.tls_inspector"

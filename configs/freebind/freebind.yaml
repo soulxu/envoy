@@ -7,10 +7,11 @@ admin:
 static_resources:
   listeners:
   - name: listener_0
-    address:
-      socket_address:
-        address: 192.168.42.1
-        port_value: 10000
+    addresses:
+    - address:
+        socket_address:
+          address: 192.168.42.1
+          port_value: 10000
     freebind: true
     filter_chains:
     - filters:

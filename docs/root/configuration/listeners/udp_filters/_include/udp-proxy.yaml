@@ -7,11 +7,12 @@ admin:
 static_resources:
   listeners:
   - name: listener_0
-    address:
-      socket_address:
-        protocol: UDP
-        address: 127.0.0.1
-        port_value: 1234
+    addresses:
+    - address:
+        socket_address:
+          protocol: UDP
+          address: 127.0.0.1
+          port_value: 1234
     udp_listener_config:
       downstream_socket_config:
         max_rx_datagram_size: 9000

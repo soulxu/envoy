@@ -1,11 +1,12 @@
 {% import 'routing_helper.template.yaml' as helper -%}
 {% import 'access_log_format_helper.template.yaml' as access_log_helper -%}
 {% macro ingress_listener(protocol, address, port_value) -%}
-- address:
-    socket_address:
-      protocol: {{protocol}}
-      address: {{address}}
-      port_value: {{port_value}}
+- addresses:
+  - address:
+      socket_address:
+        protocol: {{protocol}}
+        address: {{address}}
+        port_value: {{port_value}}
   traffic_direction: INBOUND
   filter_chains:
   - filters:
@@ -102,11 +103,12 @@
 static_resources:
   listeners:
   {{ ingress_listener("tcp", "0.0.0.0", 9211) | indent(2)}}
-  - address:
-      socket_address:
-        protocol: TCP
-        port_value: 9001
-        address: 127.0.0.1
+  - addresses:
+    - address:
+        socket_address:
+          protocol: TCP
+          port_value: 9001
+          address: 127.0.0.1
     traffic_direction: OUTBOUND
     filter_chains:
     - filters:
@@ -166,11 +168,12 @@ static_resources:
                        cluster_name: ratelimit
           - name: envoy.filters.http.grpc_http1_bridge
           - name: envoy.filters.http.router
-  - address:
-      socket_address:
-        protocol: TCP
-        port_value: 9002
-        address: 127.0.0.1
+  - addresses:
+    - address:
+        socket_address:
+          protocol: TCP
+          port_value: 9002
+          address: 127.0.0.1
     traffic_direction: OUTBOUND
     filter_chains:
     - filters:
@@ -230,11 +233,12 @@ static_resources:
   {% if external_virtual_hosts|length > 0 or mongos_servers|length > 0 %}{% endif -%}
   {% for mapping in external_virtual_hosts -%}
   - name: "{{ mapping['address']}}"
-    address:
-      socket_address:
-        address: "{{ mapping['address'] }}"
-        protocol: TCP
-        port_value: 9901
+    addresses:
+    - address:
+        socket_address:
+          address: "{{ mapping['address'] }}"
+          protocol: TCP
+          port_value: 9901
     filter_chains:
     - filters:
       - name: envoy.filters.network.http_connection_manager
@@ -304,11 +308,12 @@ static_resources:
   {% endfor -%}
   {% for key, value in mongos_servers.items() -%}
   - name : "{{ value['address'] }}"
-    address:
-      socket_address:
-        address: "{{ value['address'] }}"
-        protocol: TCP
-        port_value: 9003
+    addresses:
+    - address:
+        socket_address:
+          address: "{{ value['address'] }}"
+          protocol: TCP
+          port_value: 9003
     filter_chains:
     - filters:
       - name: envoy.filters.network.tcp_proxy

@@ -1,9 +1,10 @@
 static_resources:
   listeners:
-  - address:
-      socket_address:
-        address: 0.0.0.0
-        port_value: 10000
+  - addresses:
+    - address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 10000
     filter_chains:
     - filters:
       - name: envoy.filters.network.http_connection_manager
@@ -100,10 +101,11 @@ static_resources:
                   ohhtprnQQAddfjHP7rh2LGt+irFzhdXXQ1ybGaGM9D764KUNCXLuwdly0vzXU4HU
                   q5sGxGrC1RECGB5Zwx2S2ZY=
                   -----END PRIVATE KEY-----
-  - address:
-      socket_address:
-        address: 0.0.0.0
-        port_value: 9902
+  - addresses:
+    - address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 9902
     filter_chains:
     - filters:
       - name: envoy.filters.network.http_connection_manager

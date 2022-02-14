@@ -1,9 +1,10 @@
 static_resources:
   listeners:
-  - address:
-      socket_address:
-        address: 0.0.0.0
-        port_value: 10000
+  - addresses:
+    - address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 10000
     listener_filters:
     - name: "envoy.filters.listener.tls_inspector"
     filter_chains:

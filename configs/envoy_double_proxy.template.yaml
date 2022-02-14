@@ -1,10 +1,11 @@
 {%- macro listener(protocol, address, port_value, tls, proxy_proto, tracing) -%}
 - name: listener_created_from_configgen
-  address:
-    socket_address:
-      protocol: {{protocol}}
-      address: {{address}}
-      port_value: {{port_value}}
+  addresses:
+  - address:
+      socket_address:
+        protocol: {{protocol}}
+        address: {{address}}
+        port_value: {{port_value}}
   {% if proxy_proto %}
   listener_filters:
   - name: envoy.filters.listener.proxy_protocol

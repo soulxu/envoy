@@ -20,11 +20,12 @@ overload_manager:
 static_resources:
   listeners:
   - name: listener_0
-    address:
-      socket_address:
-        protocol: TCP
-        address: 0.0.0.0
-        port_value: 10002
+    addresses:
+    - address:
+        socket_address:
+          protocol: TCP
+          address: 0.0.0.0
+          port_value: 10002
     per_connection_buffer_limit_bytes: 32768
     filter_chains:
     - filters:

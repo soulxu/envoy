@@ -1,11 +1,12 @@
 static_resources:
   listeners:
   - name: listener_0
-    address:
-      socket_address:
-        protocol: UDP
-        address: 0.0.0.0
-        port_value: 10000
+    addresses:
+    - address:
+        socket_address:
+          protocol: UDP
+          address: 0.0.0.0
+          port_value: 10000
     listener_filters:
     - name: envoy.filters.udp_listener.udp_proxy
       typed_config:

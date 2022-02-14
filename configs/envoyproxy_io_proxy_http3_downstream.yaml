@@ -9,11 +9,12 @@ admin:
 static_resources:
   listeners:
   - name: listener_tcp
-    address:
-      socket_address:
-        protocol: TCP
-        address: 0.0.0.0
-        port_value: 10000
+    addresses:
+    - address:
+        socket_address:
+          protocol: TCP
+          address: 0.0.0.0
+          port_value: 10000
     filter_chains:
     - transport_socket:
         name: envoy.transport_sockets.tls
@@ -51,11 +52,12 @@ static_resources:
           - name: envoy.filters.http.router
 
   - name: listener_udp
-    address:
-      socket_address:
-        protocol: UDP
-        address: 0.0.0.0
-        port_value: 10000
+    addresses:
+    - address:
+        socket_address:
+          protocol: UDP
+          address: 0.0.0.0
+          port_value: 10000
     udp_listener_config:
       quic_options: {}
       downstream_socket_config:

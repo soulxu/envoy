@@ -26,10 +26,11 @@ admin:
 
 static_resources:
   listeners:
-  - address:
-      socket_address:
-        address: 0.0.0.0
-        port_value: 443
+  - addresses:
+    - address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 443
     listener_filters:
     - name: "envoy.filters.listener.tls_inspector"
     # Uncomment if Envoy is behind a load balancer that exposes client IP address using the PROXY protocol.

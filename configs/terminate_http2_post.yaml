@@ -11,11 +11,12 @@ admin:
 static_resources:
   listeners:
   - name: listener_0
-    address:
-      socket_address:
-        protocol: TCP
-        address: 127.0.0.1
-        port_value: 10001
+    addresses:
+    - address:
+        socket_address:
+          protocol: TCP
+          address: 127.0.0.1
+          port_value: 10001
     filter_chains:
     - filters:
       - name: envoy.filters.network.http_connection_manager
