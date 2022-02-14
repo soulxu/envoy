@@ -1031,7 +1031,7 @@ void ListenerImpl::setSocketFactory(const Network::Address::InstanceConstSharedP
       return;
     }
   }
-  // Enusre not set a factory for non-existed address.
+  // Ensure not set a factory for non-existed address.
   NOT_REACHED_GCOVR_EXCL_LINE;
 }
 
