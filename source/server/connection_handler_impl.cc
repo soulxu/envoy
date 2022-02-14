@@ -7,6 +7,7 @@
 
 #include "source/common/common/logger.h"
 #include "source/common/event/deferred_task.h"
+#include "source/common/network/address_impl.h"
 #include "source/common/network/utility.h"
 #include "source/common/runtime/runtime_features.h"
 #include "source/server/active_internal_listener.h"
@@ -273,7 +274,7 @@ Network::BalancedConnectionHandlerOptRef ConnectionHandlerImpl::getBalancedHandl
     uint64_t listener_tag, const Network::Address::InstanceConstSharedPtr& address) {
   if (auto iter = listener_map_by_tag_.find(listener_tag); iter != listener_map_by_tag_.end()) {
     for (auto& details : iter->second) {
-      if (*details->address_ == *address) {
+      if (*details->address_ == *address && details->listener_->listener() != nullptr) {
         ASSERT(absl::holds_alternative<std::reference_wrapper<ActiveTcpListener>>(
             details->typed_listener_));
         return Network::BalancedConnectionHandlerOptRef(details->tcpListener().value().get());
@@ -285,10 +286,14 @@ Network::BalancedConnectionHandlerOptRef ConnectionHandlerImpl::getBalancedHandl
 
 Network::BalancedConnectionHandlerOptRef
 ConnectionHandlerImpl::getBalancedHandlerByAddress(const Network::Address::Instance& address) {
+  // Only Ip address can be restored to original address and redirect.
+  ASSERT(address.type() == Network::Address::Type::Ip);
+
   // We do not return stopped listeners.
   // If there is exact address match, return the corresponding listener.
   if (auto listener_it = tcp_listener_map_by_address_.find(address.asStringView());
-      listener_it != tcp_listener_map_by_address_.end()) {
+      listener_it != tcp_listener_map_by_address_.end() &&
+      listener_it->second->listener_->listener() != nullptr) {
     return Network::BalancedConnectionHandlerOptRef(
         listener_it->second->tcpListener().value().get());
   }
@@ -299,13 +304,13 @@ ConnectionHandlerImpl::getBalancedHandlerByAddress(const Network::Address::Insta
   // TODO(wattli): consolidate with previous search for more efficiency.
   if (Runtime::runtimeFeatureEnabled(
           "envoy.reloadable_features.listener_wildcard_match_ip_family")) {
-    std::string addr_str =
-        address.ip()->version() == Network::Address::IpVersion::v4
-            ? Network::Utility::getIpv4AnyAddress(address.ip()->port())->asString()
-            : Network::Utility::getIpv6AnyAddress(address.ip()->port())->asString();
+    std::string addr_str = address.ip()->version() == Network::Address::IpVersion::v4
+                               ? Network::Address::Ipv4Instance(address.ip()->port()).asString()
+                               : Network::Address::Ipv6Instance(address.ip()->port()).asString();
 
     auto iter = tcp_listener_map_by_address_.find(addr_str);
-    if (iter != tcp_listener_map_by_address_.end()) {
+    if (iter != tcp_listener_map_by_address_.end() &&
+        iter->second->listener_->listener() != nullptr) {
       details = *iter->second;
     }
   } else {
