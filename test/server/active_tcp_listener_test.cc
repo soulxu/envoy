@@ -33,7 +33,7 @@ class MockTcpConnectionHandler : public Network::TcpConnectionHandler,
 public:
   MOCK_METHOD(Event::Dispatcher&, dispatcher, ());
   MOCK_METHOD(Network::BalancedConnectionHandlerOptRef, getBalancedHandlerByTag,
-              (uint64_t listener_tag));
+              (uint64_t listener_tag, const Network::Address::InstanceConstSharedPtr&));
   MOCK_METHOD(Network::BalancedConnectionHandlerOptRef, getBalancedHandlerByAddress,
               (const Network::Address::Instance& address));
 };

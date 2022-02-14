@@ -382,7 +382,10 @@ public:
     return internal_listener_config_ != nullptr ? *internal_listener_config_
                                                 : Network::InternalListenerConfigOptRef();
   }
-  Network::ConnectionBalancer& connectionBalancer() override { return *connection_balancer_; }
+  Network::ConnectionBalancer& connectionBalancer() override { PANIC("not implemented"); }
+  Network::ConnectionBalancer& connectionBalancer(int address_index) {
+    return *per_address_contexts_[address_index].connection_balancer_;
+  }
   ResourceLimit& openConnections() override { return *open_connections_; }
   const std::vector<AccessLog::InstanceSharedPtr>& accessLogs() const override {
     return access_logs_;
@@ -458,6 +461,7 @@ private:
         transport_factory_context_;
     std::vector<Network::ListenerFilterFactoryCb> listener_filter_factories_;
     std::vector<Network::UdpListenerFilterFactoryCb> udp_listener_filter_factories_;
+    Network::ConnectionBalancerSharedPtr connection_balancer_;
   };
 
   /**
@@ -520,7 +524,6 @@ private:
   const bool continue_on_listener_filters_timeout_;
   std::shared_ptr<UdpListenerConfigImpl> udp_listener_config_;
   std::unique_ptr<Network::InternalListenerConfig> internal_listener_config_;
-  Network::ConnectionBalancerSharedPtr connection_balancer_;
   std::shared_ptr<ListenerCommonFactoryContext> listener_common_factory_context_;
   std::vector<PerAddressContext> per_address_contexts_;
   const bool reuse_port_;

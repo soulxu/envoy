@@ -342,7 +342,7 @@ envoy::config::core::v3::TrafficDirection PerAddressListenerConfig::direction() 
 }
 
 Network::ConnectionBalancer& PerAddressListenerConfig::connectionBalancer() {
-  return listener_impl_.connectionBalancer();
+  return listener_impl_.connectionBalancer(address_index_);
 }
 
 ResourceLimit& PerAddressListenerConfig::openConnections() {
@@ -468,7 +468,8 @@ ListenerImpl::ListenerImpl(const envoy::config::listener::v3::Listener& config,
              parent_.server_.singletonManager(), parent_.server_.threadLocal(), validation_visitor_,
              parent_.server_.api(), parent_.server_.options()),
          {},
-         {}}));
+         {},
+         socket_type_ != Network::Socket::Type::Datagram ? buildConnectionBalancer() : nullptr}));
   }
 
   const absl::optional<std::string> runtime_val =
@@ -490,10 +491,6 @@ ListenerImpl::ListenerImpl(const envoy::config::listener::v3::Listener& config,
   validateFilterChains();
   buildFilterChains();
   if (socket_type_ != Network::Socket::Type::Datagram) {
-    // TCP specific setup.
-    if (connection_balancer_ == nullptr) {
-      connection_balancer_ = buildConnectionBalancer();
-    }
     buildSocketOptions();
     buildOriginalDstListenerFilter();
     buildProxyProtocolListenerFilter();
@@ -541,7 +538,6 @@ ListenerImpl::ListenerImpl(ListenerImpl& origin,
           PROTOBUF_GET_MS_OR_DEFAULT(config, listener_filters_timeout, 15000)),
       continue_on_listener_filters_timeout_(config.continue_on_listener_filters_timeout()),
       udp_listener_config_(origin.udp_listener_config_),
-      connection_balancer_(origin.connection_balancer_),
       listener_common_factory_context_(origin.listener_common_factory_context_),
       reuse_port_(origin.reuse_port_),
       local_init_watcher_(fmt::format("Listener-local-init-watcher {}", name),
@@ -560,7 +556,8 @@ ListenerImpl::ListenerImpl(ListenerImpl& origin,
                                name, *per_address_factory_context, initManager()),
                            origin.per_address_contexts_[i].transport_factory_context_,
                            {},
-                           {}}));
+                           {},
+                           origin.per_address_contexts_[i].connection_balancer_}));
   }
   buildAccessLog();
   validateConfig();
