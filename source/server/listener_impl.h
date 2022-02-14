@@ -479,6 +479,7 @@ private:
   void buildSocketOptions();
   void buildOriginalDstListenerFilter();
   void buildProxyProtocolListenerFilter();
+  Network::ConnectionBalancerSharedPtr buildConnectionBalancer();
 
   void addListenSocketOptions(const Network::Socket::OptionsSharedPtr& options) {
     ensureSocketOptions();
