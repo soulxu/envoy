@@ -282,7 +282,7 @@ public:
   bool blockUpdate(uint64_t new_hash) { return new_hash == hash_ || !added_via_api_; }
   bool blockRemove() { return !added_via_api_; }
 
-  Network::Address::InstanceConstSharedPtr address() const { return addresses_[0]; }
+  std::vector<Network::Address::InstanceConstSharedPtr> addresses() const { return addresses_; }
   const envoy::config::listener::v3::Listener& config() const { return config_; }
   const Network::ListenSocketFactory& getSocketFactory() const { return *socket_factory_; }
   void debugLog(const std::string& message);
@@ -400,11 +400,11 @@ private:
   // Helpers for constructor.
   void buildAccessLog();
   void buildInternalListener();
-  void validateConfig(Network::Socket::Type socket_type);
-  void buildUdpListenerFactory(Network::Socket::Type socket_type, uint32_t concurrency);
-  void buildListenSocketOptions(Network::Socket::Type socket_type);
-  void createListenerFilterFactories(Network::Socket::Type socket_type);
-  void validateFilterChains(Network::Socket::Type socket_type);
+  void validateConfig();
+  void buildUdpListenerFactory(uint32_t concurrency);
+  void buildListenSocketOptions();
+  void createListenerFilterFactories();
+  void validateFilterChains();
   void buildFilterChains();
   void buildSocketOptions();
   void buildOriginalDstListenerFilter();
@@ -419,6 +419,7 @@ private:
 
   ListenerManagerImpl& parent_;
   std::vector<Network::Address::InstanceConstSharedPtr> addresses_;
+  Network::Socket::Type socket_type_;
 
   Network::ListenSocketFactoryPtr socket_factory_;
   const bool bind_to_port_;
