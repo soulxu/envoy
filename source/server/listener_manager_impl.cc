@@ -333,12 +333,6 @@ ListenerManagerStats ListenerManagerImpl::generateStats(Stats::Scope& scope) {
 
 bool ListenerManagerImpl::addOrUpdateListener(const envoy::config::listener::v3::Listener& config,
                                               const std::string& version_info, bool added_via_api) {
-  if (!Runtime::runtimeFeatureEnabled("envoy.reloadable_features.internal_address")) {
-    RELEASE_ASSERT(
-        !config.address().has_envoy_internal_address(),
-        fmt::format("listener {} has envoy internal address {}. This runtime feature is disabled.",
-                    config.name(), config.address().envoy_internal_address().DebugString()));
-  }
   // TODO(junr03): currently only one ApiListener can be installed via bootstrap to avoid having to
   // build a collection of listeners, and to have to be able to warm and drain the listeners. In the
   // future allow multiple ApiListeners, and allow them to be created via LDS as well as bootstrap.
@@ -370,6 +364,10 @@ bool ListenerManagerImpl::addOrUpdateListener(const envoy::config::listener::v3:
       throw EnvoyException(
           fmt::format("listener {}: `stat_prefix` only can be used for `address` field.", name));
     }
+    if (config.addresses_size() > 1 && config.addresses(0).address().has_envoy_internal_address()) {
+      throw EnvoyException(fmt::format(
+          "listener {}: multiple envoy internal addresses don't support in single listener", name));
+    }
     auto socket_type = Network::Utility::protobufAddressSocketType(config.addresses(0).address());
     for (auto i = 1; i < config.addresses_size(); i++) {
       if (socket_type !=
@@ -382,6 +380,17 @@ bool ListenerManagerImpl::addOrUpdateListener(const envoy::config::listener::v3:
     }
   } else if (!config.has_address()) {
     throw EnvoyException(fmt::format("listener {}: `addresses` must be set.", name));
+  }
+
+  if (!Runtime::runtimeFeatureEnabled("envoy.reloadable_features.internal_address")) {
+    RELEASE_ASSERT(
+        config.has_address() ? !config.address().has_envoy_internal_address()
+                             : !config.addresses(0).address().has_envoy_internal_address(),
+        fmt::format("listener {} has envoy internal address {}. This runtime feature is disabled.",
+                    config.name(),
+                    config.has_address()
+                        ? config.address().envoy_internal_address().DebugString()
+                        : config.addresses(0).address().envoy_internal_address().DebugString()));
   }
 
   auto it = error_state_tracker_.find(name);

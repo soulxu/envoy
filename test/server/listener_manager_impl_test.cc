@@ -623,6 +623,25 @@ TEST_F(ListenerManagerImplTest, OnlyOneTypeAddressSupportMultipleAddresses) {
       "listener foo: only one type of address can be used in single listener");
 }
 
+TEST_F(ListenerManagerImplTest, RejectMultipleInternalAddressInSingleListener) {
+  const std::string yaml = R"EOF(
+    name: "foo"
+    addresses:
+    - address:
+        envoy_internal_address:
+          server_listener_name: a_listener_name
+    - address:
+        envoy_internal_address:
+          server_listener_name: b_listener_name
+    filter_chains:
+    - filters: []
+  )EOF";
+
+  EXPECT_THROW_WITH_MESSAGE(
+      manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml), "", true), EnvoyException,
+      "listener foo: multiple envoy internal addresses don't support in single listener");
+}
+
 TEST_F(ListenerManagerImplTest, SpecifyStatPrefixForAddresses) {
   const std::string yaml = R"EOF(
     name: "foo"
