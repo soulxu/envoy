@@ -362,6 +362,28 @@ bool ListenerManagerImpl::addOrUpdateListener(const envoy::config::listener::v3:
     name = server_.api().randomGenerator().uuid();
   }
 
+  if (config.has_address() && config.addresses_size() > 0) {
+    throw EnvoyException(
+        fmt::format("listener {}: only one of `address` and `addresses` can be set.", name));
+  } else if (config.addresses_size() > 0) {
+    if (!config.stat_prefix().empty()) {
+      throw EnvoyException(
+          fmt::format("listener {}: `stat_prefix` only can be used for `address` field.", name));
+    }
+    auto socket_type = Network::Utility::protobufAddressSocketType(config.addresses(0).address());
+    for (auto i = 1; i < config.addresses_size(); i++) {
+      if (socket_type !=
+          Network::Utility::protobufAddressSocketType(config.addresses(i).address())) {
+        throw EnvoyException(
+            fmt::format("listener {}: has different socket type. The listener only "
+                        "support same socket type for all the addresses.",
+                        name));
+      }
+    }
+  } else if (!config.has_address()) {
+    throw EnvoyException(fmt::format("listener {}: `addresses` must be set.", name));
+  }
+
   auto it = error_state_tracker_.find(name);
   TRY_ASSERT_MAIN_THREAD {
     return addOrUpdateListenerInternal(config, version_info, added_via_api, name);

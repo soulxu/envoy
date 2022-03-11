@@ -546,6 +546,81 @@ filter_chains:
   EXPECT_EQ(1UL, server_.stats_store_.counterFromString("listener.127.0.0.1_1234.foo").value());
 }
 
+TEST_F(ListenerManagerImplTest, BothAddressAndAddressesSpecified) {
+  const std::string yaml = R"EOF(
+    name: "foo"
+    address:
+      socket_address:
+        address: "::0"
+        port_value: 13333
+    addresses:
+      address:
+        socket_address:
+          address: "::0"
+          port_value: 13334
+    filter_chains:
+    - filters: []
+  )EOF";
+
+  EXPECT_THROW_WITH_MESSAGE(manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml), "", true),
+                            EnvoyException,
+                            "listener foo: only one of `address` and `addresses` can be set.");
+}
+
+TEST_F(ListenerManagerImplTest, NoneOfAddressAndAddressesSpecified) {
+  const std::string yaml = R"EOF(
+    name: "foo"
+    filter_chains:
+    - filters: []
+  )EOF";
+
+  EXPECT_THROW_WITH_MESSAGE(manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml), "", true),
+                            EnvoyException, "listener foo: `addresses` must be set.");
+}
+
+TEST_F(ListenerManagerImplTest, MultipleSocketTypeSpecifiedInAddresses) {
+  const std::string yaml = R"EOF(
+    name: "foo"
+    addresses:
+    - address:
+        socket_address:
+          protocol: TCP
+          address: "::0"
+          port_value: 13333
+    - address:
+        socket_address:
+          protocol: UDP
+          address: "::0"
+          port_value: 13334
+    filter_chains:
+    - filters: []
+  )EOF";
+
+  EXPECT_THROW_WITH_MESSAGE(manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml), "", true),
+                            EnvoyException,
+                            "listener foo: has different socket type. The listener only "
+                            "support same socket type for all the addresses.");
+}
+
+TEST_F(ListenerManagerImplTest, SpecifyStatPrefixForAddresses) {
+  const std::string yaml = R"EOF(
+    name: "foo"
+    stat_prefix: "foo"
+    addresses:
+    - address:
+        socket_address:
+          protocol: TCP
+          address: "::0"
+          port_value: 13333
+    filter_chains:
+    - filters: []
+  )EOF";
+
+  EXPECT_THROW_WITH_MESSAGE(manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml), "", true),
+                            EnvoyException,
+                            "listener foo: `stat_prefix` only can be used for `address` field.");
+}
+
 TEST_F(ListenerManagerImplTest, RejectIpv4CompatOnIpv4Address) {
   const std::string yaml = R"EOF(
     name: "foo"
