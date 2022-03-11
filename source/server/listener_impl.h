@@ -157,7 +157,7 @@ private:
       typed_metadata_;
   envoy::config::core::v3::TrafficDirection direction_;
   Stats::ScopeSharedPtr global_scope_;
-  Stats::ScopeSharedPtr listener_scope_; // Stats with listener named scope.
+  std::vector<Stats::ScopeSharedPtr> listener_scopes_; // Stats with listener named scope.
   ProtobufMessage::ValidationVisitor& validation_visitor_;
   const Server::DrainManagerPtr drain_manager_;
   bool is_quic_;
@@ -282,7 +282,7 @@ public:
   bool blockUpdate(uint64_t new_hash) { return new_hash == hash_ || !added_via_api_; }
   bool blockRemove() { return !added_via_api_; }
 
-  Network::Address::InstanceConstSharedPtr address() const { return address_; }
+  Network::Address::InstanceConstSharedPtr address() const { return addresses_[0]; }
   const envoy::config::listener::v3::Listener& config() const { return config_; }
   const Network::ListenSocketFactory& getSocketFactory() const { return *socket_factory_; }
   void debugLog(const std::string& message);
@@ -384,6 +384,12 @@ private:
     const envoy::config::listener::v3::Listener_InternalListenerConfig config_;
   };
 
+  struct AddressStrFormatter {
+    void operator()(std::string* out, const Network::Address::InstanceConstSharedPtr& instance) {
+      out->append(instance->asString());
+    }
+  };
+
   /**
    * Create a new listener from an existing listener and the new config message if the in place
    * filter chain update is decided. Should be called only by newListenerWithFilterChain().
@@ -403,6 +409,8 @@ private:
   void buildSocketOptions();
   void buildOriginalDstListenerFilter();
   void buildProxyProtocolListenerFilter();
+  void validateIpv4MappedAddress(Network::Address::InstanceConstSharedPtr& address,
+                                 const envoy::config::listener::v3::Listener& config);
 
   void addListenSocketOptions(const Network::Socket::OptionsSharedPtr& options) {
     ensureSocketOptions();
@@ -410,7 +418,7 @@ private:
   }
 
   ListenerManagerImpl& parent_;
-  Network::Address::InstanceConstSharedPtr address_;
+  std::vector<Network::Address::InstanceConstSharedPtr> addresses_;
 
   Network::ListenSocketFactoryPtr socket_factory_;
   const bool bind_to_port_;

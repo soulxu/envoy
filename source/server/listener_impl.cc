@@ -216,13 +216,25 @@ ListenerFactoryContextBaseImpl::ListenerFactoryContextBaseImpl(
     const envoy::config::listener::v3::Listener& config, DrainManagerPtr drain_manager)
     : server_(server), metadata_(config.metadata()), typed_metadata_(config.metadata()),
       direction_(config.traffic_direction()), global_scope_(server.stats().createScope("")),
-      listener_scope_(server_.stats().createScope(
-          fmt::format("listener.{}.",
-                      !config.stat_prefix().empty()
-                          ? config.stat_prefix()
-                          : Network::Address::resolveProtoAddress(config.address())->asString()))),
+
       validation_visitor_(validation_visitor), drain_manager_(std::move(drain_manager)),
-      is_quic_(config.udp_listener_config().has_quic_options()) {}
+      is_quic_(config.udp_listener_config().has_quic_options()) {
+  if (config.has_address()) {
+    listener_scopes_.emplace_back(server_.stats().createScope(
+        fmt::format("listener.{}.",
+                    !config.stat_prefix().empty()
+                        ? config.stat_prefix()
+                        : Network::Address::resolveProtoAddress(config.address())->asString())));
+  } else if (config.addresses_size() > 0) {
+    for (auto i = 0; i < config.addresses_size(); i++) {
+      listener_scopes_.emplace_back(server_.stats().createScope(fmt::format(
+          "listener.{}.",
+          !config.addresses(i).stat_prefix().empty()
+              ? config.addresses(i).stat_prefix()
+              : Network::Address::resolveProtoAddress(config.addresses(i).address())->asString())));
+    }
+  }
+}
 
 AccessLog::AccessLogManager& ListenerFactoryContextBaseImpl::accessLogManager() {
   return server_.accessLogManager();
@@ -284,7 +296,7 @@ Configuration::TransportSocketFactoryContext&
 ListenerFactoryContextBaseImpl::getTransportSocketFactoryContext() const {
   return server_.transportSocketFactoryContext();
 }
-Stats::Scope& ListenerFactoryContextBaseImpl::listenerScope() { return *listener_scope_; }
+Stats::Scope& ListenerFactoryContextBaseImpl::listenerScope() { return *listener_scopes_[0]; }
 bool ListenerFactoryContextBaseImpl::isQuicListener() const { return is_quic_; }
 Network::DrainDecision& ListenerFactoryContextBaseImpl::drainDecision() { return *this; }
 Server::DrainManager& ListenerFactoryContextBaseImpl::drainManager() { return *drain_manager_; }
@@ -296,8 +308,8 @@ ListenerImpl::ListenerImpl(const envoy::config::listener::v3::Listener& config,
                            const std::string& version_info, ListenerManagerImpl& parent,
                            const std::string& name, bool added_via_api, bool workers_started,
                            uint64_t hash, uint32_t concurrency)
-    : parent_(parent), address_(Network::Address::resolveProtoAddress(config.address())),
-      bind_to_port_(shouldBindToPort(config)), mptcp_enabled_(config.enable_mptcp()),
+    : parent_(parent), bind_to_port_(shouldBindToPort(config)),
+      mptcp_enabled_(config.enable_mptcp()),
       hand_off_restored_destination_connections_(
           PROTOBUF_GET_WRAPPED_OR_DEFAULT(config, use_original_dst, false)),
       per_connection_buffer_limit_bytes_(
@@ -347,19 +359,24 @@ ListenerImpl::ListenerImpl(const envoy::config::listener::v3::Listener& config,
               validation_visitor_, parent_.server_.api(), parent_.server_.options())),
       quic_stat_names_(parent_.quicStatNames()) {
 
-  if ((address_->type() == Network::Address::Type::Ip &&
-       config.address().socket_address().ipv4_compat()) &&
-      (address_->ip()->version() != Network::Address::IpVersion::v6 ||
-       (!address_->ip()->isAnyAddress() &&
-        address_->ip()->ipv6()->v4CompatibleAddress() == nullptr))) {
-    if (Runtime::runtimeFeatureEnabled("envoy.reloadable_features.strict_check_on_ipv4_compat")) {
-      throw EnvoyException(fmt::format(
-          "Only IPv6 address '::' or valid IPv4-mapped IPv6 address can set ipv4_compat: {}",
-          address_->asStringView()));
-    } else {
-      ENVOY_LOG(warn, "An invalid IPv4-mapped IPv6 address is used when ipv4_compat is set: {}",
-                address_->asStringView());
+  if (config.has_address()) {
+    auto address = Network::Address::resolveProtoAddress(config.address());
+    validateIpv4MappedAddress(address, config);
+    addresses_.emplace_back(address);
+  } else if (config.addresses_size() > 0) {
+    auto address_type =
+        Network::Address::resolveProtoAddress(config.addresses(0).address())->type();
+    for (auto i = 0; i < config.addresses_size(); i++) {
+      auto address = Network::Address::resolveProtoAddress(config.addresses(i).address());
+      if (address_type != address->type()) {
+        throw EnvoyException(fmt::format(
+            "listener {}: only one type of address can be used in single listener", name));
+      }
+      validateIpv4MappedAddress(address, config);
+      addresses_.emplace_back(address);
     }
+  } else {
+    IS_ENVOY_BUG("Should not reach here.");
   }
 
   const absl::optional<std::string> runtime_val =
@@ -401,7 +418,7 @@ ListenerImpl::ListenerImpl(ListenerImpl& origin,
                            const std::string& version_info, ListenerManagerImpl& parent,
                            const std::string& name, bool added_via_api, bool workers_started,
                            uint64_t hash)
-    : parent_(parent), address_(origin.address_), bind_to_port_(shouldBindToPort(config)),
+    : parent_(parent), addresses_(origin.addresses_), bind_to_port_(shouldBindToPort(config)),
       mptcp_enabled_(config.enable_mptcp()),
       hand_off_restored_destination_connections_(
           PROTOBUF_GET_WRAPPED_OR_DEFAULT(config, use_original_dst, false)),
@@ -458,16 +475,20 @@ void ListenerImpl::validateConfig(Network::Socket::Type socket_type) {
   if (mptcp_enabled_) {
     if (socket_type != Network::Socket::Type::Stream) {
       throw EnvoyException(
-          fmt::format("listener {}: enable_mptcp can only be used with TCP listeners", name_));
+          fmt::format("listener {}:[{}]: enable_mptcp can only be used with TCP listeners", name_,
+                      absl::StrJoin(addresses_, ",", AddressStrFormatter())));
     }
-    if (address_->type() != Network::Address::Type::Ip) {
+    // All the adddresses in single listener have same type.
+    if (addresses_[0]->type() != Network::Address::Type::Ip) {
       throw EnvoyException(
-          fmt::format("listener {}: enable_mptcp can only be used with IP addresses", name_));
+          fmt::format("listener {}:[{}]: enable_mptcp can only be used with IP addresses", name_,
+                      absl::StrJoin(addresses_, ",", AddressStrFormatter())));
     }
     if (!Api::OsSysCallsSingleton::get().supportsMptcp()) {
-      throw EnvoyException(fmt::format(
-          "listener {}: enable_mptcp is set but MPTCP is not supported by the operating system",
-          name_));
+      throw EnvoyException(fmt::format("listener {}:[{}]: enable_mptcp is set but MPTCP is not "
+                                       "supported by the operating system",
+                                       name_,
+                                       absl::StrJoin(addresses_, ",", AddressStrFormatter())));
     }
   }
 }
@@ -484,9 +505,9 @@ void ListenerImpl::buildInternalListener() {
   if (config_.address().has_envoy_internal_address()) {
     internal_listener_config_ = std::make_unique<Network::InternalListenerConfig>();
     if (config_.has_api_listener()) {
-      throw EnvoyException(
-          fmt::format("error adding listener '{}': internal address cannot be used in api listener",
-                      address_->asString()));
+      throw EnvoyException(fmt::format(
+          "error adding listener '{}:[{}]': internal address cannot be used in api listener", name_,
+          absl::StrJoin(addresses_, ",", AddressStrFormatter())));
     }
     if ((config_.has_connection_balance_config() &&
          config_.connection_balance_config().has_exact_balance()) ||
@@ -496,18 +517,20 @@ void ListenerImpl::buildInternalListener() {
         config_.has_tcp_backlog_size() || config_.has_tcp_fast_open_queue_length() ||
         (config_.has_transparent() && config_.transparent().value())) {
       throw EnvoyException(
-          fmt::format("error adding listener '{}': has unsupported tcp listener feature",
-                      address_->asString()));
+          fmt::format("error adding listener '{}:[{}]': has unsupported tcp listener feature",
+                      name_, absl::StrJoin(addresses_, ",", AddressStrFormatter())));
     }
     if (!config_.socket_options().empty()) {
-      throw EnvoyException(fmt::format("error adding listener '{}': does not support socket option",
-                                       address_->asString()));
+      throw EnvoyException(
+          fmt::format("error adding listener '{}:[{}]': does not support socket option", name_,
+                      absl::StrJoin(addresses_, ",", AddressStrFormatter())));
     }
   } else {
     if (config_.has_internal_listener()) {
-      throw EnvoyException(fmt::format("error adding listener '{}': address is not an internal "
-                                       "address but an internal listener config is provided",
-                                       address_->asString()));
+      throw EnvoyException(
+          fmt::format("error adding listener '{}:[{}]': address is not an internal "
+                      "address but an internal listener config is provided",
+                      name_, absl::StrJoin(addresses_, ",", AddressStrFormatter())));
     }
   }
 }
@@ -615,17 +638,18 @@ void ListenerImpl::validateFilterChains(Network::Socket::Type socket_type) {
        !udp_listener_config_->listener_factory_->isTransportConnectionless())) {
     // If we got here, this is a tcp listener or connection-oriented udp listener, so ensure there
     // is a filter chain specified
-    throw EnvoyException(fmt::format("error adding listener '{}': no filter chains specified",
-                                     address_->asString()));
+    throw EnvoyException(fmt::format("error adding listener '{}:[{}]': no filter chains specified",
+                                     name_, absl::StrJoin(addresses_, ",", AddressStrFormatter())));
   } else if (udp_listener_config_ != nullptr &&
              !udp_listener_config_->listener_factory_->isTransportConnectionless()) {
     // Early fail if any filter chain doesn't have transport socket configured.
     if (anyFilterChain(config_, [](const auto& filter_chain) {
           return !filter_chain.has_transport_socket();
         })) {
-      throw EnvoyException(fmt::format("error adding listener '{}': no transport socket "
+      throw EnvoyException(fmt::format("error adding listener '{}[{}]': no transport socket "
                                        "specified for connection oriented UDP listener",
-                                       address_->asString()));
+                                       name_,
+                                       absl::StrJoin(addresses_, ",", AddressStrFormatter())));
     }
   } else if (Runtime::runtimeFeatureEnabled(
                  "envoy.reloadable_features.udp_listener_updates_filter_chain_in_place") &&
@@ -633,9 +657,11 @@ void ListenerImpl::validateFilterChains(Network::Socket::Type socket_type) {
              udp_listener_config_ != nullptr &&
              udp_listener_config_->listener_factory_->isTransportConnectionless()) {
 
-    throw EnvoyException(fmt::format("error adding listener '{}': {} filter chain(s) specified for "
-                                     "connection-less UDP listener.",
-                                     address_->asString(), config_.filter_chains_size()));
+    throw EnvoyException(
+        fmt::format("error adding listener '{}:[{}]': {} filter chain(s) specified for "
+                    "connection-less UDP listener.",
+                    name_, absl::StrJoin(addresses_, ",", AddressStrFormatter()),
+                    config_.filter_chains_size()));
   }
 }
 
@@ -706,6 +732,24 @@ void ListenerImpl::buildProxyProtocolListenerFilter() {
     listener_filter_factories_.push_back(factory.createListenerFilterFactoryFromProto(
         envoy::extensions::filters::listener::proxy_protocol::v3::ProxyProtocol(),
         /*listener_filter_matcher=*/nullptr, *listener_factory_context_));
+  }
+}
+
+void ListenerImpl::validateIpv4MappedAddress(Network::Address::InstanceConstSharedPtr& address,
+                                             const envoy::config::listener::v3::Listener& config) {
+  if ((address->type() == Network::Address::Type::Ip &&
+       config.address().socket_address().ipv4_compat()) &&
+      (address->ip()->version() != Network::Address::IpVersion::v6 ||
+       (!address->ip()->isAnyAddress() &&
+        address->ip()->ipv6()->v4CompatibleAddress() == nullptr))) {
+    if (Runtime::runtimeFeatureEnabled("envoy.reloadable_features.strict_check_on_ipv4_compat")) {
+      throw EnvoyException(fmt::format(
+          "Only IPv6 address '::' or valid IPv4-mapped IPv6 address can set ipv4_compat: {}",
+          address->asStringView()));
+    } else {
+      ENVOY_LOG(warn, "An invalid IPv4-mapped IPv6 address is used when ipv4_compat is set: {}",
+                address->asStringView());
+    }
   }
 }
 
@@ -813,8 +857,8 @@ void ListenerImpl::createUdpListenerFilterChain(Network::UdpListenerFilterManage
 
 void ListenerImpl::debugLog(const std::string& message) {
   UNREFERENCED_PARAMETER(message);
-  ENVOY_LOG(debug, "{}: name={}, hash={}, tag={}, address={}", message, name_, hash_, listener_tag_,
-            address_->asString());
+  ENVOY_LOG(debug, "{}: name={}, hash={}, tag={}, addresses=[{}]", message, name_, hash_,
+            listener_tag_, absl::StrJoin(addresses_, ",", AddressStrFormatter()));
 }
 
 void ListenerImpl::initialize() {

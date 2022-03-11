@@ -602,6 +602,27 @@ TEST_F(ListenerManagerImplTest, MultipleSocketTypeSpecifiedInAddresses) {
                             "support same socket type for all the addresses.");
 }
 
+TEST_F(ListenerManagerImplTest, OnlyOneTypeAddressSupportMultipleAddresses) {
+  const std::string yaml = R"EOF(
+    name: "foo"
+    addresses:
+    - address:
+        socket_address:
+          protocol: TCP
+          address: "::0"
+          port_value: 13333
+    - address:
+        envoy_internal_address:
+          server_listener_name: a_listener_name
+    filter_chains:
+    - filters: []
+  )EOF";
+
+  EXPECT_THROW_WITH_MESSAGE(
+      manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml), "", true), EnvoyException,
+      "listener foo: only one type of address can be used in single listener");
+}
+
 TEST_F(ListenerManagerImplTest, SpecifyStatPrefixForAddresses) {
   const std::string yaml = R"EOF(
     name: "foo"
@@ -754,10 +775,10 @@ TEST_F(ListenerManagerImplTest, RejectListenerWithSocketAddressWithInternalListe
     - filters: []
   )EOF";
 
-  EXPECT_THROW_WITH_MESSAGE(manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml), "", true),
-                            EnvoyException,
-                            "error adding listener '127.0.0.1:1234': address is not an internal "
-                            "address but an internal listener config is provided");
+  EXPECT_THROW_WITH_MESSAGE(
+      manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml), "", true), EnvoyException,
+      "error adding listener 'foo:[127.0.0.1:1234]': address is not an internal "
+      "address but an internal listener config is provided");
 }
 
 TEST_F(ListenerManagerImplTest, RejectTcpOptionsWithInternalListenerConfig) {
@@ -788,24 +809,27 @@ TEST_F(ListenerManagerImplTest, RejectTcpOptionsWithInternalListenerConfig) {
   for (const auto& f : listener_mutators) {
     auto new_listener = listener;
     f(new_listener);
-    EXPECT_THROW_WITH_MESSAGE(new ListenerImpl(new_listener, "version", *manager_, "foo", true,
-                                               false, /*hash=*/static_cast<uint64_t>(0), 1),
-                              EnvoyException,
-                              "error adding listener 'envoy://test_internal_listener_name': has "
-                              "unsupported tcp listener feature");
+    EXPECT_THROW_WITH_MESSAGE(
+        new ListenerImpl(new_listener, "version", *manager_, "foo", true, false,
+                         /*hash=*/static_cast<uint64_t>(0), 1),
+        EnvoyException,
+        "error adding listener 'foo:[envoy://test_internal_listener_name]': has "
+        "unsupported tcp listener feature");
   }
   {
     auto new_listener = listener;
     new_listener.mutable_socket_options()->Add();
-    EXPECT_THROW_WITH_MESSAGE(manager_->addOrUpdateListener(new_listener, "", true), EnvoyException,
-                              "error adding listener 'envoy://test_internal_listener_name': does "
-                              "not support socket option")
+    EXPECT_THROW_WITH_MESSAGE(
+        manager_->addOrUpdateListener(new_listener, "", true), EnvoyException,
+        "error adding listener 'foo:[envoy://test_internal_listener_name]': does "
+        "not support socket option")
   }
   {
     auto new_listener = listener;
     new_listener.set_enable_mptcp(true);
     EXPECT_THROW_WITH_MESSAGE(manager_->addOrUpdateListener(new_listener, "", true), EnvoyException,
-                              "listener foo: enable_mptcp can only be used with IP addresses")
+                              "listener foo:[envoy://test_internal_listener_name]: enable_mptcp "
+                              "can only be used with IP addresses")
   }
 }
 
@@ -4692,8 +4716,9 @@ TEST_F(ListenerManagerImplWithRealFiltersTest, MptcpOnUdp) {
       filter_chains:
       - filters:
     )EOF");
-  EXPECT_THROW_WITH_MESSAGE(manager_->addOrUpdateListener(listener, "", true), EnvoyException,
-                            "listener mptcp-udp: enable_mptcp can only be used with TCP listeners");
+  EXPECT_THROW_WITH_MESSAGE(
+      manager_->addOrUpdateListener(listener, "", true), EnvoyException,
+      "listener mptcp-udp:[127.0.0.1:1111]: enable_mptcp can only be used with TCP listeners");
 }
 
 TEST_F(ListenerManagerImplWithRealFiltersTest, MptcpOnUnixDomainSocket) {
@@ -4706,8 +4731,9 @@ TEST_F(ListenerManagerImplWithRealFiltersTest, MptcpOnUnixDomainSocket) {
       filter_chains:
       - filters:
     )EOF");
-  EXPECT_THROW_WITH_MESSAGE(manager_->addOrUpdateListener(listener, "", true), EnvoyException,
-                            "listener mptcp-udp: enable_mptcp can only be used with IP addresses");
+  EXPECT_THROW_WITH_MESSAGE(
+      manager_->addOrUpdateListener(listener, "", true), EnvoyException,
+      "listener mptcp-udp:[/path]: enable_mptcp can only be used with IP addresses");
 }
 
 TEST_F(ListenerManagerImplWithRealFiltersTest, MptcpNotSupported) {
@@ -4722,9 +4748,9 @@ TEST_F(ListenerManagerImplWithRealFiltersTest, MptcpNotSupported) {
       - filters:
     )EOF");
   EXPECT_CALL(os_sys_calls_, supportsMptcp()).WillOnce(Return(false));
-  EXPECT_THROW_WITH_MESSAGE(
-      manager_->addOrUpdateListener(listener, "", true), EnvoyException,
-      "listener mptcp-udp: enable_mptcp is set but MPTCP is not supported by the operating system");
+  EXPECT_THROW_WITH_MESSAGE(manager_->addOrUpdateListener(listener, "", true), EnvoyException,
+                            "listener mptcp-udp:[127.0.0.1:1111]: enable_mptcp is set but MPTCP is "
+                            "not supported by the operating system");
 }
 
 // Set the resolver to the default IP resolver. The address resolver logic is unit tested in
@@ -5896,10 +5922,10 @@ TEST_F(ListenerManagerImplForInPlaceFilterChainUpdateTest, TraditionalUpdateIfDi
   EXPECT_CALL(server_.validation_context_, staticValidationVisitor()).Times(0);
   EXPECT_CALL(server_.validation_context_, dynamicValidationVisitor());
   EXPECT_CALL(listener_factory_, createDrainManager_(_));
-  EXPECT_THROW_WITH_MESSAGE(manager_->addOrUpdateListener(new_listener_proto, "", true),
-                            EnvoyException,
-                            "error adding listener '127.0.0.1:1234': 1 filter chain(s) specified "
-                            "for connection-less UDP listener.");
+  EXPECT_THROW_WITH_MESSAGE(
+      manager_->addOrUpdateListener(new_listener_proto, "", true), EnvoyException,
+      "error adding listener 'foo:[127.0.0.1:1234]': 1 filter chain(s) specified "
+      "for connection-less UDP listener.");
 
   expectRemove(new_listener_proto, listener_foo, *listener_factory_.socket_);
   EXPECT_EQ(0UL, manager_->listeners().size());
@@ -5942,9 +5968,9 @@ TEST_F(ListenerManagerImplForInPlaceFilterChainUpdateTest, TraditionalUpdateOnZe
   EXPECT_CALL(server_.validation_context_, staticValidationVisitor()).Times(0);
   EXPECT_CALL(server_.validation_context_, dynamicValidationVisitor());
   EXPECT_CALL(listener_factory_, createDrainManager_(_));
-  EXPECT_THROW_WITH_MESSAGE(manager_->addOrUpdateListener(new_listener_proto, "", true),
-                            EnvoyException,
-                            "error adding listener '127.0.0.1:1234': no filter chains specified");
+  EXPECT_THROW_WITH_MESSAGE(
+      manager_->addOrUpdateListener(new_listener_proto, "", true), EnvoyException,
+      "error adding listener 'foo:[127.0.0.1:1234]': no filter chains specified");
 
   expectRemove(listener_proto, listener_foo, *listener_factory_.socket_);
   EXPECT_EQ(0UL, manager_->listeners().size());
