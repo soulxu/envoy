@@ -75,7 +75,7 @@ void ActiveTcpSocket::continueFilterChain(bool success) {
     bool no_error = true;
     if (iter_ == accept_filters_.end()) {
       iter_ = accept_filters_.begin();
-      if (listener_filter_max_read_bytes_ > 0) {
+      if (iter_ != accept_filters_.end() && (*iter_)->maxReadBytes() > 0) {
         listener_filter_buffer_ = std::make_unique<Network::ListenerFilterBufferImpl>(
             socket_->ioHandle(), listener_.dispatcher(),
             [this](bool error) {
@@ -87,20 +87,28 @@ void ActiveTcpSocket::continueFilterChain(bool success) {
               }
               continueFilterChain(false);
             },
-            [this](Network::ListenerFilterBuffer& filter_buffer) {
+            [this](Network::ListenerFilterBufferImpl& filter_buffer) {
               ASSERT((*iter_)->maxReadBytes() != 0);
               Network::FilterStatus status = (*iter_)->onData(filter_buffer);
               if (status == Network::FilterStatus::StopIteration) {
                 if (socket_->ioHandle().isOpen()) {
                   // The listener filter should not wait for more data when it has already received
                   // all the data it requested.
-                  ASSERT(filter_buffer.rawSlice().len_ < listener_filter_max_read_bytes_);
+                  ASSERT(filter_buffer.rawSlice().len_ < (*iter_)->maxReadBytes());
+                  // Check if the maxReadBytes is changed or not. If change,
+                  // reset the buffer capacity.
+                  if ((*iter_)->maxReadBytes() > filter_buffer.capacity()) {
+                    filter_buffer.resetCapacity((*iter_)->maxReadBytes());
+                    // Activate `Read` event manually in case the data already
+                    // available in the socket buffer.
+                    filter_buffer.activateFileEvent(Event::FileReadyType::Read);
+                  }
                 }
                 return;
               }
               continueFilterChain(true);
             },
-            listener_filter_max_read_bytes_);
+            (*iter_)->maxReadBytes());
       }
     } else {
       iter_ = std::next(iter_);
@@ -112,7 +120,7 @@ void ActiveTcpSocket::continueFilterChain(bool success) {
         // The filter is responsible for calling us again at a later time to continue the filter
         // chain from the next filter.
         if (!socket().ioHandle().isOpen()) {
-          // break the loop but should not create new connection
+          // Break the loop but should not create new connection.
           no_error = false;
           break;
         } else {
@@ -125,6 +133,9 @@ void ActiveTcpSocket::continueFilterChain(bool success) {
           // peeked into the buffer when previous filter processing the data, then activate the read
           // event to trigger the current filter callback to process the data.
           if (listener_filter_buffer_ != nullptr) {
+            if (listener_filter_buffer_->capacity() < (*iter_)->maxReadBytes()) {
+              listener_filter_buffer_->resetCapacity((*iter_)->maxReadBytes());
+            }
             listener_filter_buffer_->activateFileEvent(Event::FileReadyType::Read);
           }
           // Waiting for more data.
