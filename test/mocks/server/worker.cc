@@ -17,7 +17,8 @@ MockWorker::MockWorker() {
                                    Network::ListenerConfig& config,
                                    AddListenerCompletion completion, Runtime::Loader&) -> void {
         UNREFERENCED_PARAMETER(overridden_listener);
-        config.listenSocketFactory().getListenSocket(0);
+        config.listenSocketFactory().getListenSocket(
+            config.listenSocketFactory().localAddresses()[0], 0);
         EXPECT_EQ(nullptr, add_listener_completion_);
         add_listener_completion_ = completion;
       }));

@@ -231,7 +231,7 @@ filter_chains:
   manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml1), "", true);
   EXPECT_THROW_WITH_MESSAGE(
       manager_->addOrUpdateListener(parseListenerFromV3Yaml(yaml2), "", true), EnvoyException,
-      "error adding listener: 'bar' has duplicate address '127.0.0.1:1234' as existing listener");
+      "error adding listener: 'bar' has duplicate address '[127.0.0.1:1234]' as existing listener");
 }
 
 TEST_F(ListenerManagerImplWithRealFiltersTest, SetListenerPerConnectionBufferLimit) {
@@ -2669,7 +2669,7 @@ filter_chains:
   EXPECT_THROW_WITH_MESSAGE(
       manager_->addOrUpdateListener(parseListenerFromV3Yaml(listener_bar_yaml), "", true),
       EnvoyException,
-      "error adding listener: 'bar' has duplicate address '0.0.0.0:1234' as existing listener");
+      "error adding listener: 'bar' has duplicate address '[0.0.0.0:1234]' as existing listener");
 
   // Move foo to active and then try to add again. This should still fail.
   EXPECT_CALL(*worker_, addListener(_, _, _, _));
@@ -2681,7 +2681,79 @@ filter_chains:
   EXPECT_THROW_WITH_MESSAGE(
       manager_->addOrUpdateListener(parseListenerFromV3Yaml(listener_bar_yaml), "", true),
       EnvoyException,
-      "error adding listener: 'bar' has duplicate address '0.0.0.0:1234' as existing listener");
+      "error adding listener: 'bar' has duplicate address '[0.0.0.0:1234]' as existing listener");
+
+  EXPECT_CALL(*listener_foo, onDestroy());
+}
+
+TEST_F(ListenerManagerImplTest, DuplicateAddressDontBindForMultipleAddresses) {
+  InSequence s;
+
+  EXPECT_CALL(*worker_, start(_, _));
+  manager_->startWorkers(guard_dog_, callback_.AsStdFunction());
+
+  // Add foo listener into warming.
+  const std::string listener_foo_yaml = R"EOF(
+name: foo
+addresses:
+- address:
+    socket_address:
+      address: 0.0.0.0
+      port_value: 1234
+- address:
+    socket_address:
+      address: 0.0.0.0
+      port_value: 1235
+bind_to_port: false
+filter_chains:
+- filters: []
+  )EOF";
+
+  ListenerHandle* listener_foo = expectListenerCreate(true, true);
+  EXPECT_CALL(listener_factory_,
+              createListenSocket(_, _, _, ListenerComponentFactory::BindType::NoBind, _, 0));
+  EXPECT_CALL(listener_factory_,
+              createListenSocket(_, _, _, ListenerComponentFactory::BindType::NoBind, _, 0));
+  EXPECT_CALL(listener_foo->target_, initialize());
+  EXPECT_TRUE(manager_->addOrUpdateListener(parseListenerFromV3Yaml(listener_foo_yaml), "", true));
+
+  // Add bar with same non-binding address. Should fail.
+  const std::string listener_bar_yaml = R"EOF(
+name: bar
+addresses:
+- address:
+    socket_address:
+      address: 0.0.0.0
+      port_value: 1234
+- address:
+    socket_address:
+      address: 0.0.0.0
+      port_value: 1236
+bind_to_port: false
+filter_chains:
+- filters: []
+  )EOF";
+
+  ListenerHandle* listener_bar = expectListenerCreate(true, true);
+  EXPECT_CALL(*listener_bar, onDestroy());
+  EXPECT_THROW_WITH_MESSAGE(
+      manager_->addOrUpdateListener(parseListenerFromV3Yaml(listener_bar_yaml), "", true),
+      EnvoyException,
+      "error adding listener: 'bar' has duplicate address '[0.0.0.0:1234,0.0.0.0:1236]' as "
+      "existing listener");
+
+  // Move foo to active and then try to add again. This should still fail.
+  EXPECT_CALL(*worker_, addListener(_, _, _, _));
+  listener_foo->target_.ready();
+  worker_->callAddCompletion();
+
+  listener_bar = expectListenerCreate(true, true);
+  EXPECT_CALL(*listener_bar, onDestroy());
+  EXPECT_THROW_WITH_MESSAGE(
+      manager_->addOrUpdateListener(parseListenerFromV3Yaml(listener_bar_yaml), "", true),
+      EnvoyException,
+      "error adding listener: 'bar' has duplicate address '[0.0.0.0:1234,0.0.0.0:1236]' as "
+      "existing listener");
 
   EXPECT_CALL(*listener_foo, onDestroy());
 }
@@ -6032,7 +6104,8 @@ address:
   manager_->addOrUpdateListener(listener, "", true);
   EXPECT_EQ(1U, manager_->listeners().size());
   Network::SocketSharedPtr listen_socket =
-      manager_->listeners().front().get().listenSocketFactory().getListenSocket(0);
+      manager_->listeners().front().get().listenSocketFactory().getListenSocket(
+          manager_->listeners().front().get().listenSocketFactory().localAddresses()[0], 0);
   Network::UdpPacketWriterPtr udp_packet_writer =
       manager_->listeners()
           .front()

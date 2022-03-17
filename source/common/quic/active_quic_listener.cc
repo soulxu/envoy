@@ -31,11 +31,13 @@ ActiveQuicListener::ActiveQuicListener(
     QuicStatNames& quic_stat_names, uint32_t packets_received_to_connection_count_ratio,
     EnvoyQuicCryptoServerStreamFactoryInterface& crypto_server_stream_factory,
     EnvoyQuicProofSourceFactoryInterface& proof_source_factory)
-    : ActiveQuicListener(runtime, worker_index, concurrency, dispatcher, parent,
-                         listener_config.listenSocketFactory().getListenSocket(worker_index),
-                         listener_config, quic_config, kernel_worker_routing, enabled,
-                         quic_stat_names, packets_received_to_connection_count_ratio,
-                         crypto_server_stream_factory, proof_source_factory) {}
+    : ActiveQuicListener(
+          runtime, worker_index, concurrency, dispatcher, parent,
+          listener_config.listenSocketFactory().getListenSocket(
+              listener_config.listenSocketFactory().localAddresses()[0], worker_index),
+          listener_config, quic_config, kernel_worker_routing, enabled, quic_stat_names,
+          packets_received_to_connection_count_ratio, crypto_server_stream_factory,
+          proof_source_factory) {}
 
 ActiveQuicListener::ActiveQuicListener(
     Runtime::Loader& runtime, uint32_t worker_index, uint32_t concurrency,

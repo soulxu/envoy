@@ -345,10 +345,13 @@ private:
 
     // Network::ListenSocketFactory
     Network::Socket::Type socketType() const override { return socket_->socketType(); }
-    const Network::Address::InstanceConstSharedPtr& localAddress() const override {
-      return socket_->connectionInfoProvider().localAddress();
+    std::vector<Network::Address::InstanceConstSharedPtr> localAddresses() const override {
+      std::vector<Network::Address::InstanceConstSharedPtr> addresses;
+      addresses.emplace_back(socket_->connectionInfoProvider().localAddress());
+      return addresses;
     }
-    Network::SocketSharedPtr getListenSocket(uint32_t) override {
+    Network::SocketSharedPtr getListenSocket(const Network::Address::InstanceConstSharedPtr&,
+                                             uint32_t) override {
       // This is only supposed to be called once.
       RELEASE_ASSERT(!socket_create_, "AdminListener's socket shouldn't be shared.");
       socket_create_ = true;

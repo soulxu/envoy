@@ -69,21 +69,21 @@ bool shouldBindToPort(const envoy::config::listener::v3::Listener& config) {
 } // namespace
 
 ListenSocketFactoryImpl::ListenSocketFactoryImpl(
-    ListenerComponentFactory& factory, Network::Address::InstanceConstSharedPtr address,
+    ListenerComponentFactory& factory,
+    const std::vector<Network::Address::InstanceConstSharedPtr>& addresses,
     Network::Socket::Type socket_type, const Network::Socket::OptionsSharedPtr& options,
     const std::string& listener_name, uint32_t tcp_backlog_size,
     ListenerComponentFactory::BindType bind_type,
     const Network::SocketCreationOptions& creation_options, uint32_t num_sockets)
-    : factory_(factory), local_address_(address), socket_type_(socket_type), options_(options),
+    : factory_(factory), socket_type_(socket_type), options_(options),
       listener_name_(listener_name), tcp_backlog_size_(tcp_backlog_size), bind_type_(bind_type),
       socket_creation_options_(creation_options) {
-
-  if (local_address_->type() == Network::Address::Type::Ip) {
+  if (addresses[0]->type() == Network::Address::Type::Ip) {
     if (socket_type == Network::Socket::Type::Datagram) {
       ASSERT(bind_type_ == ListenerComponentFactory::BindType::ReusePort || num_sockets == 1u);
     }
   } else {
-    if (local_address_->type() == Network::Address::Type::Pipe) {
+    if (addresses[0]->type() == Network::Address::Type::Pipe) {
       // Listeners with Unix domain socket always use shared socket.
       // TODO(mattklein123): This should be blocked at the config parsing layer instead of getting
       // here and disabling reuse_port.
@@ -91,65 +91,79 @@ ListenSocketFactoryImpl::ListenSocketFactoryImpl(
         bind_type_ = ListenerComponentFactory::BindType::NoReusePort;
       }
     } else {
-      ASSERT(local_address_->type() == Network::Address::Type::EnvoyInternal);
+      ASSERT(addresses[0]->type() == Network::Address::Type::EnvoyInternal);
       bind_type_ = ListenerComponentFactory::BindType::NoBind;
     }
   }
 
-  sockets_.push_back(createListenSocketAndApplyOptions(factory, socket_type, 0));
+  for (auto& address : addresses) {
+    std::vector<Network::SocketSharedPtr> sockets;
+    sockets.push_back(createListenSocketAndApplyOptions(address, factory, socket_type, 0));
 
-  if (sockets_[0] != nullptr && local_address_->ip() && local_address_->ip()->port() == 0) {
-    local_address_ = sockets_[0]->connectionInfoProvider().localAddress();
-  }
-  ENVOY_LOG(debug, "Set listener {} socket factory local address to {}", listener_name,
-            local_address_->asString());
-
-  // Now create the remainder of the sockets that will be used by the rest of the workers.
-  for (uint32_t i = 1; i < num_sockets; i++) {
-    if (bind_type_ != ListenerComponentFactory::BindType::ReusePort && sockets_[0] != nullptr) {
-      sockets_.push_back(sockets_[0]->duplicate());
-    } else {
-      sockets_.push_back(createListenSocketAndApplyOptions(factory, socket_type, i));
+    Network::Address::InstanceConstSharedPtr actual_local_address = address;
+    if (sockets[0] != nullptr && address->ip() && address->ip()->port() == 0) {
+      actual_local_address = sockets[0]->connectionInfoProvider().localAddress();
     }
+    ENVOY_LOG(debug, "Set listener {} socket factory local address to {}", listener_name,
+              actual_local_address->asString());
+
+    // Now create the remainder of the sockets that will be used by the rest of the workers.
+    for (uint32_t i = 1; i < num_sockets; i++) {
+      if (bind_type_ != ListenerComponentFactory::BindType::ReusePort && sockets[0] != nullptr) {
+        sockets.push_back(sockets[0]->duplicate());
+      } else {
+        sockets.push_back(createListenSocketAndApplyOptions(address, factory, socket_type, i));
+      }
+    }
+    ASSERT(sockets.size() == num_sockets);
+
+    socket_maps_.insert(std::make_pair(actual_local_address->asString(),
+                                       SocketDetails(actual_local_address, address, sockets)));
   }
-  ASSERT(sockets_.size() == num_sockets);
 }
 
 ListenSocketFactoryImpl::ListenSocketFactoryImpl(const ListenSocketFactoryImpl& factory_to_clone)
-    : factory_(factory_to_clone.factory_), local_address_(factory_to_clone.local_address_),
-      socket_type_(factory_to_clone.socket_type_), options_(factory_to_clone.options_),
-      listener_name_(factory_to_clone.listener_name_),
+    : factory_(factory_to_clone.factory_), socket_type_(factory_to_clone.socket_type_),
+      options_(factory_to_clone.options_), listener_name_(factory_to_clone.listener_name_),
       tcp_backlog_size_(factory_to_clone.tcp_backlog_size_),
       bind_type_(factory_to_clone.bind_type_),
       socket_creation_options_(factory_to_clone.socket_creation_options_) {
-  for (auto& socket : factory_to_clone.sockets_) {
-    // In the cloning case we always duplicate() the socket. This makes sure that during listener
-    // update/drain we don't lose any incoming connections when using reuse_port. Specifically on
-    // Linux the use of SO_REUSEPORT causes the kernel to allocate a separate queue for each socket
-    // on the same address. Incoming connections are immediately assigned to one of these queues.
-    // If connections are in the queue when the socket is closed, they are closed/reset, not sent to
-    // another queue. So avoid making extra queues in the kernel, even temporarily.
-    //
-    // TODO(mattklein123): In the current code as long as the address matches, the socket factory
-    // will be cloned, effectively ignoring any changed socket options. The code should probably
-    // block any updates to listeners that use the same address but different socket options.
-    // (It's possible we could handle changing some socket options, but this would be tricky and
-    // probably not worth the difficulty.)
-    sockets_.push_back(socket->duplicate());
+  for (auto& socket_map_item : factory_to_clone.socket_maps_) {
+    std::vector<Network::SocketSharedPtr> sockets;
+    for (auto& socket : socket_map_item.second.sockets_) {
+      // In the cloning case we always duplicate() the socket. This makes sure that during listener
+      // update/drain we don't lose any incoming connections when using reuse_port. Specifically on
+      // Linux the use of SO_REUSEPORT causes the kernel to allocate a separate queue for each
+      // socket on the same address. Incoming connections are immediately assigned to one of these
+      // queues. If connections are in the queue when the socket is closed, they are closed/reset,
+      // not sent to another queue. So avoid making extra queues in the kernel, even temporarily.
+      //
+      // TODO(mattklein123): In the current code as long as the address matches, the socket factory
+      // will be cloned, effectively ignoring any changed socket options. The code should probably
+      // block any updates to listeners that use the same address but different socket options.
+      // (It's possible we could handle changing some socket options, but this would be tricky and
+      // probably not worth the difficulty.)
+      sockets.emplace_back(socket->duplicate());
+    }
+    socket_maps_.insert(
+        std::make_pair(socket_map_item.first,
+                       SocketDetails(socket_map_item.second.local_address_,
+                                     socket_map_item.second.config_local_address_, sockets)));
   }
 }
 
 Network::SocketSharedPtr ListenSocketFactoryImpl::createListenSocketAndApplyOptions(
-    ListenerComponentFactory& factory, Network::Socket::Type socket_type, uint32_t worker_index) {
+    const Network::Address::InstanceConstSharedPtr& address, ListenerComponentFactory& factory,
+    Network::Socket::Type socket_type, uint32_t worker_index) {
   // Socket might be nullptr when doing server validation.
   // TODO(mattklein123): See the comment in the validation code. Make that code not return nullptr
   // so this code can be simpler.
   Network::SocketSharedPtr socket = factory.createListenSocket(
-      local_address_, socket_type, options_, bind_type_, socket_creation_options_, worker_index);
+      address, socket_type, options_, bind_type_, socket_creation_options_, worker_index);
 
   // Binding is done by now.
   ENVOY_LOG(debug, "Create listen socket for listener {} on address {}", listener_name_,
-            local_address_->asString());
+            address->asString());
   if (socket != nullptr && options_ != nullptr) {
     const bool ok = Network::Socket::applyOptions(
         options_, *socket, envoy::config::core::v3::SocketOption::STATE_BOUND);
@@ -169,46 +183,55 @@ Network::SocketSharedPtr ListenSocketFactoryImpl::createListenSocketAndApplyOpti
   return socket;
 }
 
-Network::SocketSharedPtr ListenSocketFactoryImpl::getListenSocket(uint32_t worker_index) {
+Network::SocketSharedPtr
+ListenSocketFactoryImpl::getListenSocket(const Network::Address::InstanceConstSharedPtr& address,
+                                         uint32_t worker_index) {
+  auto iter = socket_maps_.find(address->asString());
+  ASSERT(iter != socket_maps_.end());
+  auto& sockets = iter->second.sockets_;
   // Per the TODO above, sockets at this point can never be null. That only happens in the
   // config validation path.
-  ASSERT(worker_index < sockets_.size() && sockets_[worker_index] != nullptr);
-  return sockets_[worker_index];
+  ASSERT(worker_index < sockets.size() && sockets[worker_index] != nullptr);
+  return sockets[worker_index];
 }
 
 void ListenSocketFactoryImpl::doFinalPreWorkerInit() {
-  if (bind_type_ == ListenerComponentFactory::BindType::NoBind ||
-      socket_type_ != Network::Socket::Type::Stream) {
-    return;
-  }
+  for (auto& socket_map_item : socket_maps_) {
+    auto& sockets = socket_map_item.second.sockets_;
+    if (bind_type_ == ListenerComponentFactory::BindType::NoBind ||
+        socket_type_ != Network::Socket::Type::Stream) {
+      return;
+    }
 
-  ASSERT(!sockets_.empty());
-  auto listen_and_apply_options = [](Envoy::Network::SocketSharedPtr socket, int tcp_backlog_size) {
-    const auto rc = socket->ioHandle().listen(tcp_backlog_size);
-    if (rc.return_value_ != 0) {
-      throw EnvoyException(fmt::format("cannot listen() errno={}", rc.errno_));
-    }
-    if (!Network::Socket::applyOptions(socket->options(), *socket,
-                                       envoy::config::core::v3::SocketOption::STATE_LISTENING)) {
-      throw Network::SocketOptionException(
-          fmt::format("cannot set post-listen socket option on socket: {}",
-                      socket->connectionInfoProvider().localAddress()->asString()));
-    }
-  };
-  // On all platforms we should listen on the first socket.
-  auto iterator = sockets_.begin();
-  listen_and_apply_options(*iterator, tcp_backlog_size_);
-  ++iterator;
-#ifndef WIN32
-  // With this implementation on Windows we only accept
-  // connections on Worker 1 and then we use the `ExactConnectionBalancer`
-  // to balance these connections to all workers.
-  // TODO(davinci26): We should update the behavior when socket duplication
-  // does not cause accepts to hang in the OS.
-  for (; iterator != sockets_.end(); ++iterator) {
+    ASSERT(!sockets.empty());
+    auto listen_and_apply_options = [](Envoy::Network::SocketSharedPtr socket,
+                                       int tcp_backlog_size) {
+      const auto rc = socket->ioHandle().listen(tcp_backlog_size);
+      if (rc.return_value_ != 0) {
+        throw EnvoyException(fmt::format("cannot listen() errno={}", rc.errno_));
+      }
+      if (!Network::Socket::applyOptions(socket->options(), *socket,
+                                         envoy::config::core::v3::SocketOption::STATE_LISTENING)) {
+        throw Network::SocketOptionException(
+            fmt::format("cannot set post-listen socket option on socket: {}",
+                        socket->connectionInfoProvider().localAddress()->asString()));
+      }
+    };
+    // On all platforms we should listen on the first socket.
+    auto iterator = sockets.begin();
     listen_and_apply_options(*iterator, tcp_backlog_size_);
-  }
+    ++iterator;
+#ifndef WIN32
+    // With this implementation on Windows we only accept
+    // connections on Worker 1 and then we use the `ExactConnectionBalancer`
+    // to balance these connections to all workers.
+    // TODO(davinci26): We should update the behavior when socket duplication
+    // does not cause accepts to hang in the OS.
+    for (; iterator != sockets.end(); ++iterator) {
+      listen_and_apply_options(*iterator, tcp_backlog_size_);
+    }
 #endif
+  }
 }
 
 ListenerFactoryContextBaseImpl::ListenerFactoryContextBaseImpl(
@@ -419,8 +442,8 @@ ListenerImpl::ListenerImpl(ListenerImpl& origin,
                            const std::string& version_info, ListenerManagerImpl& parent,
                            const std::string& name, bool added_via_api, bool workers_started,
                            uint64_t hash)
-    : parent_(parent), addresses_(origin.addresses_), bind_to_port_(shouldBindToPort(config)),
-      mptcp_enabled_(config.enable_mptcp()),
+    : parent_(parent), addresses_(origin.addresses_), socket_type_(origin.socket_type_),
+      bind_to_port_(shouldBindToPort(config)), mptcp_enabled_(config.enable_mptcp()),
       hand_off_restored_destination_connections_(
           PROTOBUF_GET_WRAPPED_OR_DEFAULT(config, use_original_dst, false)),
       per_connection_buffer_limit_bytes_(
@@ -456,14 +479,13 @@ ListenerImpl::ListenerImpl(ListenerImpl& origin,
       transport_factory_context_(origin.transport_factory_context_),
       quic_stat_names_(parent_.quicStatNames()) {
   buildAccessLog();
-  auto socket_type = Network::Utility::protobufAddressSocketType(config.address());
-  validateConfig(socket_type);
-  buildListenSocketOptions(socket_type);
-  createListenerFilterFactories(socket_type);
-  validateFilterChains(socket_type);
+  validateConfig();
+  buildListenSocketOptions();
+  createListenerFilterFactories();
+  validateFilterChains();
   buildFilterChains();
   buildInternalListener();
-  if (socket_type == Network::Socket::Type::Stream) {
+  if (socket_type_ == Network::Socket::Type::Stream) {
     // Apply the options below only for TCP.
     buildSocketOptions();
     buildOriginalDstListenerFilter();
@@ -990,17 +1012,34 @@ bool ListenerImpl::getReusePortOrDefault(Server::Instance& server,
   return initial_reuse_port_value;
 }
 
-bool ListenerImpl::hasCompatibleAddress(const ListenerImpl& other) const {
+bool ListenerImpl::hasAnyCompatibleAddress(const ListenerImpl& other) const {
+  if (socket_type_ != other.socket_type_) {
+    return false;
+  }
+
+  auto& other_addresses = other.addresses();
+  for (auto& addr : addresses()) {
+    if (std::any_of(other_addresses.begin(), other_addresses.end(),
+                    [&addr](const Network::Address::InstanceConstSharedPtr& other_addr) {
+                      return *other_addr == *addr;
+                    })) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool ListenerImpl::hasCompatibleAddresses(const ListenerImpl& other) const {
   if ((socket_type_ != other.socket_type_) || (addresses().size() != other.addresses().size())) {
     return false;
   }
 
   auto& other_addresses = other.addresses();
   for (auto& addr : addresses()) {
-    if (std::none_of(other_addresses.begin(), other_addresses.end(),
-                     [&addr](const Network::Address::InstanceConstSharedPtr& other_addr) {
-                       return *other_addr == *addr;
-                     })) {
+    if (std::any_of(other_addresses.begin(), other_addresses.end(),
+                    [&addr](const Network::Address::InstanceConstSharedPtr& other_addr) {
+                      return *other_addr != *addr;
+                    })) {
       return false;
     }
   }

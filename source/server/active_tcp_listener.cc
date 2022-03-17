@@ -15,12 +15,13 @@ namespace Server {
 ActiveTcpListener::ActiveTcpListener(Network::TcpConnectionHandler& parent,
                                      Network::ListenerConfig& config, Runtime::Loader& runtime,
                                      uint32_t worker_index)
-    : OwnedActiveStreamListenerBase(parent, parent.dispatcher(),
-                                    parent.dispatcher().createListener(
-                                        config.listenSocketFactory().getListenSocket(worker_index),
-                                        *this, runtime, config.bindToPort(),
-                                        config.ignoreGlobalConnLimit()),
-                                    config),
+    : OwnedActiveStreamListenerBase(
+          parent, parent.dispatcher(),
+          parent.dispatcher().createListener(
+              config.listenSocketFactory().getListenSocket(
+                  config.listenSocketFactory().localAddresses()[0], worker_index),
+              *this, runtime, config.bindToPort(), config.ignoreGlobalConnLimit()),
+          config),
       tcp_conn_handler_(parent) {
   config.connectionBalancer().registerHandler(*this);
 }

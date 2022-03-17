@@ -42,7 +42,7 @@ class ListenSocketFactoryImpl : public Network::ListenSocketFactory,
                                 protected Logger::Loggable<Logger::Id::config> {
 public:
   ListenSocketFactoryImpl(ListenerComponentFactory& factory,
-                          Network::Address::InstanceConstSharedPtr address,
+                          const std::vector<Network::Address::InstanceConstSharedPtr>& addresses,
                           Network::Socket::Type socket_type,
                           const Network::Socket::OptionsSharedPtr& options,
                           const std::string& listener_name, uint32_t tcp_backlog_size,
@@ -52,31 +52,50 @@ public:
 
   // Network::ListenSocketFactory
   Network::Socket::Type socketType() const override { return socket_type_; }
-  const Network::Address::InstanceConstSharedPtr& localAddress() const override {
-    return local_address_;
+  std::vector<Network::Address::InstanceConstSharedPtr> localAddresses() const override {
+    std::vector<Network::Address::InstanceConstSharedPtr> addresses;
+    for (auto& socket_map_item : socket_maps_) {
+      addresses.emplace_back(socket_map_item.second.local_address_);
+    }
+    return addresses;
   }
-  Network::SocketSharedPtr getListenSocket(uint32_t worker_index) override;
+  Network::SocketSharedPtr getListenSocket(const Network::Address::InstanceConstSharedPtr& address,
+                                           uint32_t worker_index) override;
   Network::ListenSocketFactoryPtr clone() const override {
     return absl::WrapUnique(new ListenSocketFactoryImpl(*this));
   }
   void closeAllSockets() override {
-    for (auto& socket : sockets_) {
-      socket->close();
+    for (auto& socket_map_item : socket_maps_) {
+      for (auto& socket : socket_map_item.second.sockets_) {
+        socket->close();
+      }
     }
   }
   void doFinalPreWorkerInit() override;
 
 private:
+  struct SocketDetails {
+    SocketDetails(Network::Address::InstanceConstSharedPtr local_address,
+                  Network::Address::InstanceConstSharedPtr config_local_address,
+                  std::vector<Network::SocketSharedPtr>& sockets)
+        : local_address_(local_address), config_local_address_(config_local_address),
+          sockets_(sockets) {}
+
+    Network::Address::InstanceConstSharedPtr local_address_;
+    Network::Address::InstanceConstSharedPtr config_local_address_;
+    std::vector<Network::SocketSharedPtr> sockets_;
+  };
+
   ListenSocketFactoryImpl(const ListenSocketFactoryImpl& factory_to_clone);
 
-  Network::SocketSharedPtr createListenSocketAndApplyOptions(ListenerComponentFactory& factory,
-                                                             Network::Socket::Type socket_type,
-                                                             uint32_t worker_index);
+  Network::SocketSharedPtr
+  createListenSocketAndApplyOptions(const Network::Address::InstanceConstSharedPtr& address,
+                                    ListenerComponentFactory& factory,
+                                    Network::Socket::Type socket_type, uint32_t worker_index);
 
   ListenerComponentFactory& factory_;
   // Initially, its port number might be 0. Once a socket is created, its port
   // will be set to the binding port.
-  Network::Address::InstanceConstSharedPtr local_address_;
   const Network::Socket::Type socket_type_;
   const Network::Socket::OptionsSharedPtr options_;
   const std::string listener_name_;
@@ -91,7 +110,7 @@ private:
   //
   // TODO(mattklein123): If a listener does not bind, it still has a socket. This is confusing
   // and not needed and can be cleaned up.
-  std::vector<Network::SocketSharedPtr> sockets_;
+  absl::flat_hash_map<std::string, SocketDetails> socket_maps_;
 };
 
 // TODO(mattklein123): Consider getting rid of pre-worker start and post-worker start code by
@@ -282,7 +301,9 @@ public:
   bool blockUpdate(uint64_t new_hash) { return new_hash == hash_ || !added_via_api_; }
   bool blockRemove() { return !added_via_api_; }
 
-  std::vector<Network::Address::InstanceConstSharedPtr> addresses() const { return addresses_; }
+  const std::vector<Network::Address::InstanceConstSharedPtr>& addresses() const {
+    return addresses_;
+  }
   const envoy::config::listener::v3::Listener& config() const { return config_; }
   const Network::ListenSocketFactory& getSocketFactory() const { return *socket_factory_; }
   void debugLog(const std::string& message);
@@ -299,7 +320,9 @@ public:
                                     const envoy::config::listener::v3::Listener& config);
 
   // Check whether a new listener can share sockets with this listener.
-  bool hasCompatibleAddress(const ListenerImpl& other) const;
+  bool hasCompatibleAddresses(const ListenerImpl& other) const;
+  // Check is there any addresses same with other listener.
+  bool hasAnyCompatibleAddress(const ListenerImpl& other) const;
 
   // Network::ListenerConfig
   Network::FilterChainManager& filterChainManager() override { return filter_chain_manager_; }
@@ -355,6 +378,7 @@ public:
   bool createListenerFilterChain(Network::ListenerFilterManager& manager) override;
   void createUdpListenerFilterChain(Network::UdpListenerFilterManager& udp_listener,
                                     Network::UdpReadFilterCallbacks& callbacks) override;
+  Network::Socket::Type socketType() const { return socket_type_; }
 
   SystemTime last_updated_;
 

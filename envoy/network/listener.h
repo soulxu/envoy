@@ -40,12 +40,15 @@ public:
 
   /**
    * Called during actual listener creation.
+   * @param local_address is used to query the corresponding sockets.
    * @param worker_index supplies the worker index to get the socket for. All sockets are created
    *        ahead of time.
    * @return the socket to be used for a certain listener, which might be shared
    * with other listeners of the same config on other worker threads.
    */
-  virtual SocketSharedPtr getListenSocket(uint32_t worker_index) PURE;
+  virtual SocketSharedPtr
+  getListenSocket(const Network::Address::InstanceConstSharedPtr& local_address,
+                  uint32_t worker_index) PURE;
 
   /**
    * @return the type of the socket getListenSocket() returns.
@@ -53,10 +56,11 @@ public:
   virtual Socket::Type socketType() const PURE;
 
   /**
-   * @return the listening address of the socket getListenSocket() returns. Before getListenSocket()
-   * is called, the return value might has 0 as port number if the config doesn't specify it.
+   * @return the listening addresses of the socket getListenSocket() returns. Before
+   * getListenSocket() is called, the return value might has 0 as port number if the config doesn't
+   * specify it.
    */
-  virtual const Address::InstanceConstSharedPtr& localAddress() const PURE;
+  virtual std::vector<Network::Address::InstanceConstSharedPtr> localAddresses() const PURE;
 
   /**
    * Clone this socket factory so it can be used by a new listener (e.g., if the address is shared).

@@ -383,8 +383,9 @@ public:
   MockListenSocketFactory() = default;
 
   MOCK_METHOD(Network::Socket::Type, socketType, (), (const));
-  MOCK_METHOD(const Network::Address::InstanceConstSharedPtr&, localAddress, (), (const));
-  MOCK_METHOD(Network::SocketSharedPtr, getListenSocket, (uint32_t));
+  MOCK_METHOD(std::vector<Network::Address::InstanceConstSharedPtr>, localAddresses, (), (const));
+  MOCK_METHOD(Network::SocketSharedPtr, getListenSocket,
+              (const Network::Address::InstanceConstSharedPtr&, uint32_t));
   MOCK_METHOD(bool, reusePort, (), (const));
   MOCK_METHOD(Network::ListenSocketFactoryPtr, clone, (), (const));
   MOCK_METHOD(void, closeAllSockets, ());
@@ -451,6 +452,7 @@ public:
   Stats::IsolatedStoreImpl scope_;
   std::string name_;
   const std::vector<AccessLog::InstanceSharedPtr> empty_access_logs_;
+  std::vector<Address::InstanceConstSharedPtr> addresses_;
 };
 
 class MockListener : public Listener {

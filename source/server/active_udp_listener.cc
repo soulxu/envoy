@@ -68,8 +68,9 @@ ActiveRawUdpListener::ActiveRawUdpListener(uint32_t worker_index, uint32_t concu
                                            Event::Dispatcher& dispatcher,
                                            Network::ListenerConfig& config)
     : ActiveRawUdpListener(worker_index, concurrency, parent,
-                           config.listenSocketFactory().getListenSocket(worker_index), dispatcher,
-                           config) {}
+                           config.listenSocketFactory().getListenSocket(
+                               config.listenSocketFactory().localAddresses()[0], worker_index),
+                           dispatcher, config) {}
 
 ActiveRawUdpListener::ActiveRawUdpListener(uint32_t worker_index, uint32_t concurrency,
                                            Network::UdpConnectionHandler& parent,

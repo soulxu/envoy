@@ -85,7 +85,8 @@ void ConnectionHandlerImpl::addListener(absl::optional<uint64_t> overridden_list
   }
 
   details->listener_tag_ = config.listenerTag();
-  details->address_ = config.listenSocketFactory().localAddress();
+  // TODO(soulxu): support multiple addresses
+  details->address_ = config.listenSocketFactory().localAddresses()[0];
 
   ASSERT(!listener_map_by_tag_.contains(config.listenerTag()));
 
@@ -94,7 +95,7 @@ void ConnectionHandlerImpl::addListener(absl::optional<uint64_t> overridden_list
   if (absl::holds_alternative<std::reference_wrapper<ActiveTcpListener>>(
           details->typed_listener_)) {
     tcp_listener_map_by_address_.insert_or_assign(
-        config.listenSocketFactory().localAddress()->asStringView(), details);
+        config.listenSocketFactory().localAddresses()[0]->asStringView(), details);
 
     auto& address = details->address_;
     // If the address is Ipv6 and isn't v6only, parse out the ipv4 compatible address from the Ipv6
@@ -127,7 +128,7 @@ void ConnectionHandlerImpl::addListener(absl::optional<uint64_t> overridden_list
   } else if (absl::holds_alternative<std::reference_wrapper<ActiveInternalListener>>(
                  details->typed_listener_)) {
     internal_listener_map_by_address_.insert_or_assign(
-        config.listenSocketFactory().localAddress()->asStringView(), details);
+        config.listenSocketFactory().localAddresses()[0]->asStringView(), details);
   }
 }
 
