@@ -890,6 +890,36 @@ TEST_F(ListenerManagerImplTest, ModifyOnlyDrainType) {
   EXPECT_CALL(*listener_foo, onDestroy());
 }
 
+TEST_F(ListenerManagerImplTest, AddMultipleAddressesListener) {
+  InSequence s;
+
+  // Add foo listener.
+  const std::string listener_foo_yaml = R"EOF(
+    name: "foo"
+    addresses:
+    - address:
+        socket_address: { address: 127.0.0.1, port_value: 10000 }
+    - address:
+        socket_address: { address: 127.0.0.2, port_value: 10000 }
+    filter_chains:
+    - filters:
+  )EOF";
+
+  ListenerHandle* listener_foo =
+      expectListenerCreate(false, true);
+  auto socket1 = std::make_shared<Network::MockSocket>();
+  auto socket2 = std::make_shared<Network::MockSocket>();
+  EXPECT_CALL(listener_factory_, createListenSocket(_, _, _, default_bind_type, _, 0)).Times(2);
+  EXPECT_TRUE(manager_->addOrUpdateListener(parseListenerFromV3Yaml(listener_foo_yaml), "", true));
+  checkStats(__LINE__, 1, 0, 0, 0, 1, 0, 0);
+  auto address1 = std::make_shared<Network::Address::Ipv4Instance>("127.0.0.1", 10000);
+  auto address2 = std::make_shared<Network::Address::Ipv4Instance>("127.0.0.2", 10000);
+  manager_->listeners()[0].get().listenSocketFactory().getListenSocket(address1, 0);
+  manager_->listeners()[0].get().listenSocketFactory().getListenSocket(address2, 0);
+
+  EXPECT_CALL(*listener_foo, onDestroy());
+}
+
 TEST_F(ListenerManagerImplTest, AddListenerAddressNotMatching) {
   time_system_.setSystemTime(std::chrono::milliseconds(1001001001001));
 
