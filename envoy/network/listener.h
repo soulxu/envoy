@@ -185,6 +185,11 @@ public:
   virtual Stats::Scope& listenerScope() PURE;
 
   /**
+   * @return Stats::Scope& the stats scope to use for all listener specific stats on specific address.
+   */
+  virtual Stats::Scope& listenerScope(int address_index) PURE;
+
+  /**
    * @return uint64_t the tag the listener should use for connection handler tracking.
    */
   virtual uint64_t listenerTag() const PURE;

@@ -157,6 +157,7 @@ public:
   Configuration::ServerFactoryContext& getServerFactoryContext() const override;
   Configuration::TransportSocketFactoryContext& getTransportSocketFactoryContext() const override;
   Stats::Scope& listenerScope() override;
+  Stats::Scope& listenerScope(int address_index) override;
   bool isQuicListener() const override;
 
   // DrainDecision
@@ -235,6 +236,7 @@ public:
   Configuration::TransportSocketFactoryContext& getTransportSocketFactoryContext() const override;
 
   Stats::Scope& listenerScope() override;
+  Stats::Scope& listenerScope(int address_index) override;
   bool isQuicListener() const override;
 
   // ListenerFactoryContext
@@ -343,6 +345,7 @@ public:
     return continue_on_listener_filters_timeout_;
   }
   Stats::Scope& listenerScope() override { return listener_factory_context_->listenerScope(); }
+  Stats::Scope& listenerScope(int address_index) override { return listener_factory_context_->listenerScope(address_index); }
   uint64_t listenerTag() const override { return listener_tag_; }
   const std::string& name() const override { return name_; }
   Network::UdpListenerConfigOptRef udpListenerConfig() override {

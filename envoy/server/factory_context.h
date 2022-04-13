@@ -221,6 +221,11 @@ public:
   virtual Stats::Scope& listenerScope() PURE;
 
   /**
+   * @return Stats::Scope& the listener's stats scope for specific address.
+   */
+  virtual Stats::Scope& listenerScope(int address_index) PURE;
+
+  /**
    * @return bool if these filters are created under the scope of a Quic listener.
    */
   virtual bool isQuicListener() const PURE;

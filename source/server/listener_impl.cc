@@ -320,6 +320,9 @@ ListenerFactoryContextBaseImpl::getTransportSocketFactoryContext() const {
   return server_.transportSocketFactoryContext();
 }
 Stats::Scope& ListenerFactoryContextBaseImpl::listenerScope() { return *listener_scopes_[0]; }
+Stats::Scope& ListenerFactoryContextBaseImpl::listenerScope(int address_index) {
+  return *listener_scopes_[address_index];
+}
 bool ListenerFactoryContextBaseImpl::isQuicListener() const { return is_quic_; }
 Network::DrainDecision& ListenerFactoryContextBaseImpl::drainDecision() { return *this; }
 Server::DrainManager& ListenerFactoryContextBaseImpl::drainManager() { return *drain_manager_; }
@@ -855,6 +858,9 @@ PerListenerFactoryContextImpl::getTransportSocketFactoryContext() const {
 }
 Stats::Scope& PerListenerFactoryContextImpl::listenerScope() {
   return listener_factory_context_base_->listenerScope();
+}
+Stats::Scope& PerListenerFactoryContextImpl::listenerScope(int address_scope) {
+  return listener_factory_context_base_->listenerScope(address_scope);
 }
 bool PerListenerFactoryContextImpl::isQuicListener() const {
   return listener_factory_context_base_->isQuicListener();
