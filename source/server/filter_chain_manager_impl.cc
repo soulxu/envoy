@@ -33,7 +33,9 @@ PerFilterChainFactoryContextImpl::PerFilterChainFactoryContextImpl(
     Configuration::FactoryContext& parent_context, Init::Manager& init_manager)
     : parent_context_(parent_context), scope_(parent_context_.scope().createScope("")),
       filter_chain_scope_(parent_context_.listenerScope().createScope("")),
-      init_manager_(init_manager) {}
+      init_manager_(init_manager) {
+    // TODO (soulxu): start from here
+}
 
 bool PerFilterChainFactoryContextImpl::drainClose() const {
   return is_draining_.load() || parent_context_.drainDecision().drainClose();

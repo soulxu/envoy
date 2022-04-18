@@ -323,6 +323,9 @@ Stats::Scope& ListenerFactoryContextBaseImpl::listenerScope() { return *listener
 Stats::Scope& ListenerFactoryContextBaseImpl::listenerScope(int address_index) {
   return *listener_scopes_[address_index];
 }
+std::vector<Stats::ScopeSharedPtr>& ListenerFactoryContextBaseImpl::listenerScopes() override {
+  return listener_scopes_;
+}
 bool ListenerFactoryContextBaseImpl::isQuicListener() const { return is_quic_; }
 Network::DrainDecision& ListenerFactoryContextBaseImpl::drainDecision() { return *this; }
 Server::DrainManager& ListenerFactoryContextBaseImpl::drainManager() { return *drain_manager_; }
@@ -861,6 +864,9 @@ Stats::Scope& PerListenerFactoryContextImpl::listenerScope() {
 }
 Stats::Scope& PerListenerFactoryContextImpl::listenerScope(int address_scope) {
   return listener_factory_context_base_->listenerScope(address_scope);
+}
+std::vector<Stats::ScopeSharedPtr>& PerListenerFactoryContextImpl::listenerScopes() {
+  return listener_factory_context_base_->listenerScopes();
 }
 bool PerListenerFactoryContextImpl::isQuicListener() const {
   return listener_factory_context_base_->isQuicListener();

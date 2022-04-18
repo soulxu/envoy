@@ -158,6 +158,7 @@ public:
   Configuration::TransportSocketFactoryContext& getTransportSocketFactoryContext() const override;
   Stats::Scope& listenerScope() override;
   Stats::Scope& listenerScope(int address_index) override;
+  std::vector<Stats::ScopeSharedPtr>& listenerScopes() override;
   bool isQuicListener() const override;
 
   // DrainDecision
@@ -237,6 +238,7 @@ public:
 
   Stats::Scope& listenerScope() override;
   Stats::Scope& listenerScope(int address_index) override;
+  std::vector<Stats::ScopeSharedPtr>& listenerScopes() override;
   bool isQuicListener() const override;
 
   // ListenerFactoryContext

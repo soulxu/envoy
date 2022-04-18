@@ -226,6 +226,11 @@ public:
   virtual Stats::Scope& listenerScope(int address_index) PURE;
 
   /**
+   * @return std:vector<Stats::ScopeSharedPtr> the listener's stats scope for all addresses.
+   */
+  std::vector<Stats::ScopeSharedPtr>& listenerScopes() PURE;
+
+  /**
    * @return bool if these filters are created under the scope of a Quic listener.
    */
   virtual bool isQuicListener() const PURE;
