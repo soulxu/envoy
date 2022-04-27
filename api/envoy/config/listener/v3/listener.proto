@@ -13,7 +13,9 @@ import "envoy/config/listener/v3/udp_listener_config.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/wrappers.proto";
 
+import "xds/annotations/v3/status.proto";
 import "xds/core/v3/collection_entry.proto";
+import "xds/type/matcher/v3/matcher.proto";
 
 import "envoy/annotations/deprecation.proto";
 import "udpa/annotations/security.proto";
@@ -46,7 +48,7 @@ message ListenAddresses {
   core.v3.Address address = 2 [(validate.rules).message = {required: true}];
 }
 
-// [#next-free-field: 33]
+// [#next-free-field: 34]
 message Listener {
   option (udpa.annotations.versioning).previous_message_type = "envoy.api.v2.Listener";
 
@@ -120,7 +122,7 @@ message Listener {
   // a listener should have same socket type (e.g TCP, UDP, internal). In general, the address must be unique, though
   // that is governed by the bind rules of the OS. E.g., multiple listeners can listen on port 0 on
   // Linux as the actual port will be allocated by the OS.
-  repeated ListenAddresses addresses = 32;
+  repeated ListenAddresses addresses = 33;
 
   // Optional prefix to use on listener stats. If empty, the stats will be rooted at
   // `listener.<address as string>.`. If non-empty, stats will be rooted at
@@ -135,6 +137,25 @@ message Listener {
   // Example using SNI for filter chain selection can be found in the
   // :ref:`FAQ entry <faq_how_to_setup_sni>`.
   repeated FilterChain filter_chains = 3;
+
+  // :ref:`Matcher API <arch_overview_matching_listener>` resolving the filter chain name from the
+  // network properties. This matcher is used as a replacement for the filter chain match condition
+  // :ref:`filter_chain_match
+  // <envoy_v3_api_field_config.listener.v3.FilterChain.filter_chain_match>`. If specified, all
+  // :ref:`filter_chains <envoy_v3_api_field_config.listener.v3.Listener.filter_chains>` must have a
+  // non-empty and unique :ref:`name <envoy_v3_api_field_config.listener.v3.FilterChain.name>` field
+  // and not specify :ref:`filter_chain_match
+  // <envoy_v3_api_field_config.listener.v3.FilterChain.filter_chain_match>` field.
+  //
+  // .. note::
+  //
+  //  Once matched, each connection is permanently bound to its filter chain.
+  //  If the matcher changes but the filter chain remains the same, the
+  //  connections bound to the filter chain are not drained. If, however, the
+  //  filter chain is removed or structurally modified, then the drain for its
+  //  connections is initiated.
+  xds.type.matcher.v3.Matcher filter_chain_matcher = 32
+      [(xds.annotations.v3.field_status).work_in_progress = true];
 
   // If a connection is redirected using *iptables*, the port on which the proxy
   // receives it might be different from the original destination address. When this flag is set to

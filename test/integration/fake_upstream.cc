@@ -228,8 +228,8 @@ bool waitForWithDispatcherRun(Event::TestTimeSystem& time_system, absl::Mutex& l
     ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock) {
   Event::TestTimeSystem::RealTimeBound bound(timeout);
   while (bound.withinBound()) {
-    // Wake up every 5ms to run the client dispatcher.
-    if (time_system.waitFor(lock, absl::Condition(&condition), 5ms)) {
+    // Wake up periodically to run the client dispatcher.
+    if (time_system.waitFor(lock, absl::Condition(&condition), 5ms * TSAN_TIMEOUT_FACTOR)) {
       return true;
     }
 
@@ -399,7 +399,7 @@ void FakeHttpConnection::onGoAway(Http::GoAwayErrorCode code) {
   ASSERT(type_ >= Http::CodecType::HTTP2);
   // Usually indicates connection level errors, no operations are needed since
   // the connection will be closed soon.
-  ENVOY_LOG(info, "FakeHttpConnection receives GOAWAY: ", code);
+  ENVOY_LOG(info, "FakeHttpConnection receives GOAWAY: ", static_cast<int>(code));
 }
 
 void FakeHttpConnection::encodeGoAway() {
@@ -716,6 +716,14 @@ FakeUpstream::waitForHttpConnection(Event::Dispatcher& client_dispatcher,
     }
   }
   return AssertionFailure() << "Timed out waiting for HTTP connection.";
+}
+
+ABSL_MUST_USE_RESULT
+testing::AssertionResult FakeUpstream::assertPendingConnectionsEmpty() {
+  return runOnDispatcherThreadAndWait([&]() {
+    absl::MutexLock lock(&lock_);
+    return new_connections_.empty() ? AssertionSuccess() : AssertionFailure();
+  });
 }
 
 AssertionResult FakeUpstream::waitForRawConnection(FakeRawConnectionPtr& connection,

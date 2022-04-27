@@ -12,7 +12,7 @@
 
 #include "source/common/buffer/buffer_impl.h"
 
-#include "quiche/quic/core/quic_buffer_allocator.h"
+#include "quiche/common/quiche_buffer_allocator.h"
 
 namespace quiche {
 
@@ -26,7 +26,7 @@ public:
   ~QuicheMemSliceImpl();
 
   // Constructs a QuicheMemSliceImpl by taking ownership of the memory in |buffer|.
-  QuicheMemSliceImpl(quic::QuicBuffer buffer);
+  QuicheMemSliceImpl(quiche::QuicheBuffer buffer);
   QuicheMemSliceImpl(std::unique_ptr<char[]> buffer, size_t length);
 
   // Constructs a QuicheMemSliceImpl from a Buffer::Instance with first |length| bytes in it.
@@ -42,6 +42,10 @@ public:
   QuicheMemSliceImpl& operator=(const QuicheMemSliceImpl& other) = delete;
   QuicheMemSliceImpl& operator=(QuicheMemSliceImpl&& other) noexcept {
     if (this != &other) {
+      // OwnedImpl::move() appends data from `other` without clearing the buffer
+      // first. It is necessary to call Reset() beforehand to clear
+      // `single_slice_buffer_`.
+      Reset();
       fragment_ = std::move(other.fragment_);
       single_slice_buffer_.move(other.single_slice_buffer_);
     }

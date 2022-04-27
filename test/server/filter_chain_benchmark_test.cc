@@ -228,9 +228,10 @@ BENCHMARK_DEFINE_F(FilterChainBenchmarkFixture, FilterChainManagerBuildTest)
   initialize(state);
   NiceMock<Server::Configuration::MockFactoryContext> factory_context;
   for (auto _ : state) {
-    FilterChainManagerImpl filter_chain_manager{listener_config_.name(), factory_context,
-                                                init_manager_};
-    filter_chain_manager.addFilterChains(filter_chains_, nullptr, dummy_builder_,
+    FilterChainManagerImpl filter_chain_manager{
+        listener_config_.name(), factory_context,
+        init_manager_};
+    filter_chain_manager.addFilterChains(nullptr, filter_chains_, nullptr, dummy_builder_,
                                          filter_chain_manager);
   }
 }
@@ -253,7 +254,7 @@ BENCHMARK_DEFINE_F(FilterChainBenchmarkFixture, FilterChainFindTest)
   FilterChainManagerImpl filter_chain_manager{listener_config_.name(), factory_context,
                                               init_manager_};
 
-  filter_chain_manager.addFilterChains(filter_chains_, nullptr, dummy_builder_,
+  filter_chain_manager.addFilterChains(nullptr, filter_chains_, nullptr, dummy_builder_,
                                        filter_chain_manager);
   for (auto _ : state) {
     UNREFERENCED_PARAMETER(_);
