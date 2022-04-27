@@ -110,7 +110,7 @@ HotRestartingParent::Internal::getListenSocketsForChild(const HotRestartMessage:
   for (const auto& listener : server_->listenerManager().listeners()) {
     Network::ListenSocketFactory& socket_factory = listener.get().listenSocketFactory();
     for (auto& local_address : socket_factory.localAddresses()) {
-      if (*socket_factory.localAddress() == *addr && listener.get().bindToPort()) {
+      if (*local_address == *addr && listener.get().bindToPort()) {
         StatusOr<Network::Socket::Type> socket_type =
             Network::Utility::socketTypeFromUrl(request.pass_listen_socket().address());
         // socketTypeFromUrl should return a valid value since resolveUrl returned a valid address.

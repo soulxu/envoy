@@ -720,10 +720,12 @@ private:
 
     // Network::ListenSocketFactory
     Network::Socket::Type socketType() const override { return socket_->socketType(); }
-    const Network::Address::InstanceConstSharedPtr& localAddress() const override {
-      return socket_->connectionInfoProvider().localAddress();
+    std::vector<Network::Address::InstanceConstSharedPtr> localAddresses() const override {
+      std::vector<Network::Address::InstanceConstSharedPtr> addresses;
+      addresses.push_back(socket_->connectionInfoProvider().localAddress());
+      return addresses;
     }
-    Network::SocketSharedPtr getListenSocket(uint32_t) override { return socket_; }
+    Network::SocketSharedPtr getListenSocket(const Network::Address::InstanceConstSharedPtr&, uint32_t) override { return socket_; }
     Network::ListenSocketFactoryPtr clone() const override { return nullptr; }
     void closeAllSockets() override {}
     void doFinalPreWorkerInit() override;

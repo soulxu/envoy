@@ -36,8 +36,9 @@ ListenerFilterWithDataFuzzer::ListenerFilterWithDataFuzzer()
       name_("proxy"), filter_chain_(Network::Test::createEmptyFilterChainWithRawBufferSockets()),
       init_manager_(nullptr) {
   EXPECT_CALL(socket_factory_, socketType()).WillOnce(Return(Network::Socket::Type::Stream));
-  EXPECT_CALL(socket_factory_, localAddress())
-      .WillRepeatedly(ReturnRef(socket_->connectionInfoProvider().localAddress()));
+  addresses_.push_back(socket_->connectionInfoProvider().localAddress());
+  EXPECT_CALL(socket_factory_, localAddresses())
+      .WillRepeatedly(Return(addresses_));
   EXPECT_CALL(socket_factory_, getListenSocket(_)).WillOnce(Return(socket_));
   connection_handler_->addListener(absl::nullopt, *this, runtime_);
   conn_ = dispatcher_->createClientConnection(socket_->connectionInfoProvider().localAddress(),

@@ -38,6 +38,7 @@ private:
   FakeConnectionSocket socket_;
   NiceMock<Event::MockDispatcher> dispatcher_;
   envoy::config::core::v3::Metadata metadata_;
+  std::vector<Network::Address::InstanceConstSharedPtr> addresses_;
 };
 
 class ListenerFilterWithDataFuzzer : public Network::ListenerConfig,
