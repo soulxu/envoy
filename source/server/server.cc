@@ -583,14 +583,25 @@ void InstanceImpl::initialize(Network::Address::InstanceConstSharedPtr local_add
         std::move(safe_actions), std::move(unsafe_actions), api_->threadFactory());
   }
 
+  Network::SocketInterface* sock = nullptr;
+
   if (!bootstrap_.default_socket_interface().empty()) {
     auto& sock_name = bootstrap_.default_socket_interface();
-    auto sock = const_cast<Network::SocketInterface*>(Network::socketInterface(sock_name));
-    if (sock != nullptr) {
-      Network::SocketInterfaceSingleton::clear();
-      Network::SocketInterfaceSingleton::initialize(sock);
-    }
+    sock = const_cast<Network::SocketInterface*>(Network::socketInterface(sock_name));
   }
+
+  if (bootstrap_.default_socket_interface().empty() || sock == nullptr) {
+    auto factory =
+        Registry::FactoryRegistry<Server::Configuration::BootstrapExtensionFactory>::getFactory(
+            "envoy.extensions.network.socket_interface.default_socket_interface");
+    bootstrap_extensions_.push_back(factory->createBootstrapExtension(
+        *factory->createEmptyConfigProto(), serverFactoryContext()));
+    sock = dynamic_cast<Network::SocketInterface*>(factory);
+  }
+
+  ASSERT(sock != nullptr);
+  Network::SocketInterfaceSingleton::clear();
+  Network::SocketInterfaceSingleton::initialize(sock);
 
   // Initialize the regex engine and inject to singleton.
   if (bootstrap_.has_default_regex_engine()) {
