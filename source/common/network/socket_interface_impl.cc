@@ -2,6 +2,7 @@
 
 #include "envoy/common/exception.h"
 #include "envoy/extensions/network/socket_interface/v3/default_socket_interface.pb.h"
+#include "envoy/extensions/network/socket_interface/v3/io_uring_socket_interface.pb.h"
 
 #include "source/common/api/os_sys_calls_impl.h"
 #include "source/common/common/assert.h"
@@ -14,41 +15,33 @@
 namespace Envoy {
 namespace Network {
 
-namespace {
-
-// TODO (soulxu): making those configurable if needed.
-constexpr uint32_t DefaultIoUringSize = 300;
-constexpr uint32_t DefaultReadBufferSize = 8192;
-constexpr bool UseSubmissionQueuePolling = false;
-
-} // namespace
-
-void DefaultSocketInterfaceExtension::onServerInitialized() {
-  if (io_uring_factory_ != nullptr) {
-    io_uring_factory_->onServerInitialized();
-  }
-}
-
-IoHandlePtr
-SocketInterfaceImpl::makePlatformSpecificSocket(int socket_fd, bool socket_v6only,
-                                                absl::optional<int> domain,
-                                                const Io::IoUringFactory* io_uring_factory) {
+IoHandlePtr SocketInterfaceImpl::makePlatformSpecificSocket(int socket_fd, bool socket_v6only,
+                                                            absl::optional<int> domain) {
   if constexpr (Event::PlatformDefaultTriggerType == Event::FileTriggerType::EmulatedEdge) {
     return std::make_unique<Win32SocketHandleImpl>(socket_fd, socket_v6only, domain);
   }
+  return std::make_unique<IoSocketHandleImpl>(socket_fd, socket_v6only, domain);
+}
 
-  if (io_uring_factory == nullptr) {
-    return std::make_unique<IoSocketHandleImpl>(socket_fd, socket_v6only, domain);
+int SocketInterfaceImpl::createFlags(Socket::Type socket_type) const {
+#if defined(__APPLE__) || defined(WIN32)
+  int flags = 0;
+#else
+  int flags = SOCK_NONBLOCK;
+#endif
+
+  if (socket_type == Socket::Type::Stream) {
+    flags |= SOCK_STREAM;
   } else {
-    return std::make_unique<IoUringSocketHandleImpl>(DefaultReadBufferSize, *io_uring_factory,
-                                                     socket_fd, socket_v6only, domain);
+    flags |= SOCK_DGRAM;
   }
+
+  return flags;
 }
 
 IoHandlePtr SocketInterfaceImpl::makeSocket(int socket_fd, bool socket_v6only,
-                                            absl::optional<int> domain,
-                                            const Io::IoUringFactory* io_uring_factory) const {
-  return makePlatformSpecificSocket(socket_fd, socket_v6only, domain, io_uring_factory);
+                                            absl::optional<int> domain) const {
+  return makePlatformSpecificSocket(socket_fd, socket_v6only, domain);
 }
 
 IoHandlePtr SocketInterfaceImpl::socket(Socket::Type socket_type, Address::Type addr_type,
@@ -57,14 +50,7 @@ IoHandlePtr SocketInterfaceImpl::socket(Socket::Type socket_type, Address::Type 
   int protocol = 0;
 #if defined(__APPLE__) || defined(WIN32)
   ASSERT(!options.mptcp_enabled_, "MPTCP is only supported on Linux");
-  int flags = 0;
 #else
-  int flags = SOCK_NONBLOCK;
-
-  if (io_uring_factory_ != nullptr) {
-    flags = 0;
-  }
-
   if (options.mptcp_enabled_) {
     ASSERT(socket_type == Socket::Type::Stream);
     ASSERT(addr_type == Address::Type::Ip);
@@ -72,11 +58,7 @@ IoHandlePtr SocketInterfaceImpl::socket(Socket::Type socket_type, Address::Type 
   }
 #endif
 
-  if (socket_type == Socket::Type::Stream) {
-    flags |= SOCK_STREAM;
-  } else {
-    flags |= SOCK_DGRAM;
-  }
+  int flags = createFlags(socket_type);
 
   int domain;
   if (addr_type == Address::Type::Ip) {
@@ -99,8 +81,7 @@ IoHandlePtr SocketInterfaceImpl::socket(Socket::Type socket_type, Address::Type 
       Api::OsSysCallsSingleton::get().socket(domain, flags, protocol);
   RELEASE_ASSERT(SOCKET_VALID(result.return_value_),
                  fmt::format("socket(2) failed, got error: {}", errorDetails(result.errno_)));
-  IoHandlePtr io_handle =
-      makeSocket(result.return_value_, socket_v6only, domain, io_uring_factory_.get());
+  IoHandlePtr io_handle = makeSocket(result.return_value_, socket_v6only, domain);
 
 #if defined(__APPLE__) || defined(WIN32)
   // Cannot set SOCK_NONBLOCK as a ::socket flag.
@@ -143,14 +124,10 @@ bool SocketInterfaceImpl::ipFamilySupported(int domain) {
   return SOCKET_VALID(result.return_value_);
 }
 
-Server::BootstrapExtensionPtr SocketInterfaceImpl::createBootstrapExtension(
-    const Protobuf::Message&, Server::Configuration::ServerFactoryContext& context) {
-  // TODO (soulxu): Add runtime flag here.
-  if (Io::isIoUringSupported()) {
-    io_uring_factory_ = std::make_unique<Io::IoUringFactoryImpl>(
-        DefaultIoUringSize, UseSubmissionQueuePolling, context.threadLocal());
-  }
-  return std::make_unique<DefaultSocketInterfaceExtension>(*this, io_uring_factory_);
+Server::BootstrapExtensionPtr
+SocketInterfaceImpl::createBootstrapExtension(const Protobuf::Message&,
+                                              Server::Configuration::ServerFactoryContext&) {
+  return std::make_unique<SocketInterfaceExtension>(*this);
 }
 
 ProtobufTypes::MessagePtr SocketInterfaceImpl::createEmptyConfigProto() {
@@ -159,6 +136,56 @@ ProtobufTypes::MessagePtr SocketInterfaceImpl::createEmptyConfigProto() {
 }
 
 REGISTER_FACTORY(SocketInterfaceImpl, Server::Configuration::BootstrapExtensionFactory);
+
+IoUringSocketInterfaceExtension::IoUringSocketInterfaceExtension(
+    Network::SocketInterface& sock_interface, std::unique_ptr<Io::IoUringFactory>& io_uring_factory)
+    : Network::SocketInterfaceExtension(sock_interface), io_uring_factory_(io_uring_factory) {}
+
+void IoUringSocketInterfaceExtension::onServerInitialized() {
+  io_uring_factory_->onServerInitialized();
+}
+
+IoHandlePtr
+IoUringSocketInterfaceImpl::makePlatformSpecificSocket(int socket_fd, bool socket_v6only,
+                                                       absl::optional<int> domain,
+                                                       const Io::IoUringFactory* io_uring_factory) {
+  return std::make_unique<IoUringSocketHandleImpl>(default_read_buffer_size, *io_uring_factory,
+                                                   socket_fd, socket_v6only, domain);
+}
+
+int IoUringSocketInterfaceImpl::createFlags(Socket::Type socket_type) const {
+  int flags = 0;
+
+  if (socket_type == Socket::Type::Stream) {
+    flags |= SOCK_STREAM;
+  } else {
+    flags |= SOCK_DGRAM;
+  }
+
+  return flags;
+}
+
+IoHandlePtr IoUringSocketInterfaceImpl::makeSocket(int socket_fd, bool socket_v6only,
+                                                   absl::optional<int> domain) const {
+  return makePlatformSpecificSocket(socket_fd, socket_v6only, domain, io_uring_factory_.get());
+}
+
+Server::BootstrapExtensionPtr IoUringSocketInterfaceImpl::createBootstrapExtension(
+    const Protobuf::Message&, Server::Configuration::ServerFactoryContext& context) {
+  // TODO (soulxu): Add runtime flag here.
+  if (Io::isIoUringSupported()) {
+    io_uring_factory_ = std::make_unique<Io::IoUringFactoryImpl>(
+        default_io_uring_size_, use_submission_queue_polling_, context.threadLocal());
+  }
+  return std::make_unique<IoUringSocketInterfaceExtension>(*this, io_uring_factory_);
+}
+
+ProtobufTypes::MessagePtr IoUringSocketInterfaceImpl::createEmptyConfigProto() {
+  return std::make_unique<
+      envoy::extensions::network::socket_interface::v3::IoUringSocketInterface>();
+}
+
+REGISTER_FACTORY(IoUringSocketInterfaceImpl, Server::Configuration::BootstrapExtensionFactory);
 
 static SocketInterfaceLoader* socket_interface_ =
     new SocketInterfaceLoader(std::make_unique<SocketInterfaceImpl>());
