@@ -15,6 +15,7 @@
 #include "envoy/event/dispatcher.h"
 #include "envoy/event/signal.h"
 #include "envoy/event/timer.h"
+
 // TODO(zhxie): This references io_uring socket interface. For test only.
 #include "envoy/extensions/network/socket_interface/v3/io_uring_socket_interface.pb.h"
 #include "envoy/network/dns.h"
@@ -558,7 +559,8 @@ void InstanceImpl::initialize(Network::Address::InstanceConstSharedPtr local_add
   // TODO(zhxie): This forcely use io_uring in socket interface. For test only.
   envoy::extensions::network::socket_interface::v3::IoUringSocketInterface io_uring;
   envoy::config::core::v3::TypedExtensionConfig io_uring_typed_config;
-  io_uring_typed_config.set_name("envoy.extensions.network.socket_interface.io_uring_socket_interface");
+  io_uring_typed_config.set_name(
+      "envoy.extensions.network.socket_interface.io_uring_socket_interface");
   io_uring_typed_config.mutable_typed_config()->PackFrom(io_uring);
   bootstrap_.add_bootstrap_extensions()->CopyFrom(io_uring_typed_config);
 
