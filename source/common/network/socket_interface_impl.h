@@ -2,7 +2,7 @@
 
 #include "envoy/network/socket.h"
 
-#include "source/common/io/io_uring.h"
+#include "source/common/io/io_uring_impl.h"
 #include "source/common/network/socket_interface.h"
 
 namespace Envoy {
@@ -42,13 +42,13 @@ DECLARE_FACTORY(SocketInterfaceImpl);
 class IoUringSocketInterfaceExtension : public SocketInterfaceExtension {
 public:
   IoUringSocketInterfaceExtension(Network::SocketInterface& sock_interface,
-                                  std::unique_ptr<Io::IoUringFactory>& io_uring_factory);
+                                  std::shared_ptr<Io::IoUringFactory> io_uring_factory);
 
   // Server::BootstrapExtension
   void onServerInitialized() override;
 
 protected:
-  std::unique_ptr<Io::IoUringFactory>& io_uring_factory_;
+  std::shared_ptr<Io::IoUringFactory> io_uring_factory_;
 };
 
 class IoUringSocketInterfaceImpl : public SocketInterfaceImpl {
@@ -79,7 +79,7 @@ protected:
                          absl::optional<int> domain) const override;
 
 private:
-  std::unique_ptr<Io::IoUringFactory> io_uring_factory_;
+  std::weak_ptr<Io::IoUringFactory> io_uring_factory_;
 };
 
 DECLARE_FACTORY(IoUringSocketInterfaceImpl);

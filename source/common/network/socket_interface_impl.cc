@@ -138,7 +138,7 @@ ProtobufTypes::MessagePtr SocketInterfaceImpl::createEmptyConfigProto() {
 REGISTER_FACTORY(SocketInterfaceImpl, Server::Configuration::BootstrapExtensionFactory);
 
 IoUringSocketInterfaceExtension::IoUringSocketInterfaceExtension(
-    Network::SocketInterface& sock_interface, std::unique_ptr<Io::IoUringFactory>& io_uring_factory)
+    Network::SocketInterface& sock_interface, std::shared_ptr<Io::IoUringFactory> io_uring_factory)
     : Network::SocketInterfaceExtension(sock_interface), io_uring_factory_(io_uring_factory) {}
 
 void IoUringSocketInterfaceExtension::onServerInitialized() {
@@ -167,17 +167,21 @@ int IoUringSocketInterfaceImpl::createFlags(Socket::Type socket_type) const {
 
 IoHandlePtr IoUringSocketInterfaceImpl::makeSocket(int socket_fd, bool socket_v6only,
                                                    absl::optional<int> domain) const {
-  return makePlatformSpecificSocket(socket_fd, socket_v6only, domain, io_uring_factory_.get());
+  return makePlatformSpecificSocket(socket_fd, socket_v6only, domain,
+                                    io_uring_factory_.lock().get());
 }
 
 Server::BootstrapExtensionPtr IoUringSocketInterfaceImpl::createBootstrapExtension(
     const Protobuf::Message&, Server::Configuration::ServerFactoryContext& context) {
   // TODO (soulxu): Add runtime flag here.
   if (Io::isIoUringSupported()) {
-    io_uring_factory_ = std::make_unique<Io::IoUringFactoryImpl>(
-        default_io_uring_size_, use_submission_queue_polling_, context.threadLocal());
+    std::shared_ptr<Io::IoUringFactoryImpl> io_uring_factory =
+        std::make_shared<Io::IoUringFactoryImpl>(
+            default_io_uring_size_, use_submission_queue_polling_, context.threadLocal());
+    io_uring_factory_ = io_uring_factory;
+    return std::make_unique<IoUringSocketInterfaceExtension>(*this, io_uring_factory);
   }
-  return std::make_unique<IoUringSocketInterfaceExtension>(*this, io_uring_factory_);
+  throw;
 }
 
 ProtobufTypes::MessagePtr IoUringSocketInterfaceImpl::createEmptyConfigProto() {
