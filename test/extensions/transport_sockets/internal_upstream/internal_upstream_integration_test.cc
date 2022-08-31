@@ -40,8 +40,6 @@ public:
             kind: { host: {}}
           - name: cluster_metadata
             kind: { cluster: {}}
-          passthrough_filter_state_objects:
-          - name: internal_state
           transport_socket:
             name: envoy.transport_sockets.raw_buffer
             typed_config:
@@ -58,6 +56,7 @@ public:
       auto* endpoint = lb_endpoint->mutable_endpoint();
       auto* addr = endpoint->mutable_address()->mutable_envoy_internal_address();
       addr->set_server_listener_name("internal_address");
+      addr->set_endpoint_id("lorem_ipsum");
       if (add_metadata_) {
         auto* metadata = lb_endpoint->mutable_metadata();
         Config::Metadata::mutableMetadataValue(*metadata, "host_metadata", "value")
@@ -74,9 +73,7 @@ public:
       auto* listener = static_resources->mutable_listeners()->Add();
       TestUtility::loadFromYaml(fmt::format(R"EOF(
       name: internal_address
-      address:
-        envoy_internal_address:
-          server_listener_name: internal_address
+      internal_listener: {{}}
       filter_chains:
       - filters:
         - name: tcp_proxy
@@ -115,7 +112,7 @@ public:
       "@type": type.googleapis.com/test.integration.filters.HeaderToFilterStateFilterConfig
       header_name: internal-header
       state_name: internal_state
-      read_only: false
+      shared: true
     )EOF");
     HttpIntegrationTest::initialize();
   }

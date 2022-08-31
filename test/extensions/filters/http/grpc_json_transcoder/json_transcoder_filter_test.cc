@@ -476,6 +476,7 @@ TEST_F(GrpcJsonTranscoderFilterTest, EmptyRoute) {
 
   Http::TestRequestHeaderMapImpl headers;
   EXPECT_EQ(Http::FilterHeadersStatus::Continue, filter_.decodeHeaders(headers, false));
+  EXPECT_FALSE(filter_.shouldTranscodeResponse());
 }
 
 TEST_F(GrpcJsonTranscoderFilterTest, EmptyRouteEntry) {
@@ -483,6 +484,7 @@ TEST_F(GrpcJsonTranscoderFilterTest, EmptyRouteEntry) {
 
   Http::TestRequestHeaderMapImpl headers;
   EXPECT_EQ(Http::FilterHeadersStatus::Continue, filter_.decodeHeaders(headers, false));
+  EXPECT_FALSE(filter_.shouldTranscodeResponse());
 }
 
 TEST_F(GrpcJsonTranscoderFilterTest, PerRouteDisabledConfigOverride) {
@@ -491,11 +493,11 @@ TEST_F(GrpcJsonTranscoderFilterTest, PerRouteDisabledConfigOverride) {
   route_cfg.set_proto_descriptor_bin("");
   JsonTranscoderConfig route_config(route_cfg, *api_);
 
-  ON_CALL(*decoder_callbacks_.route_,
-          mostSpecificPerFilterConfig("envoy.filters.http.grpc_json_transcoder"))
+  ON_CALL(*decoder_callbacks_.route_, mostSpecificPerFilterConfig(_))
       .WillByDefault(Return(&route_config));
   Http::TestRequestHeaderMapImpl headers;
   EXPECT_EQ(Http::FilterHeadersStatus::Continue, filter_.decodeHeaders(headers, false));
+  EXPECT_FALSE(filter_.shouldTranscodeResponse());
 }
 
 TEST_F(GrpcJsonTranscoderFilterTest, NoTranscoding) {
@@ -521,6 +523,7 @@ TEST_F(GrpcJsonTranscoderFilterTest, NoTranscoding) {
 
   Http::TestRequestTrailerMapImpl request_trailers;
   EXPECT_EQ(Http::FilterTrailersStatus::Continue, filter_.decodeTrailers(request_trailers));
+  EXPECT_FALSE(filter_.shouldTranscodeResponse());
 
   Http::TestResponseHeaderMapImpl response_headers{{"content-type", "application/grpc"},
                                                    {":status", "200"}};
@@ -589,6 +592,7 @@ TEST_F(GrpcJsonTranscoderFilterTest, TranscodingUnaryPost) {
   bookstore::Shelf response;
   response.set_id(20);
   response.set_theme("Children");
+  EXPECT_TRUE(filter_.shouldTranscodeResponse());
 
   auto response_data = Grpc::Common::serializeToGrpcFrame(response);
 
@@ -639,7 +643,7 @@ TEST_F(GrpcJsonTranscoderFilterTest, TranscodingUnaryPostWithPackageServiceMetho
 
   EXPECT_EQ(expected_request.ByteSize(), frames[0].length_);
   EXPECT_TRUE(MessageDifferencer::Equals(expected_request, request));
-
+  EXPECT_TRUE(filter_.shouldTranscodeResponse());
   Http::TestResponseHeaderMapImpl continue_headers{{":status", "000"}};
   EXPECT_EQ(Http::FilterHeadersStatus::Continue, filter_.encode1xxHeaders(continue_headers));
 
@@ -979,7 +983,7 @@ TEST_F(GrpcJsonTranscoderFilterTest, TranscodingUnaryWithInvalidHttpBodyAsOutput
   response_data.add("\x10\x80");
   Grpc::Common::prependGrpcFrameHeader(response_data);
 
-  EXPECT_CALL(encoder_callbacks_, resetStream());
+  EXPECT_CALL(encoder_callbacks_, resetStream(_, _));
   EXPECT_EQ(Http::FilterDataStatus::StopIterationAndBuffer,
             filter_.encodeData(response_data, false));
 }
@@ -1355,6 +1359,61 @@ TEST_F(GrpcJsonTranscoderFilterReportCollisionTest, CreateShelfBodyWildcard) {
   EXPECT_EQ(Http::FilterDataStatus::StopIterationNoBuffer, filter_.decodeData(request_data, true));
 }
 
+bookstore::EchoStructReqResp createDeepStruct(int level) {
+  bookstore::EchoStructReqResp msg;
+  auto* field_map = msg.mutable_content()->mutable_fields();
+  for (int i = 0; i < level; ++i) {
+    (*field_map)["level"] = ValueUtil::numberValue(i);
+    Envoy::ProtobufWkt::Struct s;
+    (*field_map)["struct"] = ValueUtil::structValue(s);
+    field_map = (*field_map)["struct"].mutable_struct_value()->mutable_fields();
+  }
+  return msg;
+}
+
+class GrpcJsonTranscoderFilterEchoStructTest : public GrpcJsonTranscoderFilterTest {
+public:
+  GrpcJsonTranscoderFilterEchoStructTest() : GrpcJsonTranscoderFilterTest(bookstoreProtoConfig()) {}
+
+  void SetUp() override {
+    EXPECT_CALL(decoder_callbacks_, clearRouteCache());
+
+    Http::TestRequestHeaderMapImpl request_headers{
+        {"content-type", "application/json"}, {":method", "POST"}, {":path", "/echoStruct"}};
+    EXPECT_EQ(Http::FilterHeadersStatus::Continue, filter_.decodeHeaders(request_headers, false));
+
+    Http::TestResponseHeaderMapImpl response_headers{{"content-type", "application/grpc"},
+                                                     {":status", "200"}};
+    EXPECT_EQ(Http::FilterHeadersStatus::StopIteration,
+              filter_.encodeHeaders(response_headers, false));
+  }
+};
+
+TEST_F(GrpcJsonTranscoderFilterEchoStructTest, TranscodingOKWithNotDeepProtoMessage) {
+  // If less than 64 deep, grpc response transcoder should be fine.
+  // But loadFromJson() only can convert up to 32 level deep.
+  auto response_message = createDeepStruct(30);
+  auto response_data = Grpc::Common::serializeToGrpcFrame(response_message);
+
+  EXPECT_EQ(Http::FilterDataStatus::StopIterationAndBuffer,
+            filter_.encodeData(*response_data, false));
+
+  bookstore::EchoStructReqResp response_out;
+  TestUtility::loadFromJson(response_data->toString(), response_out);
+  EXPECT_TRUE(TestUtility::protoEqual(response_message, response_out));
+}
+
+TEST_F(GrpcJsonTranscoderFilterEchoStructTest, TranscodingFailedWithTooDeepProtoMessage) {
+  // If more than 64 deep, grpc response transcoder will fail.
+  auto response_message = createDeepStruct(65);
+  auto response_data = Grpc::Common::serializeToGrpcFrame(response_message);
+
+  EXPECT_CALL(encoder_callbacks_, sendLocalReply(Http::Code::BadGateway, _, _, _, _));
+
+  EXPECT_EQ(Http::FilterDataStatus::StopIterationNoBuffer,
+            filter_.encodeData(*response_data, false));
+}
+
 class GrpcJsonTranscoderFilterGrpcStatusTest : public GrpcJsonTranscoderFilterTest {
 public:
   GrpcJsonTranscoderFilterGrpcStatusTest(
@@ -1617,8 +1676,7 @@ TEST_F(GrpcJsonTranscoderDisabledFilterTest, PerRouteEnabledOverride) {
       bookstoreProtoConfig();
   JsonTranscoderConfig route_config(route_cfg, *api_);
 
-  ON_CALL(*decoder_callbacks_.route_,
-          mostSpecificPerFilterConfig("envoy.filters.http.grpc_json_transcoder"))
+  ON_CALL(*decoder_callbacks_.route_, mostSpecificPerFilterConfig(_))
       .WillByDefault(Return(&route_config));
 
   Http::TestRequestHeaderMapImpl request_headers{
