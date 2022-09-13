@@ -14,15 +14,6 @@
 namespace Envoy {
 namespace Network {
 
-namespace {
-
-// TODO (soulxu): making those configurable if needed.
-constexpr uint32_t DefaultIoUringSize = 300;
-constexpr uint32_t DefaultReadBufferSize = 8192;
-constexpr bool UseSubmissionQueuePolling = false;
-
-} // namespace
-
 void DefaultSocketInterfaceExtension::onServerInitialized() {
   if (io_uring_factory_ != nullptr) {
     io_uring_factory_->onServerInitialized();
