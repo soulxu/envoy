@@ -11,14 +11,14 @@ namespace Network {
 class DefaultSocketInterfaceExtension : public Network::SocketInterfaceExtension {
 public:
   DefaultSocketInterfaceExtension(Network::SocketInterface& sock_interface,
-                                  std::unique_ptr<Io::IoUringFactory>& io_uring_factory)
+                                  std::shared_ptr<Io::IoUringFactory> io_uring_factory)
       : Network::SocketInterfaceExtension(sock_interface), io_uring_factory_(io_uring_factory) {}
 
   // Server::BootstrapExtension
   void onServerInitialized() override;
 
 protected:
-  std::unique_ptr<Io::IoUringFactory>& io_uring_factory_;
+  std::shared_ptr<Io::IoUringFactory> io_uring_factory_;
 };
 
 class SocketInterfaceImpl : public SocketInterfaceBase {
@@ -54,7 +54,7 @@ protected:
                                  const Io::IoUringFactory* io_uring_factory = nullptr) const;
 
 private:
-  std::unique_ptr<Io::IoUringFactory> io_uring_factory_;
+  std::weak_ptr<Io::IoUringFactory> io_uring_factory_;
 };
 
 DECLARE_FACTORY(SocketInterfaceImpl);
