@@ -40,9 +40,9 @@ public:
     return "envoy.extensions.network.socket_interface.default_socket_interface";
   };
 
-  static IoHandlePtr
-  makePlatformSpecificSocket(int socket_fd, bool socket_v6only, absl::optional<int> domain,
-                             const Io::IoUringFactory* io_uring_factory = nullptr);
+  static IoHandlePtr makePlatformSpecificSocket(int socket_fd, bool socket_v6only,
+                                                absl::optional<int> domain,
+                                                Io::IoUringFactory* io_uring_factory = nullptr);
 
   // TODO (soulxu): making those configurable if needed.
   static constexpr uint32_t DefaultIoUringSize = 300;
@@ -51,7 +51,7 @@ public:
 
 protected:
   virtual IoHandlePtr makeSocket(int socket_fd, bool socket_v6only, absl::optional<int> domain,
-                                 const Io::IoUringFactory* io_uring_factory = nullptr) const;
+                                 Io::IoUringFactory* io_uring_factory = nullptr) const;
 
 private:
   std::weak_ptr<Io::IoUringFactory> io_uring_factory_;

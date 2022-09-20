@@ -368,7 +368,6 @@ envoy_cc_library(
     external_deps = ["abseil_optional"],
     deps = [
         ":address_lib",
-        ":listen_socket_lib",
         "//envoy/api:os_sys_calls_interface",
         "//envoy/network:listen_socket_interface",
         "//source/common/api:os_sys_calls_lib",
@@ -438,6 +437,7 @@ envoy_cc_library(
         ":address_lib",
         ":default_socket_interface_lib",
         ":socket_lib",
+        ":socket_option_lib",
         "//envoy/network:connection_interface",
         "//envoy/network:listener_interface",
         "//envoy/stats:stats_interface",

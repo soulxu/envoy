@@ -66,9 +66,10 @@ public:
                                 Network::Address::InstanceConstSharedPtr local_addr,
                                 Event::Dispatcher& dispatcher,
                                 const Network::ConnectionSocket::OptionsSharedPtr& options,
-                                bool validation_failure_on_path_response)
+                                bool validation_failure_on_path_response,
+                                quic::ConnectionIdGeneratorInterface& generator)
       : EnvoyQuicClientConnection(server_connection_id, initial_peer_address, helper, alarm_factory,
-                                  supported_versions, local_addr, dispatcher, options),
+                                  supported_versions, local_addr, dispatcher, options, generator),
         dispatcher_(dispatcher),
         validation_failure_on_path_response_(validation_failure_on_path_response) {}
 
@@ -173,7 +174,7 @@ public:
     auto connection = std::make_unique<TestEnvoyQuicClientConnection>(
         getNextConnectionId(), server_addr_, conn_helper_, alarm_factory_,
         quic::ParsedQuicVersionVector{supported_versions_[0]}, local_addr, *dispatcher_, options,
-        validation_failure_on_path_response_);
+        validation_failure_on_path_response_, connection_id_generator_);
     quic_connection_ = connection.get();
     ASSERT(quic_connection_persistent_info_ != nullptr);
     auto& persistent_info = static_cast<PersistentQuicInfoImpl&>(*quic_connection_persistent_info_);
@@ -366,6 +367,8 @@ protected:
   Ssl::ClientSslTransportOptions ssl_client_option_;
   std::unique_ptr<Quic::QuicClientTransportSocketFactory> transport_socket_factory_;
   bool validation_failure_on_path_response_{false};
+  quic::DeterministicConnectionIdGenerator connection_id_generator_{
+      quic::kQuicDefaultConnectionIdLength};
 };
 
 class QuicHttpIntegrationTest : public QuicHttpIntegrationTestBase,
@@ -1377,6 +1380,39 @@ TEST_P(QuicInplaceLdsIntegrationTest, EnableAndDisableEarlyData) {
       static_cast<EnvoyQuicClientSession*>(codec_client_2->connection());
   EXPECT_FALSE(quic_session->EarlyDataAccepted());
   codec_client_2->close();
+}
+
+TEST_P(QuicInplaceLdsIntegrationTest, StatelessResetOldConnection) {
+  enable_quic_early_data_ = true;
+  inplaceInitialize(/*add_default_filter_chain=*/false);
+
+  auto codec_client0 =
+      makeHttpConnection(makeClientConnectionWithHost(lookupPort("http"), "www.lyft.com"));
+  makeRequestAndWaitForResponse(*codec_client0);
+  // Make the next connection use the same connection ID.
+  designated_connection_ids_.push_back(quic_connection_->connection_id());
+  codec_client0->close();
+  if (version_ == Network::Address::IpVersion::v4) {
+    test_server_->waitForGaugeEq("listener.127.0.0.1_0.downstream_cx_active", 0u);
+  } else {
+    test_server_->waitForGaugeEq("listener.[__1]_0.downstream_cx_active", 0u);
+  }
+
+  // This new connection would be reset.
+  auto codec_client1 =
+      makeRawHttpConnection(makeClientConnection(lookupPort("http")), absl::nullopt);
+  EXPECT_TRUE(codec_client1->disconnected());
+
+  quic::QuicErrorCode error =
+      static_cast<EnvoyQuicClientSession*>(codec_client1->connection())->error();
+  EXPECT_TRUE(error == quic::QUIC_NETWORK_IDLE_TIMEOUT || error == quic::QUIC_HANDSHAKE_TIMEOUT);
+  if (version_ == Network::Address::IpVersion::v4) {
+    test_server_->waitForCounterGe(
+        "listener.127.0.0.1_0.quic.dispatcher.stateless_reset_packets_sent", 1u);
+  } else {
+    test_server_->waitForCounterGe("listener.[__1]_0.quic.dispatcher.stateless_reset_packets_sent",
+                                   1u);
+  }
 }
 
 } // namespace Quic
