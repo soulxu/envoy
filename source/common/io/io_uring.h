@@ -116,7 +116,12 @@ public:
    */
   virtual void onServerInitialized() PURE;
 
-  virtual bool currentThreadRegistered() PURE;
+  /**
+   * Returns if the io_uring has been initialized. io_uring will usually be created on server
+   * initialized, but may not be created on integration tests in test threads or before
+   * initialization.
+   */
+  virtual bool isInitialized() PURE;
 };
 
 } // namespace Io

@@ -27,7 +27,7 @@ IoHandlePtr SocketInterfaceImpl::makePlatformSpecificSocket(int socket_fd, bool 
     return std::make_unique<Win32SocketHandleImpl>(socket_fd, socket_v6only, domain);
   }
 
-  if (io_uring_factory == nullptr || !io_uring_factory->currentThreadRegistered()) {
+  if (io_uring_factory == nullptr || !io_uring_factory->isInitialized()) {
     return std::make_unique<IoSocketHandleImpl>(socket_fd, socket_v6only, domain);
   } else {
     return std::make_unique<IoUringSocketHandleImpl>(DefaultReadBufferSize, *io_uring_factory,

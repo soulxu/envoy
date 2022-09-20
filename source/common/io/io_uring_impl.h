@@ -46,7 +46,7 @@ public:
   // IoUringFactory
   IoUring& getOrCreate() const override;
   void onServerInitialized() override;
-  bool currentThreadRegistered() override;
+  bool isInitialized() override;
 
 private:
   const uint32_t io_uring_size_{};

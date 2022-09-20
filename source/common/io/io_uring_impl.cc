@@ -33,7 +33,10 @@ void IoUringFactoryImpl::onServerInitialized() {
   });
 }
 
-bool IoUringFactoryImpl::currentThreadRegistered() { return tls_.currentThreadRegistered(); }
+bool IoUringFactoryImpl::isInitialized() {
+  // io_uring may not be created in test threads or before onServerInitialized get called.
+  return tls_.currentThreadRegistered() && tls_.get().has_value();
+}
 
 IoUringImpl::IoUringImpl(uint32_t io_uring_size, bool use_submission_queue_polling)
     : io_uring_size_(io_uring_size), cqes_(io_uring_size_, nullptr) {
