@@ -51,6 +51,19 @@ bool VclSocketInterface::ipFamilySupported(int) { return true; };
 
 REGISTER_FACTORY(VclSocketInterface, Server::Configuration::BootstrapExtensionFactory);
 
+SocketInterfaceSharedPtr VclSocketInterfaceFactory::createSocketInterface(
+    const Protobuf::Message&, Server::Configuration::ServerFactoryContext& server_factory_context) {
+  vclInterfaceInit(server_factory_context.mainThreadDispatcher(),
+                   server_factory_context.options().concurrency());
+  return std::make_shared<VclSocketInterface>();
+}
+
+ProtobufTypes::MessagePtr VclSocketInterfaceFactory::createEmptyConfigProto() {
+  return std::make_unique<envoy::extensions::vcl::v3alpha::VclSocketInterface>();
+}
+
+REGISTER_FACTORY(VclSocketInterfaceFactory, Envoy::Network::SocketInterfaceFactory);
+
 } // namespace Vcl
 } // namespace Network
 } // namespace Extensions

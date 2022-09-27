@@ -1265,3 +1265,10 @@ envoy.matching.custom_matchers.trie_matcher:
   status: alpha
   type_urls:
   - xds.type.matcher.v3.IPMatcher
+envoy.network.socket_interface.default_socket_interface:
+  categories:
+  - envoy.network.socket_interface
+  security_posture: unknown
+  status: stable
+  type_urls:
+  - envoy.extensions.network.socket_interface.v3.DefaultSocketInterface

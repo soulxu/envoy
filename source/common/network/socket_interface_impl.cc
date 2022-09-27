@@ -161,6 +161,19 @@ ProtobufTypes::MessagePtr SocketInterfaceImpl::createEmptyConfigProto() {
 
 REGISTER_FACTORY(SocketInterfaceImpl, Server::Configuration::BootstrapExtensionFactory);
 
+SocketInterfaceSharedPtr
+DefaultSocketInterfaceFactory::createSocketInterface(const Protobuf::Message&,
+                                                     Server::Configuration::ServerFactoryContext&) {
+  return std::make_shared<SocketInterfaceImpl>();
+}
+
+ProtobufTypes::MessagePtr DefaultSocketInterfaceFactory::createEmptyConfigProto() {
+  return std::make_unique<
+      envoy::extensions::network::socket_interface::v3::DefaultSocketInterface>();
+}
+
+REGISTER_FACTORY(DefaultSocketInterfaceFactory, SocketInterfaceFactory);
+
 static SocketInterfaceLoader* socket_interface_ =
     new SocketInterfaceLoader(std::make_unique<SocketInterfaceImpl>());
 

@@ -39,7 +39,7 @@ CONTRIB_EXTENSIONS = {
     # Socket interface extensions
     #
 
-    "envoy.bootstrap.vcl":                                      "//contrib/vcl/source:config",
+    "envoy.network.socket_interface.vcl_socket_interface":      "//contrib/vcl/source:config",
 
     #
     # Input matchers

@@ -11,6 +11,7 @@ option go_package = "github.com/envoyproxy/go-control-plane/envoy/extensions/net
 option (udpa.annotations.file_status).package_version_status = ACTIVE;
 
 // [#protodoc-title: Default Socket Interface configuration]
+// [#extension: envoy.network.socket_interface.default_socket_interface]
 
 // Configuration for default socket interface that relies on OS dependent syscall to create
 // sockets.

@@ -2,7 +2,9 @@
 
 #include "envoy/common/platform.h"
 #include "envoy/common/pure.h"
+#include "envoy/config/typed_config.h"
 #include "envoy/network/socket.h"
+#include "envoy/server/factory_context.h"
 
 namespace Envoy {
 namespace Network {
@@ -56,6 +58,19 @@ public:
 };
 
 using SocketInterfacePtr = std::unique_ptr<SocketInterface>;
+using SocketInterfaceSharedPtr = std::shared_ptr<SocketInterface>;
+
+class SocketInterfaceFactory : public Config::TypedFactory {
+public:
+  /*
+   * Creates an Socket Interface from the provided config.
+   */
+  virtual SocketInterfaceSharedPtr
+  createSocketInterface(const Protobuf::Message& config,
+                        Server::Configuration::ServerFactoryContext& server_factory_context) PURE;
+
+  std::string category() const override { return "envoy.network.socket_interface"; }
+};
 
 /**
  * Create IoHandle for given address.

@@ -63,9 +63,9 @@ envoy.tls.key_providers.qat:
   - envoy.tls.key_providers
   security_posture: robust_to_untrusted_downstream
   status: alpha
-envoy.bootstrap.vcl:
+envoy.network.socket_interface.vcl_socket_interface:
   categories:
-  - envoy.bootstrap
+  - envoy.network.socket_interface
   security_posture: requires_trusted_downstream_and_upstream
   status: alpha
 envoy.matching.input_matchers.hyperscan:

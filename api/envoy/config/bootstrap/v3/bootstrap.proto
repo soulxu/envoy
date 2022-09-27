@@ -41,7 +41,7 @@ option (udpa.annotations.file_status).package_version_status = ACTIVE;
 // <config_overview_bootstrap>` for more detail.
 
 // Bootstrap :ref:`configuration overview <config_overview_bootstrap>`.
-// [#next-free-field: 36]
+// [#next-free-field: 37]
 message Bootstrap {
   option (udpa.annotations.versioning).previous_message_type =
       "envoy.config.bootstrap.v2.Bootstrap";
@@ -311,7 +311,13 @@ message Bootstrap {
 
   // Optional overriding of default socket interface. The value must be the name of one of the
   // socket interface factories initialized through a bootstrap extension
+  // This field is deprecated in favor of
+  // :ref:`typed_default_socket_interface <envoy_v3_api_field_config.bootstrap.v3.Bootstrap.typed_default_socket_interface>`.
   string default_socket_interface = 24;
+
+  // Optional overriding of default socket interface.
+  // [#extension-category: envoy.network.socket_interface]
+  core.v3.TypedExtensionConfig typed_default_socket_interface = 36;
 
   // Global map of CertificateProvider instances. These instances are referred to by name in the
   // :ref:`CommonTlsContext.CertificateProviderInstance.instance_name

@@ -35,6 +35,18 @@ public:
 
 DECLARE_FACTORY(VclSocketInterface);
 
+class VclSocketInterfaceFactory : public Envoy::Network::SocketInterfaceFactory {
+public:
+  Envoy::Network::SocketInterfaceSharedPtr createSocketInterface(
+      const Protobuf::Message& config,
+      Server::Configuration::ServerFactoryContext& server_factory_context) override;
+
+  ProtobufTypes::MessagePtr createEmptyConfigProto() override;
+  std::string name() const override {
+    return "envoy.network.socket_interface.vcl_socket_interface";
+  };
+};
+
 } // namespace Vcl
 } // namespace Network
 } // namespace Extensions

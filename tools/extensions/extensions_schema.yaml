@@ -24,6 +24,7 @@ builtin:
 - envoy.matching.inputs.subject
 - envoy.regex_engines.google_re2
 - envoy.filters.http.upstream_codec
+- envoy.network.socket_interface.default_socket_interface
 
 # All Envoy extensions must be tagged with their security hardening stance with
 # respect to downstream and upstream data plane threats. These are verbose
@@ -102,6 +103,7 @@ categories:
 - envoy.common.key_value
 - envoy.network.dns_resolver
 - envoy.network.connection_balance
+- envoy.network.socket_interface
 - envoy.rbac.matchers
 - envoy.access_loggers.extension_filters
 - envoy.http.stateful_session

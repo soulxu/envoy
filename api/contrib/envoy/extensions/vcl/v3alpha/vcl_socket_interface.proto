@@ -13,7 +13,7 @@ option (udpa.annotations.file_status).package_version_status = ACTIVE;
 
 // [#protodoc-title: Vcl Socket Interface configuration]
 // VCL :ref:`configuration overview <config_sock_interface_vcl>`.
-// [#extension: envoy.bootstrap.vcl]
+// [#extension: envoy.network.socket_interface.vcl_socket_interface]
 
 // Configuration for vcl socket interface that relies on ``vpp`` ``comms`` library (VCL)
 message VclSocketInterface {
