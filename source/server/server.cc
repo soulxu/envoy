@@ -462,6 +462,21 @@ void InstanceImpl::initialize(Network::Address::InstanceConstSharedPtr local_add
   Regex::EngineSingleton::clear();
   Regex::EngineSingleton::initialize(regex_engine_.get());
 
+  // Initialize the socket interface and inject to singleton.
+  if (bootstrap_.has_typed_default_socket_interface()) {
+    const auto& default_socket_interface = bootstrap_.typed_default_socket_interface();
+    Network::SocketInterfaceFactory& factory =
+        Config::Utility::getAndCheckFactory<Network::SocketInterfaceFactory>(
+            default_socket_interface);
+    auto config = Config::Utility::translateAnyToFactoryConfig(
+        default_socket_interface.typed_config(),
+        messageValidationContext().staticValidationVisitor(), factory);
+    socket_interface_ = factory.createSocketInterface(*config, serverFactoryContext());
+
+    Network::SocketInterfaceSingleton::clear();
+    Network::SocketInterfaceSingleton::initialize(socket_interface_.get());
+  }
+
   // Needs to happen as early as possible in the instantiation to preempt the objects that require
   // stats.
   stats_store_.setTagProducer(Config::Utility::createTagProducer(bootstrap_, options_.statsTags()));
@@ -603,8 +618,17 @@ void InstanceImpl::initialize(Network::Address::InstanceConstSharedPtr local_add
   Network::SocketInterface* sock = nullptr;
 
   if (!bootstrap_.default_socket_interface().empty()) {
-    auto& sock_name = bootstrap_.default_socket_interface();
-    sock = const_cast<Network::SocketInterface*>(Network::socketInterface(sock_name));
+    if (bootstrap_.has_typed_default_socket_interface()) {
+      ENVOY_LOG(warn, "Both default_socket_interface and typed_default_socket_interface have been "
+                      "set, ignore the former one");
+    } else {
+      auto& sock_name = bootstrap_.default_socket_interface();
+      auto sock = const_cast<Network::SocketInterface*>(Network::socketInterface(sock_name));
+      if (sock != nullptr) {
+        Network::SocketInterfaceSingleton::clear();
+        Network::SocketInterfaceSingleton::initialize(sock);
+      }
+    }
   }
 
   if (bootstrap_.default_socket_interface().empty() || sock == nullptr) {

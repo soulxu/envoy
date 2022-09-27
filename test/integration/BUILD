@@ -1133,6 +1133,8 @@ envoy_cc_test(
         ":http_integration_lib",
         "//source/common/network:socket_interface_lib",
         "//source/extensions/filters/network/echo:config",
+        "@envoy_api//envoy/config/bootstrap/v3:pkg_cc_proto",
+        "@envoy_api//envoy/extensions/network/socket_interface/v3:pkg_cc_proto",
     ],
 )
 

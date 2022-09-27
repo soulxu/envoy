@@ -1,3 +1,6 @@
+#include "envoy/config/bootstrap/v3/bootstrap.pb.h"
+#include "envoy/extensions/network/socket_interface/v3/default_socket_interface.pb.h"
+
 #include "source/common/buffer/buffer_impl.h"
 #include "source/common/network/address_impl.h"
 #include "source/common/network/socket_interface.h"
@@ -19,16 +22,6 @@ public:
   };
 
   static std::string config() {
-    // At least one empty filter chain needs to be specified.
-    return absl::StrCat(echoConfig(), R"EOF(
-bootstrap_extensions:
-  - name: envoy.extensions.network.socket_interface.default_socket_interface
-    typed_config:
-      "@type": type.googleapis.com/envoy.extensions.network.socket_interface.v3.DefaultSocketInterface
-default_socket_interface: "envoy.extensions.network.socket_interface.default_socket_interface"
-    )EOF");
-  }
-  static std::string echoConfig() {
     return absl::StrCat(ConfigHelper::baseConfig(), R"EOF(
     filter_chains:
       filters:
@@ -42,14 +35,38 @@ default_socket_interface: "envoy.extensions.network.socket_interface.default_soc
         name: envoy.filters.network.echo
       )EOF");
   }
+
+  void initializeConfig(bool has_default_socket_interface,
+                        bool has_typed_default_socket_interface) {
+    config_helper_.addConfigModifier([&](envoy::config::bootstrap::v3::Bootstrap& bootstrap) {
+      if (has_default_socket_interface) {
+        envoy::extensions::network::socket_interface::v3::DefaultSocketInterface
+            default_socket_interface;
+        auto config = bootstrap.mutable_bootstrap_extensions()->Add();
+        config->set_name("envoy.extensions.network.socket_interface.default_socket_interface");
+        config->mutable_typed_config()->PackFrom(default_socket_interface);
+        bootstrap.set_default_socket_interface(
+            "envoy.extensions.network.socket_interface.default_socket_interface");
+      }
+      if (has_typed_default_socket_interface) {
+        envoy::extensions::network::socket_interface::v3::DefaultSocketInterface
+            default_socket_interface;
+        auto config = bootstrap.mutable_typed_default_socket_interface();
+        config->set_name("envoy.extensions.network.socket_interface.default_socket_interface");
+        config->mutable_typed_config()->PackFrom(default_socket_interface);
+      }
+    });
+
+    BaseIntegrationTest::initialize();
+  }
 };
 
 INSTANTIATE_TEST_SUITE_P(IpVersions, SocketInterfaceIntegrationTest,
                          testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
                          TestUtility::ipTestParamsToString);
 
-TEST_P(SocketInterfaceIntegrationTest, Basic) {
-  BaseIntegrationTest::initialize();
+TEST_P(SocketInterfaceIntegrationTest, Deprecated) {
+  initializeConfig(true, false);
   const Network::SocketInterface* factory = Network::socketInterface(
       "envoy.extensions.network.socket_interface.default_socket_interface");
   ASSERT_TRUE(Network::SocketInterfaceSingleton::getExisting() == factory);
@@ -65,8 +82,31 @@ TEST_P(SocketInterfaceIntegrationTest, Basic) {
   EXPECT_EQ("hello", response);
 }
 
+TEST_P(SocketInterfaceIntegrationTest, Basic) {
+  initializeConfig(false, true);
+
+  std::string response;
+  auto connection = createConnectionDriver(
+      lookupPort("listener_0"), "hello",
+      [&response](Network::ClientConnection& conn, const Buffer::Instance& data) -> void {
+        response.append(data.toString());
+        conn.close(Network::ConnectionCloseType::FlushWrite);
+      });
+  ASSERT_TRUE(connection->run());
+  EXPECT_EQ("hello", response);
+}
+
+TEST_P(SocketInterfaceIntegrationTest,
+       BothDefaultSocketInterfaceAndTypedDefaultSocketInterfaceSet) {
+  EXPECT_LOG_CONTAINS(
+      "warn",
+      "Both default_socket_interface and typed_default_socket_interface have been set, "
+      "ignore the former one",
+      initializeConfig(true, true));
+}
+
 TEST_P(SocketInterfaceIntegrationTest, AddressWithSocketInterface) {
-  BaseIntegrationTest::initialize();
+  initializeConfig(false, true);
 
   ConnectionStatusCallbacks connect_callbacks_;
   Network::ClientConnectionPtr client_;
@@ -93,7 +133,7 @@ TEST_P(SocketInterfaceIntegrationTest, AddressWithSocketInterface) {
 // Test that connecting to internal address will crash if the user space socket extension is not
 // linked.
 TEST_P(SocketInterfaceIntegrationTest, InternalAddressWithSocketInterface) {
-  BaseIntegrationTest::initialize();
+  initializeConfig(false, true);
 
   ConnectionStatusCallbacks connect_callbacks_;
   Network::ClientConnectionPtr client_;
@@ -112,7 +152,7 @@ TEST_P(SocketInterfaceIntegrationTest, InternalAddressWithSocketInterface) {
 // Test that recv from internal address will crash.
 // TODO(lambdai): Add UDP internal listener implementation to enable the io path.
 TEST_P(SocketInterfaceIntegrationTest, UdpRecvFromInternalAddressWithSocketInterface) {
-  BaseIntegrationTest::initialize();
+  initializeConfig(false, true);
 
   const Network::SocketInterface* sock_interface = Network::socketInterface(
       "envoy.extensions.network.socket_interface.default_socket_interface");
@@ -127,7 +167,7 @@ TEST_P(SocketInterfaceIntegrationTest, UdpRecvFromInternalAddressWithSocketInter
 
 // Test that send to internal address will return io error.
 TEST_P(SocketInterfaceIntegrationTest, UdpSendToInternalAddressWithSocketInterface) {
-  BaseIntegrationTest::initialize();
+  initializeConfig(false, true);
 
   const Network::SocketInterface* sock_interface = Network::socketInterface(
       "envoy.extensions.network.socket_interface.default_socket_interface");

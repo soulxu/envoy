@@ -396,6 +396,7 @@ private:
   ServerFactoryContextImpl server_contexts_;
   bool enable_reuse_port_default_;
   Regex::EnginePtr regex_engine_;
+  Network::SocketInterfaceSharedPtr socket_interface_;
 
   bool stats_flush_in_progress_ : 1;
 
