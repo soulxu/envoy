@@ -15,6 +15,7 @@
 #include "envoy/event/dispatcher.h"
 #include "envoy/event/signal.h"
 #include "envoy/event/timer.h"
+#include "envoy/extensions/network/socket_interface/v3/default_socket_interface.pb.h"
 #include "envoy/network/dns.h"
 #include "envoy/registry/registry.h"
 #include "envoy/server/bootstrap_extension_config.h"
@@ -462,21 +463,6 @@ void InstanceImpl::initialize(Network::Address::InstanceConstSharedPtr local_add
   Regex::EngineSingleton::clear();
   Regex::EngineSingleton::initialize(regex_engine_.get());
 
-  // Initialize the socket interface and inject to singleton.
-  if (bootstrap_.has_typed_default_socket_interface()) {
-    const auto& default_socket_interface = bootstrap_.typed_default_socket_interface();
-    Network::SocketInterfaceFactory& factory =
-        Config::Utility::getAndCheckFactory<Network::SocketInterfaceFactory>(
-            default_socket_interface);
-    auto config = Config::Utility::translateAnyToFactoryConfig(
-        default_socket_interface.typed_config(),
-        messageValidationContext().staticValidationVisitor(), factory);
-    socket_interface_ = factory.createSocketInterface(*config, serverFactoryContext());
-
-    Network::SocketInterfaceSingleton::clear();
-    Network::SocketInterfaceSingleton::initialize(socket_interface_.get());
-  }
-
   // Needs to happen as early as possible in the instantiation to preempt the objects that require
   // stats.
   stats_store_.setTagProducer(Config::Utility::createTagProducer(bootstrap_, options_.statsTags()));
@@ -615,8 +601,6 @@ void InstanceImpl::initialize(Network::Address::InstanceConstSharedPtr local_add
         std::move(safe_actions), std::move(unsafe_actions), api_->threadFactory());
   }
 
-  Network::SocketInterface* sock = nullptr;
-
   if (!bootstrap_.default_socket_interface().empty()) {
     if (bootstrap_.has_typed_default_socket_interface()) {
       ENVOY_LOG(warn, "Both default_socket_interface and typed_default_socket_interface have been "
@@ -631,19 +615,6 @@ void InstanceImpl::initialize(Network::Address::InstanceConstSharedPtr local_add
     }
   }
 
-  if (bootstrap_.default_socket_interface().empty() || sock == nullptr) {
-    auto factory =
-        Registry::FactoryRegistry<Server::Configuration::BootstrapExtensionFactory>::getFactory(
-            "envoy.extensions.network.socket_interface.default_socket_interface");
-    bootstrap_extensions_.push_back(factory->createBootstrapExtension(
-        *factory->createEmptyConfigProto(), serverFactoryContext()));
-    sock = dynamic_cast<Network::SocketInterface*>(factory);
-  }
-
-  ASSERT(sock != nullptr);
-  Network::SocketInterfaceSingleton::clear();
-  Network::SocketInterfaceSingleton::initialize(sock);
-
   // Workers get created first so they register for thread local updates.
   listener_manager_ =
       std::make_unique<ListenerManagerImpl>(*this, listener_component_factory_, worker_factory_,
@@ -652,6 +623,29 @@ void InstanceImpl::initialize(Network::Address::InstanceConstSharedPtr local_add
   // The main thread is also registered for thread local updates so that code that does not care
   // whether it runs on the main thread or on workers can still use TLS.
   thread_local_.registerThread(*dispatcher_, true);
+
+  // TODO(zhxie): FOR TESTING ONLY.
+  auto typed_default_socket_interface = bootstrap_.mutable_typed_default_socket_interface();
+  typed_default_socket_interface->set_name(
+      "envoy.extensions.network.socket_interface.default_socket_interface");
+  envoy::extensions::network::socket_interface::v3::DefaultSocketInterface default_socket_interface;
+  typed_default_socket_interface->mutable_typed_config()->PackFrom(default_socket_interface);
+
+  // Initialize the socket interface and inject to singleton.
+  // Needs to happen after thread local initialization.
+  if (bootstrap_.has_typed_default_socket_interface()) {
+    const auto& default_socket_interface = bootstrap_.typed_default_socket_interface();
+    Network::SocketInterfaceFactory& factory =
+        Config::Utility::getAndCheckFactory<Network::SocketInterfaceFactory>(
+            default_socket_interface);
+    auto config = Config::Utility::translateAnyToFactoryConfig(
+        default_socket_interface.typed_config(),
+        messageValidationContext().staticValidationVisitor(), factory);
+    socket_interface_ = factory.createSocketInterface(*config, serverFactoryContext());
+
+    Network::SocketInterfaceSingleton::clear();
+    Network::SocketInterfaceSingleton::initialize(socket_interface_.get());
+  }
 
   // We can now initialize stats for threading.
   stats_store_.initializeThreading(*dispatcher_, thread_local_);

@@ -14,12 +14,6 @@
 namespace Envoy {
 namespace Network {
 
-void DefaultSocketInterfaceExtension::onServerInitialized() {
-  if (io_uring_factory_ != nullptr) {
-    io_uring_factory_->onServerInitialized();
-  }
-}
-
 IoHandlePtr SocketInterfaceImpl::makePlatformSpecificSocket(int socket_fd, bool socket_v6only,
                                                             absl::optional<int> domain,
                                                             Io::IoUringFactory* io_uring_factory) {
@@ -30,8 +24,8 @@ IoHandlePtr SocketInterfaceImpl::makePlatformSpecificSocket(int socket_fd, bool 
   // Only create IoUringSocketHandleImpl when the IoUringFactory is created, and
   // it is registered in the TLS, and initialized. There are cases the test may create thread
   // before IoUringFactory add to the TLS and initialized.
-  if (io_uring_factory == nullptr || !io_uring_factory->currentThreadRegistered() ||
-      io_uring_factory->get() == absl::nullopt) {
+  if (io_uring_factory == nullptr || io_uring_factory->get() == absl::nullopt ||
+      !io_uring_factory->currentThreadRegistered()) {
     return std::make_unique<IoSocketHandleImpl>(socket_fd, socket_v6only, domain);
   } else {
     return std::make_unique<IoUringSocketHandleImpl>(DefaultReadBufferSize, *io_uring_factory,
@@ -56,8 +50,7 @@ IoHandlePtr SocketInterfaceImpl::socket(Socket::Type socket_type, Address::Type 
   int flags = SOCK_NONBLOCK;
 
   // Use blocking socket for IOUring.
-  if (io_uring_factory_.lock() != nullptr && io_uring_factory_.lock()->currentThreadRegistered() &&
-      io_uring_factory_.lock()->get() != absl::nullopt) {
+  if (io_uring_factory_ != nullptr && io_uring_factory_->currentThreadRegistered()) {
     flags = 0;
   }
 
@@ -96,7 +89,7 @@ IoHandlePtr SocketInterfaceImpl::socket(Socket::Type socket_type, Address::Type 
   RELEASE_ASSERT(SOCKET_VALID(result.return_value_),
                  fmt::format("socket(2) failed, got error: {}", errorDetails(result.errno_)));
   IoHandlePtr io_handle =
-      makeSocket(result.return_value_, socket_v6only, domain, io_uring_factory_.lock().get());
+      makeSocket(result.return_value_, socket_v6only, domain, io_uring_factory_.get());
 
 #if defined(__APPLE__) || defined(WIN32)
   // Cannot set SOCK_NONBLOCK as a ::socket flag.
@@ -139,19 +132,10 @@ bool SocketInterfaceImpl::ipFamilySupported(int domain) {
   return SOCKET_VALID(result.return_value_);
 }
 
-Server::BootstrapExtensionPtr SocketInterfaceImpl::createBootstrapExtension(
-    const Protobuf::Message&, Server::Configuration::ServerFactoryContext& context) {
-  // TODO (soulxu): Add runtime flag here.
-  if (Io::isIoUringSupported()) {
-    std::shared_ptr<Io::IoUringFactoryImpl> io_uring_factory =
-        std::make_unique<Io::IoUringFactoryImpl>(DefaultIoUringSize, UseSubmissionQueuePolling,
-                                                 context.threadLocal());
-    io_uring_factory_ = io_uring_factory;
-
-    return std::make_unique<DefaultSocketInterfaceExtension>(*this, io_uring_factory);
-  } else {
-    return std::make_unique<DefaultSocketInterfaceExtension>(*this, nullptr);
-  }
+Server::BootstrapExtensionPtr
+SocketInterfaceImpl::createBootstrapExtension(const Protobuf::Message&,
+                                              Server::Configuration::ServerFactoryContext&) {
+  return std::make_unique<SocketInterfaceExtension>(*this);
 }
 
 ProtobufTypes::MessagePtr SocketInterfaceImpl::createEmptyConfigProto() {
@@ -161,10 +145,19 @@ ProtobufTypes::MessagePtr SocketInterfaceImpl::createEmptyConfigProto() {
 
 REGISTER_FACTORY(SocketInterfaceImpl, Server::Configuration::BootstrapExtensionFactory);
 
-SocketInterfaceSharedPtr
-DefaultSocketInterfaceFactory::createSocketInterface(const Protobuf::Message&,
-                                                     Server::Configuration::ServerFactoryContext&) {
-  return std::make_shared<SocketInterfaceImpl>();
+SocketInterfaceSharedPtr DefaultSocketInterfaceFactory::createSocketInterface(
+    const Protobuf::Message&, Server::Configuration::ServerFactoryContext& server_factory_context) {
+  // TODO (soulxu): Add runtime flag here.
+  if (Io::isIoUringSupported()) {
+    std::shared_ptr<Io::IoUringFactoryImpl> io_uring_factory =
+        std::make_shared<Io::IoUringFactoryImpl>(SocketInterfaceImpl::DefaultIoUringSize,
+                                                 SocketInterfaceImpl::UseSubmissionQueuePolling,
+                                                 server_factory_context.threadLocal());
+    io_uring_factory->onServerInitialized();
+    return std::make_shared<SocketInterfaceImpl>(io_uring_factory);
+  } else {
+    return std::make_shared<SocketInterfaceImpl>();
+  }
 }
 
 ProtobufTypes::MessagePtr DefaultSocketInterfaceFactory::createEmptyConfigProto() {
