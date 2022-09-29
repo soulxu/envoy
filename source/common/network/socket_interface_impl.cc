@@ -24,8 +24,8 @@ IoHandlePtr SocketInterfaceImpl::makePlatformSpecificSocket(int socket_fd, bool 
   // Only create IoUringSocketHandleImpl when the IoUringFactory is created, and
   // it is registered in the TLS, and initialized. There are cases the test may create thread
   // before IoUringFactory add to the TLS and initialized.
-  if (io_uring_factory == nullptr || io_uring_factory->get() == absl::nullopt ||
-      !io_uring_factory->currentThreadRegistered()) {
+  if (io_uring_factory == nullptr || !io_uring_factory->currentThreadRegistered() ||
+      io_uring_factory->get() == absl::nullopt) {
     return std::make_unique<IoSocketHandleImpl>(socket_fd, socket_v6only, domain);
   } else {
     return std::make_unique<IoUringSocketHandleImpl>(DefaultReadBufferSize, *io_uring_factory,
