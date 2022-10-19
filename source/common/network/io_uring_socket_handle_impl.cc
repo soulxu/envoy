@@ -48,7 +48,6 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::close() {
       res = uring.prepareCancel(read_req_, req);
       RELEASE_ASSERT(res == Io::IoUringResult::Ok, "unable to prepare cancel");
     }
-    uring.submit();
   }
 
   auto req = new Request{absl::nullopt, RequestType::Close};
@@ -57,6 +56,7 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::close() {
     // Fall back to posix system call.
     ::close(fd_);
   }
+  uring.submit();
   if (isLeader()) {
     if (uring.isEventfdRegistered()) {
       uring.unregisterEventfd();
