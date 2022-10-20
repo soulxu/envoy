@@ -490,6 +490,9 @@ IoHandlePtr IoUringSocketHandleImpl::FileEventAdapter::accept(struct sockaddr* a
 void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Request& req,
                                                                     int32_t result) {
   if (result < 0) {
+    if (result == -ECANCELED) {
+      return;
+    }
     ENVOY_LOG(debug, "async request failed: {}", errorDetails(-result));
   }
 
