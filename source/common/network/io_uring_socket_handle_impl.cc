@@ -490,9 +490,6 @@ IoHandlePtr IoUringSocketHandleImpl::FileEventAdapter::accept(struct sockaddr* a
 void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Request& req,
                                                                     int32_t result) {
   if (result < 0) {
-    if (result == -ECANCELED) {
-      return;
-    }
     ENVOY_LOG(debug, "async request failed: {}", errorDetails(-result));
   }
 
@@ -507,6 +504,10 @@ void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Reques
     break;
   case RequestType::Read: {
     ASSERT(req.iohandle_.has_value());
+    // Read is cancellable.
+    if (result == -ECANCELED) {
+      return;
+    }
     auto& iohandle = req.iohandle_->get();
     iohandle.bytes_to_read_ = result;
     // This is hacky fix, we should check the req is valid or not.
