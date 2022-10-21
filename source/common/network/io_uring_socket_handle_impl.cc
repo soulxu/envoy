@@ -96,13 +96,17 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::readv(uint64_t /* max_length */
 Api::IoCallUint64Result IoUringSocketHandleImpl::read(Buffer::Instance& buffer,
                                                       absl::optional<uint64_t> max_length_opt) {
   const uint64_t max_length = max_length_opt.value_or(UINT64_MAX);
-  if (max_length == 0) {
+  if (max_length == 0 || remote_closed_) {
     return Api::ioCallUint64ResultNoError();
   }
 
   if (bytes_to_read_ == 0) {
     return {0, Api::IoErrorPtr(IoSocketError::getIoSocketEagainInstance(),
                                IoSocketError::deleteIoError)};
+  }
+
+  if (bytes_to_read_ < 0) {
+    return {0, Api::IoErrorPtr(new IoSocketError(bytes_to_read_), IoSocketError::deleteIoError)};
   }
 
   if (read_buf_ == nullptr) {
@@ -322,7 +326,7 @@ void IoUringSocketHandleImpl::enableFileEvents(uint32_t events) {
 
 void IoUringSocketHandleImpl::resetFileEvents() { file_event_adapter_.reset(); }
 
-Api::SysCallIntResult IoUringSocketHandleImpl::shutdown(int /*how*/) { PANIC("not implemented"); }
+Api::SysCallIntResult IoUringSocketHandleImpl::shutdown(int how) { return Api::OsSysCallsSingleton::get().shutdown(fd_, how); }
 
 void IoUringSocketHandleImpl::addReadRequest() {
   if (!is_read_enabled_ || !SOCKET_VALID(fd_) || read_req_) {
@@ -515,7 +519,11 @@ void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Reques
       ENVOY_LOG_MISC(debug, "the uring's fd already closed");
       break;
     }
-    iohandle.cb_(result > 0 ? Event::FileReadyType::Read : Event::FileReadyType::Closed);
+
+    if (result == 0) {
+      iohandle.remote_closed_ = true;
+    }
+    iohandle.cb_(Event::FileReadyType::Read);
     if (result > 0) {
       iohandle.addReadRequest();
     }
@@ -530,6 +538,13 @@ void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Reques
     ASSERT(req.iov_ != nullptr);
     ASSERT(req.iohandle_.has_value());
     auto& iohandle = req.iohandle_->get();
+
+    // This is hacky fix, we should check the req is valid or not.
+    if (iohandle.fd_ == -1) {
+      ENVOY_LOG_MISC(debug, "the uring's fd already closed");
+      break;
+    }
+
     if (result < 0) {
       delete[] req.iov_;
       iohandle.cb_(Event::FileReadyType::Closed);
