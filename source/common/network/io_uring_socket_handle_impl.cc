@@ -508,6 +508,11 @@ void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Reques
       return;
     }
     auto& iohandle = req.iohandle_->get();
+    // This is hacky fix, we should check the req is valid or not.
+    if (iohandle.fd_ == -1) {
+      ENVOY_LOG_MISC(debug, "the uring's fd already closed");
+      break;
+    }
     iohandle.bytes_to_read_ = result;
 
     if (result == 0) {
