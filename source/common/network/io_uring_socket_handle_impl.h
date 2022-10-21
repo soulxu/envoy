@@ -12,7 +12,7 @@ namespace Network {
 
 class IoUringSocketHandleImpl;
 
-enum class RequestType { Accept, Connect, Read, Write, Close, Cancel, Unknown };
+enum class RequestType { Accept, Connect, Read, Write, Close, Unknown };
 
 using IoUringSocketHandleImplOptRef =
     absl::optional<std::reference_wrapper<IoUringSocketHandleImpl>>;

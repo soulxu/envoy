@@ -88,11 +88,11 @@ public:
   virtual IoUringResult prepareClose(os_fd_t fd, void* user_data) PURE;
 
   /**
-   * Prepares a cancellation and puts it into the submission queue.
-   * Returns IoUringResult::Failed in case the submission queue is full already
-   * and IoUringResult::Ok otherwise.
+   * Cancels an entry in the submission queue.
+   * Returns IoUringResult::Failed in case the cancellation is failed and
+   * IoUringResult::Ok otherwise.
    */
-  virtual IoUringResult prepareCancel(void* cancelling_user_data, void* user_data) PURE;
+  virtual IoUringResult cancel(void* user_data) PURE;
 
   /**
    * Submits the entries in the submission queue to the kernel using the

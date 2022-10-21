@@ -40,15 +40,10 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::close() {
   ASSERT(SOCKET_VALID(fd_));
   auto& uring = io_uring_factory_.get().ref();
   if (read_req_) {
-    auto req = new Request{*this, RequestType::Cancel};
-    auto res = uring.prepareCancel(read_req_, req);
-    if (res == Io::IoUringResult::Failed) {
-      // TODO(rojkov): handle `EBUSY` in case the completion queue is never reaped.
-      uring.submit();
-      res = uring.prepareCancel(read_req_, req);
-      RELEASE_ASSERT(res == Io::IoUringResult::Ok, "unable to prepare cancel");
-    }
+    auto res = uring.cancel(read_req_);
+    RELEASE_ASSERT(res == Io::IoUringResult::Ok, "unable to cancel");
   }
+  read_req_ = nullptr;
 
   auto req = new Request{absl::nullopt, RequestType::Close};
   auto res = uring.prepareClose(fd_, req);
@@ -543,8 +538,6 @@ void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Reques
     break;
   }
   case RequestType::Close:
-    break;
-  case RequestType::Cancel:
     break;
   default:
     PANIC("not implemented");

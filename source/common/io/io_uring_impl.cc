@@ -143,14 +143,14 @@ IoUringResult IoUringImpl::prepareClose(os_fd_t fd, void* user_data) {
   return IoUringResult::Ok;
 }
 
-IoUringResult IoUringImpl::prepareCancel(void* cancelling_user_data, void* user_data) {
-  struct io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
-  if (sqe == nullptr) {
+IoUringResult IoUringImpl::cancel(void* user_data) {
+  struct io_uring_sync_cancel_reg reg {};
+  reg.addr = reinterpret_cast<uint64_t>(user_data);
+  int res = io_uring_register_sync_cancel(&ring_, &reg);
+  if (res < 0 && res != -ENOENT) {
     return IoUringResult::Failed;
   }
 
-  io_uring_prep_cancel(sqe, cancelling_user_data, 0);
-  io_uring_sqe_set_data(sqe, user_data);
   return IoUringResult::Ok;
 }
 
