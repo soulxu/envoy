@@ -39,6 +39,19 @@ IoUringSocketHandleImpl::~IoUringSocketHandleImpl() {
 Api::IoCallUint64Result IoUringSocketHandleImpl::close() {
   ASSERT(SOCKET_VALID(fd_));
   auto req = new Request{absl::nullopt, RequestType::Close};
+  req->closed_ = true;
+
+  // put the request into the map.
+  req->id_ = global_request_id++;
+  req->fd_ = fd_;
+  request_map_.insert({req->id_, req});
+
+  for (auto& req : request_map_) {
+    if (req.second->fd_ == fd_) {
+      req.second->closed_ = true;
+    }
+  }
+
   Io::IoUringResult res = io_uring_factory_.get().ref().prepareClose(fd_, req);
   if (res == Io::IoUringResult::Failed) {
     // Fall back to posix system call.
@@ -62,6 +75,15 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::readv(uint64_t /* max_length */
     return {0, Api::IoErrorPtr(IoSocketError::getIoSocketEagainInstance(),
                                IoSocketError::deleteIoError)};
   }
+
+  if (remote_closed_) {
+    return Api::ioCallUint64ResultNoError();
+  }
+
+  if (bytes_to_read_ < 0) {
+    return {0, Api::IoErrorPtr(new IoSocketError(bytes_to_read_), IoSocketError::deleteIoError)};
+  }
+
   uint64_t num_slices_to_read = 0;
   uint64_t num_bytes_to_read = 0;
   for (;
@@ -190,6 +212,12 @@ IoHandlePtr IoUringSocketHandleImpl::accept(struct sockaddr* addr, socklen_t* ad
 Api::SysCallIntResult IoUringSocketHandleImpl::connect(Address::InstanceConstSharedPtr address) {
   auto& uring = io_uring_factory_.get().ref();
   auto req = new Request{*this, RequestType::Connect};
+
+  // put the request into the map.
+  req->id_ = global_request_id++;
+  req->fd_ = fd_;
+  request_map_.insert({req->id_, req});
+
   auto res = uring.prepareConnect(fd_, address, req);
   if (res == Io::IoUringResult::Failed) {
     res = uring.submit();
@@ -327,6 +355,12 @@ void IoUringSocketHandleImpl::addReadRequest() {
   iov_.iov_len = read_buffer_size_;
   auto& uring = io_uring_factory_.get().ref();
   auto req = new Request{*this, RequestType::Read};
+
+  // put the request into the map.
+  req->id_ = global_request_id++;
+  req->fd_ = fd_;
+  request_map_.insert({req->id_, req});
+
   auto res = uring.prepareReadv(fd_, &iov_, 1, 0, req);
   if (res == Io::IoUringResult::Failed) {
     // TODO(rojkov): handle `EBUSY` in case the completion queue is never reaped.
@@ -353,6 +387,12 @@ void IoUringSocketHandleImpl::addWriteRequest() {
   }
 
   auto req = new Request{*this, RequestType::Write, iovecs, std::move(write_buf_)};
+
+  // put the request into the map.
+  req->id_ = global_request_id++;
+  req->fd_ = fd_;
+  request_map_.insert({req->id_, req});
+
   write_buf_ = std::list<Buffer::SliceDataPtr>{};
   auto& uring = io_uring_factory_.get().ref();
   auto res = uring.prepareWritev(fd_, iovecs, nr_vecs, 0, req);
@@ -485,6 +525,11 @@ void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Reques
     ENVOY_LOG(debug, "async request failed: {}", errorDetails(-result));
   }
 
+  if (req.closed_) {
+    printf("IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion, request is closed, ret = %d\n", result);
+    return;
+  }
+
   switch (req.type_) {
   case RequestType::Accept:
     ASSERT(!SOCKET_VALID(connection_fd_));
@@ -504,6 +549,12 @@ void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Reques
       break;
     }
 
+    // put the request into the map.
+    auto iter = iohandle.request_map_.find(req.id_);
+    if (iter != iohandle.request_map_.end()) {
+      iohandle.request_map_.erase(iter);
+    }
+
     if (result == 0) {
       iohandle.remote_closed_ = true;
     }
@@ -513,11 +564,24 @@ void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Reques
     }
     break;
   }
-  case RequestType::Connect:
+  case RequestType::Connect: {
     ASSERT(req.iohandle_.has_value());
+    printf("IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion, Connected, fd = %d, ret = %d\n", req.iohandle_->get().fd_, result);
+    if (req.iohandle_->get().fd_ == -1) {
+      ENVOY_LOG_MISC(debug, "the uring's fd already close, we got -1 fd in connect request");
+      break;
+    }
+
+    auto& iohandle = req.iohandle_->get();
+    auto iter = iohandle.request_map_.find(req.id_);
+    if (iter != iohandle.request_map_.end()) {
+      iohandle.request_map_.erase(iter);
+    }
+
     req.iohandle_->get().cb_(result < 0 ? Event::FileReadyType::Closed
                                         : Event::FileReadyType::Write);
     break;
+  }
   case RequestType::Write: {
     ASSERT(req.iov_ != nullptr);
     ASSERT(req.iohandle_.has_value());
@@ -529,6 +593,11 @@ void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Reques
       break;
     }
 
+    auto iter = iohandle.request_map_.find(req.id_);
+    if (iter != iohandle.request_map_.end()) {
+      iohandle.request_map_.erase(iter);
+    }
+
     if (result < 0) {
       delete[] req.iov_;
       iohandle.cb_(Event::FileReadyType::Closed);
@@ -537,8 +606,16 @@ void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Reques
     }
     break;
   }
-  case RequestType::Close:
+  case RequestType::Close: {
+    printf("IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion, Close, ret = %d\n", result);
+
+    auto iter = req.iohandle_->get().request_map_.find(req.id_);
+    if (iter != req.iohandle_->get().request_map_.end()) {
+      req.iohandle_->get().request_map_.erase(iter);
+    }
+
     break;
+  }
   default:
     PANIC("not implemented");
   }

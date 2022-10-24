@@ -22,6 +22,9 @@ struct Request {
   RequestType type_{RequestType::Unknown};
   struct iovec* iov_{nullptr};
   std::list<Buffer::SliceDataPtr> slices_{};
+  uint64_t id_{0};
+  os_fd_t fd_{-1};
+  bool closed_{false};
 };
 
 /**
@@ -133,6 +136,8 @@ private:
   bool is_write_added_{false};
   std::unique_ptr<FileEventAdapter> file_event_adapter_{nullptr};
   bool remote_closed_{false};
+  uint64_t global_request_id{0};
+  absl::flat_hash_map<uint64_t, Request*> request_map_;
 };
 
 } // namespace Network
