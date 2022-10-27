@@ -68,10 +68,12 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::close() {
 }
 
 bool IoUringSocketHandleImpl::isOpen() const { return SOCKET_VALID(fd_); }
+
 Api::IoCallUint64Result IoUringSocketHandleImpl::readv(uint64_t /* max_length */,
                                                        Buffer::RawSlice* slices,
                                                        uint64_t num_slice) {
-  if (read_buf_ == nullptr) {
+  if (bytes_to_read_ == 0 || read_buf_ == nullptr) {
+    addReadRequest();
     return {0, Api::IoErrorPtr(IoSocketError::getIoSocketEagainInstance(),
                                IoSocketError::deleteIoError)};
   }
@@ -105,6 +107,7 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::read(Buffer::Instance& buffer,
   }
 
   if (bytes_to_read_ == 0 || read_buf_ == nullptr) {
+    addReadRequest();
     return {0, Api::IoErrorPtr(IoSocketError::getIoSocketEagainInstance(),
                                IoSocketError::deleteIoError)};
   }
@@ -157,9 +160,6 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::writev(const Buffer::RawSlice* 
     }
     // Need to ensure the write request submitted.
     uring.submit();
-    // Make the IO handle start reading to avoid read timeout in procedures out of Envoy's scope
-    // including handshaking of TLS.
-    addReadRequest();
   }
 
   if (bytes_to_write_ == 0) {
