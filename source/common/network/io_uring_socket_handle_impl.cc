@@ -120,7 +120,6 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::writev(const Buffer::RawSlice* 
     return {0, Api::IoErrorPtr(new IoSocketError(bytes_to_read_), IoSocketError::deleteIoError)};
   }
 
-  is_write_added_ = true; // don't add WRITE if it's been already added.
   struct iovec* iovecs = new struct iovec[num_slice];
   struct iovec* iov = iovecs;
   uint64_t num_slices_to_write = 0;
@@ -129,26 +128,42 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::writev(const Buffer::RawSlice* 
       buffer.add(slices[i].mem_, slices[i].len_);
     }
   }
-  return write(buffer);
+
+  if (num_slices_to_write > 0) {
+    is_write_added_ = true; // don't add WRITE if it's been already added.
+    auto req = new Request{*this, RequestType::Write, iovecs};
+    auto& uring = io_uring_factory_.get().ref();
+    auto res = uring.prepareWritev(fd_, iovecs, num_slice, 0, req);
+    if (res == Io::IoUringResult::Failed) {
+      // TODO(rojkov): handle `EBUSY` in case the completion queue is never reaped.
+      uring.submit();
+      res = uring.prepareWritev(fd_, iovecs, num_slice, 0, req);
+      RELEASE_ASSERT(res == Io::IoUringResult::Ok, "unable to prepare writev");
+    }
+    // Need to ensure the write request submitted.
+    uring.submit();
+    // Make the IO handle start reading to avoid read timeout in procedures out of Envoy's scope
+    // including handshaking of TLS.
+    addReadRequest();
+  }
+
+  if (bytes_to_write_ == 0) {
+    return {0, Api::IoErrorPtr(IoSocketError::getIoSocketEagainInstance(),
+                               IoSocketError::deleteIoError)};
+  }
+
+  uint64_t len = bytes_to_write_;
+  bytes_to_write_ = 0;
+  return {len, Api::IoErrorPtr(nullptr, IoSocketError::deleteIoError)};
 }
 
 Api::IoCallUint64Result IoUringSocketHandleImpl::write(Buffer::Instance& buffer) {
-  auto length = buffer.length();
-  ASSERT(length > 0);
-
-  while (buffer.length() > 0) {
-    // The buffer must not own the data after it has been extracted and put into
-    // the `io-uring` submission queue to avoid freeing it before the writev
-    // operation is completed.
-    Buffer::SliceDataPtr data = buffer.extractMutableFrontSlice();
-    write_buf_.push_back(std::move(data));
+  if (bytes_to_write_ > 0) {
+    buffer.drain(static_cast<uint64_t>(bytes_to_write_));
   }
 
-  addWriteRequest();
-  // Need to ensure the write request submitted.
-  auto& uring = io_uring_factory_.get().ref();
-  uring.submit();
-  return {length, Api::IoErrorPtr(nullptr, IoSocketError::deleteIoError)};
+  Buffer::RawSliceVector slices = buffer.getRawSlices();
+  return writev(slices.begin(), slices.size());
 }
 
 Api::IoCallUint64Result
@@ -465,6 +480,7 @@ void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Reques
 
     iohandle.bytes_to_write_ = result;
     iohandle.is_write_added_ = false;
+    iohandle.cb_(Event::FileReadyType::Write);
     break;
   }
   case RequestType::Close:
