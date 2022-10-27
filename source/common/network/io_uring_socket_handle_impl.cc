@@ -101,7 +101,7 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::read(Buffer::Instance& buffer,
   }
 
   if (bytes_to_read_ < 0) {
-    return {0, Api::IoErrorPtr(new IoSocketError(bytes_to_read_), IoSocketError::deleteIoError)};
+    return {0, Api::IoErrorPtr(new IoSocketError(-bytes_to_read_), IoSocketError::deleteIoError)};
   }
 
   if (bytes_to_read_ == 0 || read_buf_ == nullptr) {
@@ -130,7 +130,7 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::writev(const Buffer::RawSlice* 
   }
 
   if (bytes_to_write_ < 0) {
-    return {0, Api::IoErrorPtr(new IoSocketError(bytes_to_read_), IoSocketError::deleteIoError)};
+    return {0, Api::IoErrorPtr(new IoSocketError(-bytes_to_read_), IoSocketError::deleteIoError)};
   }
 
   struct iovec* iovecs = new struct iovec[num_slice];
