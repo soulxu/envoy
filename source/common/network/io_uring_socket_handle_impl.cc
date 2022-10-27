@@ -460,11 +460,11 @@ void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Reques
     }
     break;
   case RequestType::Read: {
-    ASSERT(req.iohandle_.has_value());
     // Read is cancellable.
     if (result == -ECANCELED) {
       return;
     }
+    ASSERT(req.iohandle_.has_value());
     auto& iohandle = req.iohandle_->get();
     // This is hacky fix, we should check the req is valid or not.
     if (iohandle.fd_ == -1) {
