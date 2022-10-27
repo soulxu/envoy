@@ -71,7 +71,7 @@ bool IoUringSocketHandleImpl::isOpen() const { return SOCKET_VALID(fd_); }
 Api::IoCallUint64Result IoUringSocketHandleImpl::readv(uint64_t /* max_length */,
                                                        Buffer::RawSlice* slices,
                                                        uint64_t num_slice) {
-  if (read_buf_ == nullptr) {
+  if (bytes_to_read_ == 0 || read_buf_ == nullptr) {
     return {0, Api::IoErrorPtr(IoSocketError::getIoSocketEagainInstance(),
                                IoSocketError::deleteIoError)};
   }
