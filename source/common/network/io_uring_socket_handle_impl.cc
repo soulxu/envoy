@@ -482,11 +482,18 @@ void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Reques
     }
     break;
   }
-  case RequestType::Connect:
+  case RequestType::Connect: {
     ASSERT(req.iohandle_.has_value());
-    req.iohandle_->get().cb_(result < 0 ? Event::FileReadyType::Closed
-                                        : Event::FileReadyType::Write);
+    auto& iohandle = req.iohandle_->get();
+    if (result < 0) {
+      iohandle.cb_(Event::FileReadyType::Closed);
+      break;
+    }
+
+    iohandle.cb_(Event::FileReadyType::Write);
+    iohandle.addReadRequest();
     break;
+  }
   case RequestType::Write: {
     ASSERT(req.iohandle_.has_value());
     auto& iohandle = req.iohandle_->get();
