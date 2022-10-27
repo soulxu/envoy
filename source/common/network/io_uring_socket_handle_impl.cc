@@ -138,7 +138,9 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::writev(const Buffer::RawSlice* 
   uint64_t num_slices_to_write = 0;
   for (uint64_t i = 0; i < num_slice; ++i) {
     if (slices[i].mem_ != nullptr && slices[i].len_ != 0) {
-      buffer.add(slices[i].mem_, slices[i].len_);
+      iov[num_slices_to_write].iov_base = slices[i].mem_;
+      iov[num_slices_to_write].iov_len = slices[i].len_;
+      num_slices_to_write++;
     }
   }
 
