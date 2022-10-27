@@ -453,8 +453,8 @@ void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Reques
       ENVOY_LOG_MISC(debug, "the uring's fd already closed");
       break;
     }
-    iohandle.bytes_to_read_ = result;
 
+    iohandle.bytes_to_read_ = result;
     if (result == 0) {
       iohandle.remote_closed_ = true;
     }
