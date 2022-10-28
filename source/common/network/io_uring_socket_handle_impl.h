@@ -123,6 +123,7 @@ private:
   struct iovec iov_;
   std::unique_ptr<uint8_t[]> read_buf_{nullptr};
   int32_t bytes_to_read_{0};
+  int32_t bytes_have_read_{0};
   Request* read_req_{nullptr};
   bool is_read_enabled_{true};
   int32_t bytes_to_write_{0};

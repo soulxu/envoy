@@ -70,7 +70,7 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::close() {
 bool IoUringSocketHandleImpl::isOpen() const { return SOCKET_VALID(fd_); }
 
 Api::IoCallUint64Result
-IoUringSocketHandleImpl::readv(uint64_t /* max_length */, Buffer::RawSlice* slices, uint64_t num_slice) {
+IoUringSocketHandleImpl::readv(uint64_t max_length, Buffer::RawSlice* slices, uint64_t num_slice) {
   if (remote_closed_) {
     return Api::ioCallUint64ResultNoError();
   }
@@ -84,23 +84,30 @@ IoUringSocketHandleImpl::readv(uint64_t /* max_length */, Buffer::RawSlice* slic
                                IoSocketError::deleteIoError)};
   }
 
+  const uint64_t max_read_length =
+      std::min(max_length, static_cast<uint64_t>(bytes_to_read_ - bytes_have_read_));
   uint64_t num_slices_to_read = 0;
   uint64_t num_bytes_to_read = 0;
-  for (;
-       num_slices_to_read < num_slice && num_bytes_to_read < static_cast<uint64_t>(bytes_to_read_);
+  for (; num_slices_to_read < num_slice && num_bytes_to_read < max_read_length;
        num_slices_to_read++) {
-    const size_t slice_length = std::min(slices[num_slices_to_read].len_,
-                                         static_cast<size_t>(bytes_to_read_ - num_bytes_to_read));
-    memcpy(slices[num_slices_to_read].mem_, read_buf_.get() + num_bytes_to_read, slice_length);
+    const size_t slice_length =
+        std::min(slices[num_slices_to_read].len_,
+                 static_cast<size_t>(bytes_to_read_ - bytes_have_read_ - num_bytes_to_read));
+    memcpy(slices[num_slices_to_read].mem_, read_buf_.get() + bytes_have_read_ + num_bytes_to_read,
+           slice_length);
     num_bytes_to_read += slice_length;
   }
-  ASSERT(num_bytes_to_read <= static_cast<uint64_t>(bytes_to_read_));
-  read_buf_ = nullptr;
-  read_req_ = nullptr;
+  bytes_have_read_ += num_bytes_to_read;
+  ASSERT(num_bytes_to_read <= max_read_length);
+  if (bytes_to_read_ == bytes_have_read_) {
+    read_buf_ = nullptr;
+    bytes_to_read_ = 0;
+    bytes_have_read_ = 0;
+    read_req_ = nullptr;
+    addReadRequest();
+  }
 
-  uint64_t len = bytes_to_read_;
-  bytes_to_read_ = 0;
-  return {len, Api::IoErrorPtr(nullptr, IoSocketError::deleteIoError)};
+  return {num_bytes_to_read, Api::IoErrorPtr(nullptr, IoSocketError::deleteIoError)};
 }
 
 Api::IoCallUint64Result IoUringSocketHandleImpl::read(Buffer::Instance& buffer,
@@ -474,9 +481,6 @@ void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Reques
       iohandle.remote_closed_ = true;
     }
     iohandle.cb_(Event::FileReadyType::Read);
-    if (result > 0) {
-      iohandle.addReadRequest();
-    }
     break;
   }
   case RequestType::Connect:
