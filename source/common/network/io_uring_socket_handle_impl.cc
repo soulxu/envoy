@@ -70,8 +70,8 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::close() {
 bool IoUringSocketHandleImpl::isOpen() const { return SOCKET_VALID(fd_); }
 
 Api::IoCallUint64Result
-IoUringSocketHandleImpl::readv(uint64_t max_length, Buffer::RawSlice* slices, uint64_t num_slice) {
-  if (max_length == 0 || remote_closed_) {
+IoUringSocketHandleImpl::readv(uint64_t /* max_length */, Buffer::RawSlice* slices, uint64_t num_slice) {
+  if (remote_closed_) {
     return Api::ioCallUint64ResultNoError();
   }
 
@@ -95,6 +95,7 @@ IoUringSocketHandleImpl::readv(uint64_t max_length, Buffer::RawSlice* slices, ui
     num_bytes_to_read += slice_length;
   }
   ASSERT(num_bytes_to_read <= static_cast<uint64_t>(bytes_to_read_));
+  read_buf_ = nullptr;
   read_req_ = nullptr;
 
   uint64_t len = bytes_to_read_;
@@ -105,31 +106,17 @@ IoUringSocketHandleImpl::readv(uint64_t max_length, Buffer::RawSlice* slices, ui
 Api::IoCallUint64Result IoUringSocketHandleImpl::read(Buffer::Instance& buffer,
                                                       absl::optional<uint64_t> max_length_opt) {
   const uint64_t max_length = max_length_opt.value_or(UINT64_MAX);
-  if (max_length == 0 || remote_closed_) {
+  if (max_length == 0) {
     return Api::ioCallUint64ResultNoError();
   }
 
-  if (bytes_to_read_ < 0) {
-    return {0, Api::IoErrorPtr(new IoSocketError(-bytes_to_read_), IoSocketError::deleteIoError)};
-  }
-
-  if (bytes_to_read_ == 0 || read_buf_ == nullptr) {
-    return {0, Api::IoErrorPtr(IoSocketError::getIoSocketEagainInstance(),
-                               IoSocketError::deleteIoError)};
-  }
-
-  auto fragment = new Buffer::BufferFragmentImpl(
-      read_buf_.release(), bytes_to_read_,
-      [](const void* data, size_t /*len*/, const Buffer::BufferFragmentImpl* this_fragment) {
-        delete[] reinterpret_cast<const uint8_t*>(data);
-        delete this_fragment;
-      });
-  buffer.addBufferFragment(*fragment);
-  read_req_ = nullptr;
-
-  uint64_t len = bytes_to_read_;
-  bytes_to_read_ = 0;
-  return {len, Api::IoErrorPtr(nullptr, IoSocketError::deleteIoError)};
+  Buffer::Reservation reservation = buffer.reserveForRead();
+  Api::IoCallUint64Result result = readv(std::min(reservation.length(), max_length),
+                                         reservation.slices(), reservation.numSlices());
+  uint64_t bytes_to_commit = result.ok() ? result.return_value_ : 0;
+  ASSERT(bytes_to_commit <= max_length);
+  reservation.commit(bytes_to_commit);
+  return result;
 }
 
 Api::IoCallUint64Result IoUringSocketHandleImpl::writev(const Buffer::RawSlice* slices,
