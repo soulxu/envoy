@@ -86,24 +86,24 @@ IoUringSocketHandleImpl::readv(uint64_t max_length, Buffer::RawSlice* slices, ui
   }
 
   const uint64_t max_read_length =
-      std::min(max_length, static_cast<uint64_t>(bytes_to_read_ - bytes_have_read_));
+      std::min(max_length, static_cast<uint64_t>(bytes_to_read_ - bytes_already_read_));
   uint64_t num_slices_to_read = 0;
   uint64_t num_bytes_to_read = 0;
   for (; num_slices_to_read < num_slice && num_bytes_to_read < max_read_length;
        num_slices_to_read++) {
     const size_t slice_length =
         std::min(slices[num_slices_to_read].len_,
-                 static_cast<size_t>(bytes_to_read_ - bytes_have_read_ - num_bytes_to_read));
-    memcpy(slices[num_slices_to_read].mem_, read_buf_.get() + bytes_have_read_ + num_bytes_to_read,
-           slice_length);
+                 static_cast<size_t>(bytes_to_read_ - bytes_already_read_ - num_bytes_to_read));
+    memcpy(slices[num_slices_to_read].mem_,
+           read_buf_.get() + bytes_already_read_ + num_bytes_to_read, slice_length);
     num_bytes_to_read += slice_length;
   }
-  bytes_have_read_ += num_bytes_to_read;
+  bytes_already_read_ += num_bytes_to_read;
   ASSERT(num_bytes_to_read <= max_read_length);
-  if (bytes_to_read_ == bytes_have_read_) {
+  if (bytes_to_read_ == bytes_already_read_) {
     read_buf_ = nullptr;
     bytes_to_read_ = 0;
-    bytes_have_read_ = 0;
+    bytes_already_read_ = 0;
     read_req_ = nullptr;
     addReadRequest();
   }
@@ -134,13 +134,13 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::writev(const Buffer::RawSlice* 
                                IoSocketError::deleteIoError)};
   }
 
-  if (bytes_to_write_ < 0) {
+  if (bytes_already_wrote_ < 0) {
     return {0, Api::IoErrorPtr(new IoSocketError(-bytes_to_read_), IoSocketError::deleteIoError)};
   }
 
-  if (bytes_to_write_ > 0) {
-    uint64_t len = bytes_to_write_;
-    bytes_to_write_ = 0;
+  if (bytes_already_wrote_ > 0) {
+    uint64_t len = bytes_already_wrote_;
+    bytes_already_wrote_ = 0;
     return {len, Api::IoErrorPtr(nullptr, IoSocketError::deleteIoError)};
   }
 
@@ -175,8 +175,10 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::writev(const Buffer::RawSlice* 
 }
 
 Api::IoCallUint64Result IoUringSocketHandleImpl::write(Buffer::Instance& buffer) {
-  if (bytes_to_write_ > 0) {
-    buffer.drain(static_cast<uint64_t>(bytes_to_write_));
+  // If buffer gets written and drained, the following writev will return bytes_already_wrote_
+  // directly.
+  if (bytes_already_wrote_ > 0) {
+    buffer.drain(static_cast<uint64_t>(bytes_already_wrote_));
   }
 
   Buffer::RawSliceVector slices = buffer.getRawSlices();
@@ -498,7 +500,7 @@ void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Reques
       break;
     }
 
-    iohandle.bytes_to_write_ = result;
+    iohandle.bytes_already_wrote_ = result;
     iohandle.is_write_added_ = false;
     iohandle.cb_(Event::FileReadyType::Write);
     break;

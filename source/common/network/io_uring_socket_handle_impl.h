@@ -123,10 +123,10 @@ private:
   struct iovec iov_;
   std::unique_ptr<uint8_t[]> read_buf_{nullptr};
   int32_t bytes_to_read_{0};
-  int32_t bytes_have_read_{0};
+  int32_t bytes_already_read_{0};
   Request* read_req_{nullptr};
   bool is_read_enabled_{true};
-  int32_t bytes_to_write_{0};
+  int32_t bytes_already_wrote_{0};
   bool is_write_added_{false};
   std::unique_ptr<FileEventAdapter> file_event_adapter_{nullptr};
   bool remote_closed_{false};
