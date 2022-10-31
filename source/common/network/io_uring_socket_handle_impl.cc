@@ -135,7 +135,8 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::writev(const Buffer::RawSlice* 
   }
 
   if (bytes_already_wrote_ < 0) {
-    return {0, Api::IoErrorPtr(new IoSocketError(-bytes_to_read_), IoSocketError::deleteIoError)};
+    return {
+        0, Api::IoErrorPtr(new IoSocketError(-bytes_already_wrote_), IoSocketError::deleteIoError)};
   }
 
   if (bytes_already_wrote_ > 0) {
