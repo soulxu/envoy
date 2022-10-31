@@ -5,7 +5,6 @@
 #include "envoy/event/dispatcher.h"
 
 #include "source/common/api/os_sys_calls_impl.h"
-#include "source/common/buffer/buffer_impl.h"
 #include "source/common/common/assert.h"
 #include "source/common/common/utility.h"
 #include "source/common/io/io_uring.h"
@@ -79,31 +78,19 @@ IoUringSocketHandleImpl::readv(uint64_t max_length, Buffer::RawSlice* slices, ui
     return {0, Api::IoErrorPtr(new IoSocketError(-bytes_to_read_), IoSocketError::deleteIoError)};
   }
 
-  if (bytes_to_read_ == 0 || read_buf_ == nullptr) {
+  if (bytes_to_read_ == 0 || read_req_ == nullptr) {
     addReadRequest();
     return {0, Api::IoErrorPtr(IoSocketError::getIoSocketEagainInstance(),
                                IoSocketError::deleteIoError)};
   }
 
-  const uint64_t max_read_length =
-      std::min(max_length, static_cast<uint64_t>(bytes_to_read_ - bytes_already_read_));
-  uint64_t num_slices_to_read = 0;
-  uint64_t num_bytes_to_read = 0;
-  for (; num_slices_to_read < num_slice && num_bytes_to_read < max_read_length;
-       num_slices_to_read++) {
-    const size_t slice_length =
-        std::min(slices[num_slices_to_read].len_,
-                 static_cast<size_t>(bytes_to_read_ - bytes_already_read_ - num_bytes_to_read));
-    memcpy(slices[num_slices_to_read].mem_,
-           read_buf_.get() + bytes_already_read_ + num_bytes_to_read, slice_length);
-    num_bytes_to_read += slice_length;
-  }
-  bytes_already_read_ += num_bytes_to_read;
+  const uint64_t max_read_length = std::min(max_length, static_cast<uint64_t>(bytes_to_read_));
+  uint64_t num_bytes_to_read = read_buf_.copyOutToSlices(max_read_length, slices, num_slice);
   ASSERT(num_bytes_to_read <= max_read_length);
-  if (bytes_to_read_ == bytes_already_read_) {
-    read_buf_ = nullptr;
+  read_buf_.drain(num_bytes_to_read);
+  bytes_to_read_ -= num_bytes_to_read;
+  if (bytes_to_read_ == 0) {
     bytes_to_read_ = 0;
-    bytes_already_read_ = 0;
     read_req_ = nullptr;
     addReadRequest();
   }
@@ -364,17 +351,17 @@ void IoUringSocketHandleImpl::addReadRequest() {
     return;
   }
 
-  ASSERT(read_buf_ == nullptr);
-  read_buf_ = std::unique_ptr<uint8_t[]>(new uint8_t[read_buffer_size_]);
-  iov_.iov_base = read_buf_.get();
-  iov_.iov_len = read_buffer_size_;
-  auto& uring = io_uring_factory_.get().ref();
   read_req_ = new Request{*this, RequestType::Read};
-  auto res = uring.prepareReadv(fd_, &iov_, 1, 0, read_req_);
+  read_req_->buf_ = std::make_unique<uint8_t[]>(read_buffer_size_);
+  read_req_->iov_ = new struct iovec[1];
+  read_req_->iov_->iov_base = read_req_->buf_.get();
+  read_req_->iov_->iov_len = read_buffer_size_;
+  auto& uring = io_uring_factory_.get().ref();
+  auto res = uring.prepareReadv(fd_, read_req_->iov_, 1, 0, read_req_);
   if (res == Io::IoUringResult::Failed) {
     // TODO(rojkov): handle `EBUSY` in case the completion queue is never reaped.
     uring.submit();
-    res = uring.prepareReadv(fd_, &iov_, 1, 0, read_req_);
+    res = uring.prepareReadv(fd_, read_req_->iov_, 1, 0, read_req_);
     RELEASE_ASSERT(res == Io::IoUringResult::Ok, "unable to prepare readv");
   }
 }
@@ -481,6 +468,15 @@ void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Reques
     if (result == 0) {
       iohandle.remote_closed_ = true;
     }
+    if (result > 0) {
+      Buffer::BufferFragment* fragment = new Buffer::BufferFragmentImpl(
+          const_cast<Request&>(req).buf_.release(), result,
+          [](const void* data, size_t /*len*/, const Buffer::BufferFragmentImpl* this_fragment) {
+            delete[] reinterpret_cast<const uint8_t*>(data);
+            delete this_fragment;
+          });
+      iohandle.read_buf_.addBufferFragment(*fragment);
+    }
     iohandle.cb_(Event::FileReadyType::Read);
     break;
   }
@@ -524,6 +520,9 @@ void IoUringSocketHandleImpl::FileEventAdapter::onFileEvent() {
   uring.forEveryCompletion([this](void* user_data, int32_t result) {
     auto req = static_cast<Request*>(user_data);
     onRequestCompletion(*req, result);
+    if (req->iov_) {
+      delete[] req->iov_;
+    }
     delete req;
   });
   uring.submit();
