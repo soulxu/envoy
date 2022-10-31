@@ -80,6 +80,7 @@ IoUringSocketHandleImpl::readv(uint64_t max_length, Buffer::RawSlice* slices, ui
   }
 
   if (bytes_to_read_ == 0 || read_buf_ == nullptr) {
+    addReadRequest();
     return {0, Api::IoErrorPtr(IoSocketError::getIoSocketEagainInstance(),
                                IoSocketError::deleteIoError)};
   }
@@ -137,6 +138,12 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::writev(const Buffer::RawSlice* 
     return {0, Api::IoErrorPtr(new IoSocketError(-bytes_to_read_), IoSocketError::deleteIoError)};
   }
 
+  if (bytes_to_write_ > 0) {
+    uint64_t len = bytes_to_write_;
+    bytes_to_write_ = 0;
+    return {len, Api::IoErrorPtr(nullptr, IoSocketError::deleteIoError)};
+  }
+
   struct iovec* iovecs = new struct iovec[num_slice];
   struct iovec* iov = iovecs;
   uint64_t num_slices_to_write = 0;
@@ -161,19 +168,10 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::writev(const Buffer::RawSlice* 
     }
     // Need to ensure the write request submitted.
     uring.submit();
-    // Make the IO handle start reading to avoid read timeout in procedures out of Envoy's scope
-    // including handshaking of TLS.
-    addReadRequest();
   }
 
-  if (bytes_to_write_ == 0) {
-    return {0, Api::IoErrorPtr(IoSocketError::getIoSocketEagainInstance(),
-                               IoSocketError::deleteIoError)};
-  }
-
-  uint64_t len = bytes_to_write_;
-  bytes_to_write_ = 0;
-  return {len, Api::IoErrorPtr(nullptr, IoSocketError::deleteIoError)};
+  return {
+      0, Api::IoErrorPtr(IoSocketError::getIoSocketEagainInstance(), IoSocketError::deleteIoError)};
 }
 
 Api::IoCallUint64Result IoUringSocketHandleImpl::write(Buffer::Instance& buffer) {
@@ -481,6 +479,9 @@ void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Reques
       iohandle.remote_closed_ = true;
     }
     iohandle.cb_(Event::FileReadyType::Read);
+    if (result > 0) {
+      iohandle.addReadRequest();
+    }
     break;
   }
   case RequestType::Connect:
