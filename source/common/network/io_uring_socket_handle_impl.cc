@@ -473,7 +473,7 @@ void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Reques
     // This is hacky fix, we should check the req is valid or not.
     if (iohandle.fd_ == -1) {
       ENVOY_LOG_MISC(debug, "the uring's fd already closed");
-      break;
+      return;
     }
 
     iohandle.bytes_to_read_ = result;
@@ -481,23 +481,27 @@ void IoUringSocketHandleImpl::FileEventAdapter::onRequestCompletion(const Reques
       iohandle.remote_closed_ = true;
     }
     iohandle.cb_(Event::FileReadyType::Read);
-    if (result > 0) {
-      iohandle.addReadRequest();
-    }
     break;
   }
-  case RequestType::Connect:
+  case RequestType::Connect: {
     ASSERT(req.iohandle_.has_value());
-    req.iohandle_->get().cb_(result < 0 ? Event::FileReadyType::Closed
-                                        : Event::FileReadyType::Write);
+    auto& iohandle = req.iohandle_->get();
+    if (result < 0) {
+      iohandle.cb_(Event::FileReadyType::Closed);
+      return;
+    }
+
+    iohandle.cb_(Event::FileReadyType::Write);
+    iohandle.addReadRequest();
     break;
+  }
   case RequestType::Write: {
     ASSERT(req.iohandle_.has_value());
     auto& iohandle = req.iohandle_->get();
     // This is hacky fix, we should check the req is valid or not.
     if (iohandle.fd_ == -1) {
       ENVOY_LOG_MISC(debug, "the uring's fd already closed");
-      break;
+      return;
     }
 
     iohandle.bytes_already_wrote_ = result;
