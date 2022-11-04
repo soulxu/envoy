@@ -107,6 +107,8 @@ private:
     socklen_t remote_addr_len_{sizeof(remote_addr_)};
   };
 
+  Api::IoCallUint64Result copyOut(uint64_t max_length, Buffer::RawSlice* slices,
+                                  uint64_t num_slice);
   void addReadRequest();
   // Checks if the io handle is the one that registered eventfd with `io_uring`.
   // An io handle can be a leader in two cases:
