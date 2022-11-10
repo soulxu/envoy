@@ -193,14 +193,13 @@ void IoUringImpl::onFileEvent() {
 
   for (unsigned i = 0; i < count; ++i) {
     struct io_uring_cqe* cqe = cqes_[i];
-    if (!cbs_.contains(cqe->user_data)) {
+    CompletionCb cb = cbs_[cqe->user_data];
+    if (cb == nullptr) {
       ENVOY_LOG_MISC(warn, "ignore CQ without correspoding callback");
       continue;
     }
 
-    CompletionCb cb = cbs_[cqe->user_data];
     cb(reinterpret_cast<void*>(cqe->user_data), cqe->res);
-
     cbs_.erase(cqe->user_data);
   }
   io_uring_cq_advance(&ring_, count);
