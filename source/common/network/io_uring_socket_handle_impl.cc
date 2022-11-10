@@ -218,7 +218,7 @@ Api::SysCallIntResult IoUringSocketHandleImpl::bind(Address::InstanceConstShared
 }
 
 Api::SysCallIntResult IoUringSocketHandleImpl::listen(int backlog) {
-  addAcceptRequest();
+  is_listener_ = true;
   return Api::OsSysCallsSingleton::get().listen(fd_, backlog);
 }
 
@@ -327,6 +327,9 @@ Address::InstanceConstSharedPtr IoUringSocketHandleImpl::peerAddress() {
 void IoUringSocketHandleImpl::initializeFileEvent(Event::Dispatcher&, Event::FileReadyCb cb,
                                                   Event::FileTriggerType, uint32_t) {
   cb_ = std::move(cb);
+  if (is_listener_) {
+    addAcceptRequest();
+  }
 }
 
 IoHandlePtr IoUringSocketHandleImpl::duplicate() { PANIC("not implemented"); }

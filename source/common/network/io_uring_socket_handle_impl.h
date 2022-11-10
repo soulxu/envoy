@@ -92,6 +92,7 @@ private:
   int socket_v6only_;
   const absl::optional<int> domain_;
 
+  bool is_listener_{false};
   Event::FileReadyCb cb_;
   Buffer::OwnedImpl read_buf_;
   int32_t bytes_to_read_{0};
@@ -99,7 +100,7 @@ private:
   bool is_read_enabled_{true};
   int32_t bytes_already_wrote_{0};
   bool is_write_added_{false};
-  os_fd_t connection_fd_;
+  os_fd_t connection_fd_{INVALID_SOCKET};
   struct sockaddr connection_addr_;
   socklen_t connection_addr_len_;
   Request* accept_req_{nullptr};
