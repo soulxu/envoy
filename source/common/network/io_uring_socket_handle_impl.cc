@@ -459,6 +459,10 @@ void IoUringSocketHandleImpl::onRequestCompletion(Request* request, int32_t resu
   if (result < 0) {
     ENVOY_LOG(debug, "async request failed: {}", errorDetails(-result));
   }
+  // TODO(zhxie): Cancel requests instead of escaping completion.
+  if (!SOCKET_VALID(fd_)) {
+    return;
+  }
 
   switch (request->type_) {
   case RequestType::Accept:
