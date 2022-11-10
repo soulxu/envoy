@@ -224,7 +224,6 @@ Api::SysCallIntResult IoUringSocketHandleImpl::listen(int backlog) {
 
 IoHandlePtr IoUringSocketHandleImpl::accept(struct sockaddr* addr, socklen_t* addrlen) {
   if (accept_req_ == nullptr) {
-    addAcceptRequest();
     return nullptr;
   }
 
@@ -236,7 +235,6 @@ IoHandlePtr IoUringSocketHandleImpl::accept(struct sockaddr* addr, socklen_t* ad
                                                              connection_fd_);
   SET_SOCKET_INVALID(connection_fd_);
   io_handle->addReadRequest();
-  addAcceptRequest();
   return io_handle;
 }
 
@@ -329,6 +327,8 @@ void IoUringSocketHandleImpl::initializeFileEvent(Event::Dispatcher&, Event::Fil
   cb_ = std::move(cb);
   if (is_listener_) {
     addAcceptRequest();
+    auto& uring = io_uring_factory_.get().ref();
+    uring.submit();
   }
 }
 
@@ -436,10 +436,6 @@ void IoUringSocketHandleImpl::addReadRequest() {
 }
 
 void IoUringSocketHandleImpl::addAcceptRequest() {
-  if (accept_req_) {
-    return;
-  }
-
   accept_req_ = new Request{RequestType::Accept};
   auto& uring = io_uring_factory_.get().ref();
   auto res = uring.prepareAccept(fd_, &accept_req_->remote_addr_, &accept_req_->remote_addr_len_,
@@ -467,6 +463,7 @@ void IoUringSocketHandleImpl::onRequestCompletion(Request* request, int32_t resu
   switch (request->type_) {
   case RequestType::Accept:
     ASSERT(!SOCKET_VALID(connection_fd_));
+    addAcceptRequest();
     connection_fd_ = result;
     connection_addr_ = request->remote_addr_;
     connection_addr_len_ = request->remote_addr_len_;
