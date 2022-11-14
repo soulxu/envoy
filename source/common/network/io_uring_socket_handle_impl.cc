@@ -223,18 +223,18 @@ Api::SysCallIntResult IoUringSocketHandleImpl::listen(int backlog) {
 }
 
 IoHandlePtr IoUringSocketHandleImpl::accept(struct sockaddr* addr, socklen_t* addrlen) {
-  if (accept_req_ == nullptr) {
+  if (accept_req_ == nullptr || SOCKET_INVALID(connection_fd_)) {
     return nullptr;
   }
 
-  ASSERT(SOCKET_VALID(connection_fd_));
-  accept_req_ = nullptr;
   *addr = connection_addr_;
   *addrlen = connection_addr_len_;
   auto io_handle = std::make_unique<IoUringSocketHandleImpl>(read_buffer_size_, io_uring_factory_,
                                                              connection_fd_);
-  SET_SOCKET_INVALID(connection_fd_);
   io_handle->addReadRequest();
+  SET_SOCKET_INVALID(connection_fd_);
+  accept_req_ = nullptr;
+  addAcceptRequest();
   return io_handle;
 }
 
@@ -410,7 +410,7 @@ absl::optional<std::string> IoUringSocketHandleImpl::interfaceName() {
 }
 
 void IoUringSocketHandleImpl::addReadRequest() {
-  if (!is_read_enabled_ || !SOCKET_VALID(fd_) || read_req_) {
+  if (!is_read_enabled_ || SOCKET_INVALID(fd_) || read_req_) {
     return;
   }
 
@@ -436,6 +436,10 @@ void IoUringSocketHandleImpl::addReadRequest() {
 }
 
 void IoUringSocketHandleImpl::addAcceptRequest() {
+  if (accept_req_) {
+    return;
+  }
+
   accept_req_ = new Request{RequestType::Accept};
   auto& uring = io_uring_factory_.get().ref();
   auto res = uring.prepareAccept(fd_, &accept_req_->remote_addr_, &accept_req_->remote_addr_len_,
@@ -460,14 +464,13 @@ void IoUringSocketHandleImpl::onRequestCompletion(Request* request, int32_t resu
     ENVOY_LOG(debug, "async request failed: {}", errorDetails(-result));
   }
   // TODO(zhxie): Cancel requests instead of escaping completion.
-  if (!SOCKET_VALID(fd_)) {
+  if (SOCKET_INVALID(fd_)) {
     return;
   }
 
   switch (request->type_) {
   case RequestType::Accept:
-    ASSERT(!SOCKET_VALID(connection_fd_));
-    addAcceptRequest();
+    ASSERT(SOCKET_INVALID(connection_fd_));
     connection_fd_ = result;
     connection_addr_ = request->remote_addr_;
     connection_addr_len_ = request->remote_addr_len_;
