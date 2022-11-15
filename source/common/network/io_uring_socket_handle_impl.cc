@@ -38,35 +38,34 @@ IoUringSocketHandleImpl::~IoUringSocketHandleImpl() {
 
 Api::IoCallUint64Result IoUringSocketHandleImpl::close() {
   ASSERT(SOCKET_VALID(fd_));
-  auto& uring = io_uring_factory_.get().ref();
   if (read_req_) {
     auto req = new Request{RequestType::Cancel};
-    auto res = uring.prepareCancel(read_req_, req, nullptr);
+    auto res = ioUring().prepareCancel(read_req_, req, nullptr);
     if (res == Io::IoUringResult::Failed) {
       // TODO(rojkov): handle `EBUSY` in case the completion queue is never reaped.
-      uring.submit();
-      res = uring.prepareCancel(read_req_, req, nullptr);
+      ioUring().submit();
+      res = ioUring().prepareCancel(read_req_, req, nullptr);
       RELEASE_ASSERT(res == Io::IoUringResult::Ok, "unable to prepare cancel");
     }
   }
   if (accept_req_) {
     auto req = new Request{RequestType::Cancel};
-    auto res = uring.prepareCancel(accept_req_, req, nullptr);
+    auto res = ioUring().prepareCancel(accept_req_, req, nullptr);
     if (res == Io::IoUringResult::Failed) {
       // TODO(rojkov): handle `EBUSY` in case the completion queue is never reaped.
-      uring.submit();
-      res = uring.prepareCancel(accept_req_, req, nullptr);
+      ioUring().submit();
+      res = ioUring().prepareCancel(accept_req_, req, nullptr);
       RELEASE_ASSERT(res == Io::IoUringResult::Ok, "unable to prepare cancel");
     }
   }
 
   auto req = new Request{RequestType::Close};
-  auto res = uring.prepareClose(fd_, req, nullptr);
+  auto res = ioUring().prepareClose(fd_, req, nullptr);
   if (res == Io::IoUringResult::Failed) {
     // Fall back to posix system call.
     ::close(fd_);
   }
-  uring.submit();
+  ioUring().submit();
   SET_SOCKET_INVALID(fd_);
   return Api::ioCallUint64ResultNoError();
 }
@@ -150,22 +149,21 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::writev(const Buffer::RawSlice* 
   if (num_slices_to_write > 0) {
     is_write_added_ = true; // don't add WRITE if it's been already added.
     auto req = new Request{RequestType::Write, iovecs};
-    auto& uring = io_uring_factory_.get().ref();
-    auto res = uring.prepareWritev(
+    auto res = ioUring().prepareWritev(
         fd_, iovecs, num_slice, 0, req, [this](void* user_data, int32_t result) {
           this->onRequestCompletion(reinterpret_cast<Request*>(user_data), result);
         });
     if (res == Io::IoUringResult::Failed) {
       // TODO(rojkov): handle `EBUSY` in case the completion queue is never reaped.
-      uring.submit();
-      res = uring.prepareWritev(
+      ioUring().submit();
+      res = ioUring().prepareWritev(
           fd_, iovecs, num_slice, 0, req, [this](void* user_data, int32_t result) {
             this->onRequestCompletion(reinterpret_cast<Request*>(user_data), result);
           });
       RELEASE_ASSERT(res == Io::IoUringResult::Ok, "unable to prepare writev");
     }
     // Need to ensure the write request submitted.
-    uring.submit();
+    ioUring().submit();
   }
 
   return {
@@ -238,23 +236,22 @@ IoHandlePtr IoUringSocketHandleImpl::accept(struct sockaddr* addr, socklen_t* ad
 }
 
 Api::SysCallIntResult IoUringSocketHandleImpl::connect(Address::InstanceConstSharedPtr address) {
-  auto& uring = io_uring_factory_.get().ref();
   auto req = new Request{RequestType::Connect};
-  auto res = uring.prepareConnect(fd_, address, req, [this](void* user_data, int32_t result) {
+  auto res = ioUring().prepareConnect(fd_, address, req, [this](void* user_data, int32_t result) {
     this->onRequestCompletion(reinterpret_cast<Request*>(user_data), result);
   });
   if (res == Io::IoUringResult::Failed) {
-    res = uring.submit();
+    res = ioUring().submit();
     if (res == Io::IoUringResult::Busy) {
       return Api::SysCallIntResult{0, SOCKET_ERROR_AGAIN};
     }
-    res = uring.prepareConnect(fd_, address, req, [this](void* user_data, int32_t result) {
+    res = ioUring().prepareConnect(fd_, address, req, [this](void* user_data, int32_t result) {
       this->onRequestCompletion(reinterpret_cast<Request*>(user_data), result);
     });
     RELEASE_ASSERT(res == Io::IoUringResult::Ok, "unable to prepare connect");
   }
   // Need to ensure the connect request submitted.
-  uring.submit();
+  ioUring().submit();
   return Api::SysCallIntResult{0, SOCKET_ERROR_IN_PROGRESS};
 }
 
@@ -326,8 +323,7 @@ void IoUringSocketHandleImpl::initializeFileEvent(Event::Dispatcher&, Event::Fil
   cb_ = std::move(cb);
   if (is_listener_) {
     addAcceptRequest();
-    auto& uring = io_uring_factory_.get().ref();
-    uring.submit();
+    ioUring().submit();
   }
 }
 
@@ -408,6 +404,14 @@ absl::optional<std::string> IoUringSocketHandleImpl::interfaceName() {
   return selected_interface_name;
 }
 
+Io::IoUring& IoUringSocketHandleImpl::ioUring() {
+  if (io_uring_ == absl::nullopt) {
+    io_uring_ = io_uring_factory_.get();
+  }
+
+  return io_uring_.ref();
+}
+
 void IoUringSocketHandleImpl::addReadRequest() {
   if (!is_read_enabled_ || SOCKET_INVALID(fd_) || read_req_) {
     return;
@@ -418,15 +422,14 @@ void IoUringSocketHandleImpl::addReadRequest() {
   read_req_->iov_ = new struct iovec[1];
   read_req_->iov_->iov_base = read_req_->buf_.get();
   read_req_->iov_->iov_len = read_buffer_size_;
-  auto& uring = io_uring_factory_.get().ref();
-  auto res = uring.prepareReadv(
+  auto res = ioUring().prepareReadv(
       fd_, read_req_->iov_, 1, 0, read_req_, [this](void* user_data, int32_t result) {
         this->onRequestCompletion(reinterpret_cast<Request*>(user_data), result);
       });
   if (res == Io::IoUringResult::Failed) {
     // TODO(rojkov): handle `EBUSY` in case the completion queue is never reaped.
-    uring.submit();
-    res = uring.prepareReadv(
+    ioUring().submit();
+    res = ioUring().prepareReadv(
         fd_, read_req_->iov_, 1, 0, read_req_, [this](void* user_data, int32_t result) {
           this->onRequestCompletion(reinterpret_cast<Request*>(user_data), result);
         });
@@ -440,20 +443,19 @@ void IoUringSocketHandleImpl::addAcceptRequest() {
   }
 
   accept_req_ = new Request{RequestType::Accept};
-  auto& uring = io_uring_factory_.get().ref();
-  auto res = uring.prepareAccept(fd_, &accept_req_->remote_addr_, &accept_req_->remote_addr_len_,
-                                 accept_req_, [this](void* user_data, int32_t result) {
-                                   this->onRequestCompletion(reinterpret_cast<Request*>(user_data),
-                                                             result);
-                                 });
+  auto res = ioUring().prepareAccept(
+      fd_, &accept_req_->remote_addr_, &accept_req_->remote_addr_len_, accept_req_,
+      [this](void* user_data, int32_t result) {
+        this->onRequestCompletion(reinterpret_cast<Request*>(user_data), result);
+      });
   if (res == Io::IoUringResult::Failed) {
     // TODO(rojkov): handle `EBUSY` in case the completion queue is never reaped.
-    uring.submit();
-    res = uring.prepareAccept(fd_, &accept_req_->remote_addr_, &accept_req_->remote_addr_len_,
-                              accept_req_, [this](void* user_data, int32_t result) {
-                                this->onRequestCompletion(reinterpret_cast<Request*>(user_data),
-                                                          result);
-                              });
+    ioUring().submit();
+    res = ioUring().prepareAccept(fd_, &accept_req_->remote_addr_, &accept_req_->remote_addr_len_,
+                                  accept_req_, [this](void* user_data, int32_t result) {
+                                    this->onRequestCompletion(reinterpret_cast<Request*>(user_data),
+                                                              result);
+                                  });
     RELEASE_ASSERT(res == Io::IoUringResult::Ok, "unable to prepare readv");
   }
 }

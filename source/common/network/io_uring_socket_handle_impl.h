@@ -82,6 +82,7 @@ public:
   absl::optional<std::string> interfaceName() override;
 
 private:
+  Io::IoUring& ioUring();
   void addReadRequest();
   void addAcceptRequest();
   void onRequestCompletion(Request* request, int32_t result);
@@ -92,6 +93,7 @@ private:
   int socket_v6only_;
   const absl::optional<int> domain_;
 
+  OptRef<Io::IoUring> io_uring_{absl::nullopt};
   bool is_listener_{false};
   Event::FileReadyCb cb_;
   Buffer::OwnedImpl read_buf_;
