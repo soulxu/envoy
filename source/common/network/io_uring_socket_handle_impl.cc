@@ -463,53 +463,51 @@ void IoUringSocketHandleImpl::onRequestCompletion(Request* request, int32_t resu
     ENVOY_LOG(debug, "async request failed: {}", errorDetails(-result));
   }
   // TODO(zhxie): Cancel requests instead of escaping completion.
-  if (SOCKET_INVALID(fd_)) {
-    return;
-  }
-
-  switch (request->type_) {
-  case RequestType::Accept:
-    ASSERT(SOCKET_INVALID(connection_fd_));
-    connection_fd_ = result;
-    connection_addr_ = request->remote_addr_;
-    connection_addr_len_ = request->remote_addr_len_;
-    cb_(Event::FileReadyType::Read);
-    break;
-  case RequestType::Read:
-    bytes_to_read_ = result;
-    if (result == 0) {
-      remote_closed_ = true;
-    } else if (result > 0) {
-      Buffer::BufferFragment* fragment = new Buffer::BufferFragmentImpl(
-          request->buf_.release(), result,
-          [](const void* data, size_t /*len*/, const Buffer::BufferFragmentImpl* this_fragment) {
-            delete[] reinterpret_cast<const uint8_t*>(data);
-            delete this_fragment;
-          });
-      read_buf_.addBufferFragment(*fragment);
-    }
-    cb_(Event::FileReadyType::Read);
-    break;
-  case RequestType::Connect:
-    if (result < 0) {
-      cb_(Event::FileReadyType::Closed);
+  if (SOCKET_VALID(fd_)) {
+    switch (request->type_) {
+    case RequestType::Accept:
+      ASSERT(SOCKET_INVALID(connection_fd_));
+      connection_fd_ = result;
+      connection_addr_ = request->remote_addr_;
+      connection_addr_len_ = request->remote_addr_len_;
+      cb_(Event::FileReadyType::Read);
       break;
-    }
+    case RequestType::Read:
+      bytes_to_read_ = result;
+      if (result == 0) {
+        remote_closed_ = true;
+      } else if (result > 0) {
+        Buffer::BufferFragment* fragment = new Buffer::BufferFragmentImpl(
+            request->buf_.release(), result,
+            [](const void* data, size_t /*len*/, const Buffer::BufferFragmentImpl* this_fragment) {
+              delete[] reinterpret_cast<const uint8_t*>(data);
+              delete this_fragment;
+            });
+        read_buf_.addBufferFragment(*fragment);
+      }
+      cb_(Event::FileReadyType::Read);
+      break;
+    case RequestType::Connect:
+      if (result < 0) {
+        cb_(Event::FileReadyType::Closed);
+        break;
+      }
 
-    cb_(Event::FileReadyType::Write);
-    addReadRequest();
-    break;
-  case RequestType::Write:
-    bytes_already_wrote_ = result;
-    is_write_added_ = false;
-    cb_(Event::FileReadyType::Write);
-    break;
-  case RequestType::Close:
-    break;
-  case RequestType::Cancel:
-    break;
-  default:
-    PANIC("not implemented");
+      cb_(Event::FileReadyType::Write);
+      addReadRequest();
+      break;
+    case RequestType::Write:
+      bytes_already_wrote_ = result;
+      is_write_added_ = false;
+      cb_(Event::FileReadyType::Write);
+      break;
+    case RequestType::Close:
+      break;
+    case RequestType::Cancel:
+      break;
+    default:
+      PANIC("not implemented");
+    }
   }
 
   // Cleanup.
