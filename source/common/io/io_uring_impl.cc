@@ -171,7 +171,6 @@ IoUringResult IoUringImpl::prepareCancel(void* cancelling_user_data, void* user_
     io_uring_sqe_set_data(sqe, user_data);
   }
 
-  cbs_.erase(reinterpret_cast<uint64_t>(cancelling_user_data));
   cbs_[reinterpret_cast<uint64_t>(user_data)] = cb;
   return IoUringResult::Ok;
 }
