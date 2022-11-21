@@ -78,22 +78,22 @@ IoUringSocketHandleImpl::readv(uint64_t max_length, Buffer::RawSlice* slices, ui
     return Api::ioCallUint64ResultNoError();
   }
 
-  if (bytes_to_read_ < 0) {
-    return {0, Api::IoErrorPtr(new IoSocketError(-bytes_to_read_), IoSocketError::deleteIoError)};
+  if (read_ret_ < 0) {
+    return {0, Api::IoErrorPtr(new IoSocketError(-read_ret_), IoSocketError::deleteIoError)};
   }
 
-  if (bytes_to_read_ == 0 || read_req_ == nullptr) {
+  if (read_ret_ == 0 || read_req_ == nullptr) {
     return {0, Api::IoErrorPtr(IoSocketError::getIoSocketEagainInstance(),
                                IoSocketError::deleteIoError)};
   }
 
-  const uint64_t max_read_length = std::min(max_length, static_cast<uint64_t>(bytes_to_read_));
+  const uint64_t max_read_length = std::min(max_length, static_cast<uint64_t>(read_ret_));
   uint64_t num_bytes_to_read = read_buf_.copyOutToSlices(max_read_length, slices, num_slice);
   ASSERT(num_bytes_to_read <= max_read_length);
   read_buf_.drain(num_bytes_to_read);
-  bytes_to_read_ -= num_bytes_to_read;
-  if (bytes_to_read_ == 0) {
-    bytes_to_read_ = 0;
+  read_ret_ -= num_bytes_to_read;
+  if (read_ret_ == 0) {
+    read_ret_ = 0;
     read_req_ = nullptr;
     addReadRequest();
   }
@@ -124,14 +124,14 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::writev(const Buffer::RawSlice* 
                                IoSocketError::deleteIoError)};
   }
 
-  if (bytes_already_wrote_ < 0) {
+  if (write_ret_ < 0) {
     return {
-        0, Api::IoErrorPtr(new IoSocketError(-bytes_already_wrote_), IoSocketError::deleteIoError)};
+        0, Api::IoErrorPtr(new IoSocketError(-write_ret_), IoSocketError::deleteIoError)};
   }
 
-  if (bytes_already_wrote_ > 0) {
-    uint64_t len = bytes_already_wrote_;
-    bytes_already_wrote_ = 0;
+  if (write_ret_ > 0) {
+    uint64_t len = write_ret_;
+    write_ret_ = 0;
     return {len, Api::IoErrorPtr(nullptr, IoSocketError::deleteIoError)};
   }
 
@@ -411,6 +411,29 @@ Io::IoUring& IoUringSocketHandleImpl::ioUring() {
   return io_uring_.ref();
 }
 
+void IoUringSocketHandleImpl::addAcceptRequest() {
+  if (accept_req_) {
+    return;
+  }
+
+  accept_req_ = new Request{RequestType::Accept};
+  auto res = ioUring().prepareAccept(
+      fd_, &accept_req_->remote_addr_, &accept_req_->remote_addr_len_, accept_req_,
+      [this](void* user_data, int32_t result) {
+        this->onRequestCompletion(reinterpret_cast<Request*>(user_data), result);
+      });
+  if (res == Io::IoUringResult::Failed) {
+    // TODO(rojkov): handle `EBUSY` in case the completion queue is never reaped.
+    ioUring().submit();
+    res = ioUring().prepareAccept(fd_, &accept_req_->remote_addr_, &accept_req_->remote_addr_len_,
+                                  accept_req_, [this](void* user_data, int32_t result) {
+                                    this->onRequestCompletion(reinterpret_cast<Request*>(user_data),
+                                                              result);
+                                  });
+    RELEASE_ASSERT(res == Io::IoUringResult::Ok, "unable to prepare readv");
+  }
+}
+
 void IoUringSocketHandleImpl::addReadRequest() {
   if (!is_read_enabled_ || SOCKET_INVALID(fd_) || read_req_) {
     return;
@@ -436,29 +459,6 @@ void IoUringSocketHandleImpl::addReadRequest() {
   }
 }
 
-void IoUringSocketHandleImpl::addAcceptRequest() {
-  if (accept_req_) {
-    return;
-  }
-
-  accept_req_ = new Request{RequestType::Accept};
-  auto res = ioUring().prepareAccept(
-      fd_, &accept_req_->remote_addr_, &accept_req_->remote_addr_len_, accept_req_,
-      [this](void* user_data, int32_t result) {
-        this->onRequestCompletion(reinterpret_cast<Request*>(user_data), result);
-      });
-  if (res == Io::IoUringResult::Failed) {
-    // TODO(rojkov): handle `EBUSY` in case the completion queue is never reaped.
-    ioUring().submit();
-    res = ioUring().prepareAccept(fd_, &accept_req_->remote_addr_, &accept_req_->remote_addr_len_,
-                                  accept_req_, [this](void* user_data, int32_t result) {
-                                    this->onRequestCompletion(reinterpret_cast<Request*>(user_data),
-                                                              result);
-                                  });
-    RELEASE_ASSERT(res == Io::IoUringResult::Ok, "unable to prepare readv");
-  }
-}
-
 void IoUringSocketHandleImpl::onRequestCompletion(Request* request, int32_t result) {
   if (result < 0) {
     ENVOY_LOG(debug, "async request failed: {}", errorDetails(-result));
@@ -473,8 +473,17 @@ void IoUringSocketHandleImpl::onRequestCompletion(Request* request, int32_t resu
       connection_addr_len_ = request->remote_addr_len_;
       cb_(Event::FileReadyType::Read);
       break;
+    case RequestType::Connect:
+      if (result < 0) {
+        cb_(Event::FileReadyType::Closed);
+        break;
+      }
+
+      cb_(Event::FileReadyType::Write);
+      addReadRequest();
+      break;
     case RequestType::Read:
-      bytes_to_read_ = result;
+      read_ret_ = result;
       if (result == 0) {
         remote_closed_ = true;
       } else if (result > 0) {
@@ -488,17 +497,8 @@ void IoUringSocketHandleImpl::onRequestCompletion(Request* request, int32_t resu
       }
       cb_(Event::FileReadyType::Read);
       break;
-    case RequestType::Connect:
-      if (result < 0) {
-        cb_(Event::FileReadyType::Closed);
-        break;
-      }
-
-      cb_(Event::FileReadyType::Write);
-      addReadRequest();
-      break;
     case RequestType::Write:
-      bytes_already_wrote_ = result;
+      write_ret_ = result;
       is_write_added_ = false;
       cb_(Event::FileReadyType::Write);
       break;

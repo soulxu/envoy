@@ -83,8 +83,8 @@ public:
 
 private:
   Io::IoUring& ioUring();
-  void addReadRequest();
   void addAcceptRequest();
+  void addReadRequest();
   void onRequestCompletion(Request* request, int32_t result);
 
   const uint32_t read_buffer_size_;
@@ -96,16 +96,16 @@ private:
   OptRef<Io::IoUring> io_uring_{absl::nullopt};
   bool is_listener_{false};
   Event::FileReadyCb cb_;
-  Buffer::OwnedImpl read_buf_;
-  int32_t bytes_to_read_{0};
-  Request* read_req_{nullptr};
-  bool is_read_enabled_{true};
-  int32_t bytes_already_wrote_{0};
-  bool is_write_added_{false};
   os_fd_t connection_fd_{INVALID_SOCKET};
   struct sockaddr connection_addr_;
   socklen_t connection_addr_len_;
   Request* accept_req_{nullptr};
+  Buffer::OwnedImpl read_buf_;
+  int32_t read_ret_{0};
+  Request* read_req_{nullptr};
+  bool is_read_enabled_{true};
+  int32_t write_ret_{0};
+  bool is_write_added_{false};
   bool remote_closed_{false};
 };
 
