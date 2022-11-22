@@ -261,6 +261,13 @@ Api::SysCallIntResult IoUringSocketHandleImpl::setOption(int level, int optname,
 
 Api::SysCallIntResult IoUringSocketHandleImpl::getOption(int level, int optname, void* optval,
                                                          socklen_t* optlen) {
+  // ConnectionImpl will check connect result via getOption.
+  if (connect_ret_ < 0 && optname == SO_ERROR) {
+    int ret = connect_ret_;
+    connect_ret_ = 1;
+    return Api::SysCallIntResult{0, -ret};
+  }
+
   return Api::OsSysCallsSingleton::get().getsockopt(fd_, level, optname, optval, optlen);
 }
 
@@ -474,13 +481,11 @@ void IoUringSocketHandleImpl::onRequestCompletion(Request* request, int32_t resu
       cb_(Event::FileReadyType::Read);
       break;
     case RequestType::Connect:
-      if (result < 0) {
-        cb_(Event::FileReadyType::Closed);
-        break;
-      }
-
+      connect_ret_ = result;
       cb_(Event::FileReadyType::Write);
-      addReadRequest();
+      if (result >= 0) {
+        addReadRequest();
+      }
       break;
     case RequestType::Read:
       read_ret_ = result;

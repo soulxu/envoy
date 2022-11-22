@@ -100,6 +100,7 @@ private:
   struct sockaddr connection_addr_;
   socklen_t connection_addr_len_;
   Request* accept_req_{nullptr};
+  int32_t connect_ret_{0};
   Buffer::OwnedImpl read_buf_;
   int32_t read_ret_{0};
   Request* read_req_{nullptr};
