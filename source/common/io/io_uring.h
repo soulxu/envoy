@@ -99,6 +99,17 @@ public:
    * with the forEveryCompletion() method and try again.
    */
   virtual IoUringResult submit() PURE;
+
+  /**
+   * Submits the entries in the submission queue to the kernel using the
+   * `io_uring_enter()` system call. The submission may be delayed if there is an incoming
+   * submission.
+   * Returns IoUringResult::Ok in case of success and may return
+   * IoUringResult::Busy if we over commit the number of requests. In the latter
+   * case the application should drain the completion queue by handling some completions
+   * with the forEveryCompletion() method and try again.
+   */
+  virtual IoUringResult trySubmit() PURE;
 };
 
 /**

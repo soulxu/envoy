@@ -31,6 +31,7 @@ public:
   IoUringResult prepareCancel(void* cancelling_user_data, void* user_data,
                               CompletionCb cb) override;
   IoUringResult submit() override;
+  IoUringResult trySubmit() override;
 
 private:
   const uint32_t io_uring_size_;
@@ -39,6 +40,7 @@ private:
   os_fd_t event_fd_{INVALID_SOCKET};
   Event::FileEventPtr file_event_{nullptr};
   absl::flat_hash_map<uint64_t, CompletionCb> cbs_;
+  bool delay_submit_{false};
 
   void onFileEvent();
 };

@@ -1,4 +1,5 @@
 #include "source/common/io/io_uring_impl.h"
+#include "io_uring.h"
 
 #include <sys/eventfd.h>
 
@@ -181,8 +182,17 @@ IoUringResult IoUringImpl::submit() {
   return res == -EBUSY ? IoUringResult::Busy : IoUringResult::Ok;
 }
 
+IoUringResult IoUringImpl::trySubmit() {
+  if (delay_submit_) {
+    return IoUringResult::Ok;
+  }
+
+  return submit();
+}
+
 void IoUringImpl::onFileEvent() {
   ASSERT(SOCKET_VALID(event_fd_));
+  delay_submit_ = true;
 
   eventfd_t v;
   int ret = eventfd_read(event_fd_, &v);
@@ -203,6 +213,7 @@ void IoUringImpl::onFileEvent() {
   }
   io_uring_cq_advance(&ring_, count);
   submit();
+  delay_submit_ = false;
 }
 
 } // namespace Io

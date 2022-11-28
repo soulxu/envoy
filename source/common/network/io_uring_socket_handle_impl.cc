@@ -65,7 +65,7 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::close() {
     // Fall back to posix system call.
     ::close(fd_);
   }
-  ioUring().submit();
+  ioUring().trySubmit();
   SET_SOCKET_INVALID(fd_);
   return Api::ioCallUint64ResultNoError();
 }
@@ -143,8 +143,7 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::writev(const Buffer::RawSlice* 
   }
 
   if (write_ret_ < 0) {
-    return {
-        0, Api::IoErrorPtr(new IoSocketError(-write_ret_), IoSocketError::deleteIoError)};
+    return {0, Api::IoErrorPtr(new IoSocketError(-write_ret_), IoSocketError::deleteIoError)};
   }
 
   if (write_ret_ > 0) {
@@ -181,7 +180,7 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::writev(const Buffer::RawSlice* 
       RELEASE_ASSERT(res == Io::IoUringResult::Ok, "unable to prepare writev");
     }
     // Need to ensure the write request submitted.
-    ioUring().submit();
+    ioUring().trySubmit();
   }
 
   return {
@@ -268,7 +267,7 @@ Api::SysCallIntResult IoUringSocketHandleImpl::connect(Address::InstanceConstSha
     RELEASE_ASSERT(res == Io::IoUringResult::Ok, "unable to prepare connect");
   }
   // Need to ensure the connect request submitted.
-  ioUring().submit();
+  ioUring().trySubmit();
   return Api::SysCallIntResult{0, SOCKET_ERROR_IN_PROGRESS};
 }
 
@@ -347,7 +346,7 @@ void IoUringSocketHandleImpl::initializeFileEvent(Event::Dispatcher&, Event::Fil
   cb_ = std::move(cb);
   if (is_listener_) {
     addAcceptRequest();
-    ioUring().submit();
+    ioUring().trySubmit();
   }
 }
 
