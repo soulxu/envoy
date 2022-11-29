@@ -1,5 +1,4 @@
 #include "source/common/io/io_uring_impl.h"
-#include "io_uring.h"
 
 #include <sys/eventfd.h>
 
