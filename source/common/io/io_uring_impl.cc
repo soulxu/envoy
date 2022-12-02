@@ -206,6 +206,7 @@ IoUringResult IoUringImpl::trySubmit() {
 
 void IoUringImpl::onFileEvent() {
   ASSERT(SOCKET_VALID(event_fd_));
+  // Since it is in resolving completion callbacks, all following submissions can be delayed.
   delay_submit_ = true;
 
   eventfd_t v;

@@ -44,7 +44,7 @@ public:
                                                 absl::optional<int> domain,
                                                 Io::IoUringFactory* io_uring_factory = nullptr);
 
-  // TODO (soulxu): making those configurable if needed.
+  // TODO(soulxu): making those configurable if needed.
   static constexpr uint32_t DefaultIoUringSize = 300;
   static constexpr uint32_t DefaultReadBufferSize = 8192;
   static constexpr bool UseSubmissionQueuePolling = false;

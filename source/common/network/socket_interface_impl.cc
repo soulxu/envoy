@@ -55,7 +55,7 @@ IoHandlePtr SocketInterfaceImpl::socket(Socket::Type socket_type, Address::Type 
 #else
   int flags = SOCK_NONBLOCK;
 
-  // Use blocking socket for IOUring.
+  // Forcly using blocking I/O for io_uring.
   if (io_uring_factory_.lock() != nullptr && io_uring_factory_.lock()->currentThreadRegistered() &&
       io_uring_factory_.lock()->get() != absl::nullopt) {
     flags = 0;

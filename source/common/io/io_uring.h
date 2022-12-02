@@ -91,7 +91,7 @@ public:
                                       CompletionCb cb) PURE;
 
   /**
-   * Prepares a nop and puts it into the cubmission queue.
+   * Prepares a nop and puts it into the submission queue.
    * Returns IoUringResult::Failed in case the submission queue is full already
    * and IoUringResult::Ok otherwise.
    */

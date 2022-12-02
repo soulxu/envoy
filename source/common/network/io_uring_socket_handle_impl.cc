@@ -38,6 +38,7 @@ IoUringSocketHandleImpl::~IoUringSocketHandleImpl() {
 
 Api::IoCallUint64Result IoUringSocketHandleImpl::close() {
   ASSERT(SOCKET_VALID(fd_));
+  // Cancel submitted requests before closing fd.
   if (read_req_) {
     auto req = new Request{RequestType::Cancel};
     auto res = ioUring().prepareCancel(read_req_, req, nullptr);
@@ -87,11 +88,13 @@ IoUringSocketHandleImpl::readv(uint64_t max_length, Buffer::RawSlice* slices, ui
                                IoSocketError::deleteIoError)};
   }
 
+  // TODO(zhxie): Avoid copy.
   const uint64_t max_read_length = std::min(max_length, static_cast<uint64_t>(read_ret_));
   uint64_t num_bytes_to_read = read_buf_.copyOutToSlices(max_read_length, slices, num_slice);
   ASSERT(num_bytes_to_read <= max_read_length);
   read_buf_.drain(num_bytes_to_read);
   read_ret_ -= num_bytes_to_read;
+  // Add a new read request if the current one is fully read.
   if (read_ret_ == 0) {
     read_ret_ = 0;
     read_req_ = nullptr;
@@ -126,6 +129,7 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::read(Buffer::Instance& buffer,
   num_bytes_to_read = buffer.length() - num_bytes_to_read;
   ASSERT(num_bytes_to_read <= max_length);
   read_ret_ -= num_bytes_to_read;
+  // Add a new read request if the current one is fully read.
   if (read_ret_ == 0) {
     read_ret_ = 0;
     read_req_ = nullptr;
@@ -164,7 +168,8 @@ Api::IoCallUint64Result IoUringSocketHandleImpl::writev(const Buffer::RawSlice* 
   }
 
   if (num_slices_to_write > 0) {
-    is_write_added_ = true; // don't add WRITE if it's been already added.
+    // Do not add write if it has been added.
+    is_write_added_ = true;
     auto req = new Request{RequestType::Write, iovecs};
     auto res = ioUring().prepareWritev(
         fd_, iovecs, num_slice, 0, req, [this](void* user_data, int32_t result) {
@@ -231,6 +236,7 @@ Api::SysCallIntResult IoUringSocketHandleImpl::bind(Address::InstanceConstShared
 }
 
 Api::SysCallIntResult IoUringSocketHandleImpl::listen(int backlog) {
+  // Mark the IO handle as a listener so an accept request can be added later.
   is_listener_ = true;
   return Api::OsSysCallsSingleton::get().listen(fd_, backlog);
 }
@@ -278,7 +284,8 @@ Api::SysCallIntResult IoUringSocketHandleImpl::setOption(int level, int optname,
 
 Api::SysCallIntResult IoUringSocketHandleImpl::getOption(int level, int optname, void* optval,
                                                          socklen_t* optlen) {
-  // ConnectionImpl will check connect result via getOption.
+  // io_uring will consume getsockopt SO_ERROR while parent connection may check connect result
+  // from this method. Here returns the connect result instead of getsockopt SO_ERROR.
   if (connect_ret_ < 0 && optname == SO_ERROR) {
     int ret = connect_ret_;
     connect_ret_ = 1;
@@ -363,10 +370,12 @@ void IoUringSocketHandleImpl::enableFileEvents(uint32_t events) {
   if (events & Event::FileReadyType::Read) {
     is_read_enabled_ = true;
     addReadRequest();
+    // Trigger a read callback in the next loop.
     auto req = new Request{RequestType::Unknown};
     auto res = ioUring().prepareNop(
         req, [this](void*, int32_t) { this->cb_(Event::FileReadyType::Read); });
     if (res == Io::IoUringResult::Failed) {
+      // TODO(rojkov): handle `EBUSY` in case the completion queue is never reaped.
       res = ioUring().submit();
       res = ioUring().prepareNop(req,
                                  [this](void*, int32_t) { this->cb_(Event::FileReadyType::Read); });
@@ -519,7 +528,7 @@ void IoUringSocketHandleImpl::onRequestCompletion(Request* request, int32_t resu
       } else if (result > 0) {
         Buffer::BufferFragment* fragment = new Buffer::BufferFragmentImpl(
             request->buf_.release(), result,
-            [](const void* data, size_t /*len*/, const Buffer::BufferFragmentImpl* this_fragment) {
+            [](const void* data, size_t, const Buffer::BufferFragmentImpl* this_fragment) {
               delete[] reinterpret_cast<const uint8_t*>(data);
               delete this_fragment;
             });
