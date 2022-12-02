@@ -175,6 +175,21 @@ IoUringResult IoUringImpl::prepareCancel(void* cancelling_user_data, void* user_
   return IoUringResult::Ok;
 }
 
+IoUringResult IoUringImpl::prepareNop(void* user_data, CompletionCb cb) {
+  struct io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
+  if (sqe == nullptr) {
+    return IoUringResult::Failed;
+  }
+
+  io_uring_prep_nop(sqe);
+  if (user_data) {
+    io_uring_sqe_set_data(sqe, user_data);
+  }
+
+  cbs_[reinterpret_cast<uint64_t>(user_data)] = cb;
+  return IoUringResult::Ok;
+}
+
 IoUringResult IoUringImpl::submit() {
   int res = io_uring_submit(&ring_);
   RELEASE_ASSERT(res >= 0 || res == -EBUSY, "unable to submit io_uring queue entries");

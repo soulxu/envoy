@@ -91,6 +91,13 @@ public:
                                       CompletionCb cb) PURE;
 
   /**
+   * Prepares a nop and puts it into the cubmission queue.
+   * Returns IoUringResult::Failed in case the submission queue is full already
+   * and IoUringResult::Ok otherwise.
+   */
+  virtual IoUringResult prepareNop(void* user_data, CompletionCb cb) PURE;
+
+  /**
    * Submits the entries in the submission queue to the kernel using the
    * `io_uring_enter()` system call.
    * Returns IoUringResult::Ok in case of success and may return

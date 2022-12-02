@@ -30,6 +30,7 @@ public:
   IoUringResult prepareClose(os_fd_t fd, void* user_data, CompletionCb cb) override;
   IoUringResult prepareCancel(void* cancelling_user_data, void* user_data,
                               CompletionCb cb) override;
+  IoUringResult prepareNop(void* user_data, CompletionCb cb) override;
   IoUringResult submit() override;
   IoUringResult trySubmit() override;
 

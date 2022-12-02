@@ -363,7 +363,15 @@ void IoUringSocketHandleImpl::enableFileEvents(uint32_t events) {
   if (events & Event::FileReadyType::Read) {
     is_read_enabled_ = true;
     addReadRequest();
-    cb_(Event::FileReadyType::Read);
+    auto req = new Request{RequestType::Unknown};
+    auto res = ioUring().prepareNop(
+        req, [this](void*, int32_t) { this->cb_(Event::FileReadyType::Read); });
+    if (res == Io::IoUringResult::Failed) {
+      res = ioUring().submit();
+      res = ioUring().prepareNop(req,
+                                 [this](void*, int32_t) { this->cb_(Event::FileReadyType::Read); });
+      RELEASE_ASSERT(res == Io::IoUringResult::Ok, "unable to prepare nop");
+    }
   } else {
     is_read_enabled_ = false;
   }
