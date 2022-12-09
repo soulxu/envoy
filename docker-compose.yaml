@@ -1,0 +1,35 @@
+version: "3.9"
+services:
+  envoy-io_uring:
+    image: "envoy-io_uring"
+    ports:
+      - "9901:80"
+    volumes:
+      - ./envoy.yaml:/etc/envoy/envoy.yaml
+    cpuset: "0"
+    command:
+      [
+        "/usr/local/bin/envoy",
+        "-c",
+        "/etc/envoy/envoy.yaml",
+        "--cpuset-threads"
+      ]
+  envoy:
+    image: "envoyproxy/envoy:v1.24.0"
+    ports:
+      - "9902:80"
+    volumes:
+      - ./envoy.yaml:/etc/envoy/envoy.yaml
+    cpuset: "0"
+    command:
+      [
+        "/usr/local/bin/envoy",
+        "-c",
+        "/etc/envoy/envoy.yaml",
+        "--cpuset-threads"
+      ]
+  nginx:
+    image: "nginx:1.23.2"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./payloads:/usr/share
