@@ -27,7 +27,7 @@ public:
   // This will cleanup all the injected completions for this socket and
   // unlink itself from the worker.
   void cleanup();
-  void onAccept(int32_t, bool injected) override {
+  void onAccept(Request*, int32_t, bool injected) override {
     if (injected && (injected_completions_ & RequestType::Accept)) {
       injected_completions_ &= ~RequestType::Accept;
     }
@@ -57,11 +57,17 @@ public:
       injected_completions_ &= ~RequestType::Write;
     }
   }
-
-private:
+  IoUringSocketStatus getStatus() const override {
+    return status_;
+  }
+  uint64_t write(Buffer::Instance&) override { PANIC("not implement"); }
+  uint64_t writev(const Buffer::RawSlice*, uint64_t) override { PANIC("not implement"); }
+  void connect(const Network::Address::InstanceConstSharedPtr&) override {}
+protected:
   os_fd_t fd_;
   IoUringWorkerImpl& parent_;
   uint32_t injected_completions_{0};
+  IoUringSocketStatus status_{INITIALIZED};
 };
 
 using IoUringSocketEntryPtr = std::unique_ptr<IoUringSocketEntry>;
@@ -82,8 +88,7 @@ public:
 
   Event::Dispatcher& dispatcher() override;
 
-  Request* submitAcceptRequest(IoUringSocket& socket, sockaddr_storage* remote_addr,
-                               socklen_t* remote_addr_len) override;
+  Request* submitAcceptRequest(IoUringSocket& socket) override;
   Request* submitCancelRequest(IoUringSocket& socket, Request* request_to_cancel) override;
   Request* submitCloseRequest(IoUringSocket& socket) override;
   Request* submitReadRequest(IoUringSocket& socket, struct iovec* iov) override;
@@ -114,6 +119,94 @@ protected:
   // The IoUriingWorks delay the submit the requests which are submitted in request completion
   // callback.
   bool delay_submit_{false};
+};
+
+class AcceptRequest: public Request {
+public:
+  AcceptRequest(uint32_t type, IoUringSocket& io_uring_socket) : Request(type, io_uring_socket) {}
+  sockaddr_storage remote_addr_{};
+  socklen_t remote_addr_len_{sizeof(remote_addr_)};
+};
+
+class IoUringAcceptSocket : public IoUringSocketEntry {
+public:
+  IoUringAcceptSocket(os_fd_t fd, IoUringWorkerImpl& parent, IoUringHandler& io_uring_handler, int max_requests = 5) :
+      IoUringSocketEntry(fd, parent), io_uring_handler_(io_uring_handler), max_requests_(max_requests) {
+    enable();
+  }
+
+  void close() override {
+    // TODO (soulxu): after kernel 5.19, we are able to cancel all requests for the specific fd.
+    for (auto req: requests_) {
+      parent_.submitCancelRequest(*this, req);
+    }
+    status = CLOSING;
+  }
+
+  void disable() override {
+     // TODO (soulxu): after kernel 5.19, we are able to cancel all requests for the specific fd.
+    for (auto req: requests_) {
+      parent_.submitCancelRequest(*this, req);
+    }
+    status = DISABLED;
+  }
+
+  void enable() override {
+    status = ENABLED;
+    submitRequests();
+  }
+
+  void onClose(int32_t result, bool injected) override {
+    IoUringSocketEntry::onClose(result, injected);
+    ASSERT(!injected);
+    if (result < 0) {
+      ENVOY_LOG(warn, "close request failed: fd = {}, result = {}, error = {}", fd_, result, strerror(-result));
+    }
+  
+    cleanup();
+    status = CLOSED;
+  }
+
+  void onCancel(int32_t result, bool injected) override {
+    IoUringSocketEntry::onCancel(result, injected);
+    if (result < 0) {
+      ENVOY_LOG(warn, "cancel request failed: fd = {}, result = {}, error = {}", fd_, result, strerror(-result));
+    }
+  }
+
+  void onAccept(Request* req, int32_t result, bool injected) override {
+    IoUringSocketEntry::onAccept(req, result, injected);
+    AcceptRequest *accept_req = static_cast<AcceptRequest*>(req);
+    if (!injected) {
+      requests_.erase(req);
+      ENVOY_LOG(trace, "finish one request, num reqs = {}", requests_.size());
+      if (requests_.size() == 0 && status == CLOSING) {
+        parent_.submitCloseRequest(*this);
+      }
+    }
+
+    if (result < 0 && !injected) {
+      ENVOY_LOG(trace, "accept request failed, fd = {}, result = {}, error = {}", fd_, result, strerror(-result));
+      return;
+    }
+
+    AcceptedSocketParam param{result, &accept_req->remote_addr_, accept_req->remote_addr_len_};
+    io_uring_handler_.onAcceptSocket(param);
+    submitRequests();
+  }
+
+  void submitRequests() {
+    for (int i = requests_.size(); i < max_requests_; i++) {
+      auto req = parent_.submitAcceptRequest(*this);
+      requests_.insert(req);
+    }
+  }
+
+private:
+  IoUringHandler& io_uring_handler_;
+  int max_requests_{0};
+  absl::flat_hash_set<Request*> requests_;
+  IoUringSocketStatus status{INITIALIZED};
 };
 
 } // namespace Io

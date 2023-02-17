@@ -23,8 +23,8 @@ public:
   uint64_t write(Buffer::Instance&) override { PANIC("not implement"); }
   uint64_t writev(const Buffer::RawSlice*, uint64_t) override { PANIC("not implement"); }
   void connect(const Network::Address::InstanceConstSharedPtr&) override {}
-  void onAccept(int32_t result, bool injected) override {
-    IoUringSocketEntry::onAccept(result, injected);
+  void onAccept(Request* req, int32_t result, bool injected) override {
+    IoUringSocketEntry::onAccept(req, result, injected);
     accept_result_ = result;
     is_accept_injected_completion_ = injected;
     nr_completion_++;
@@ -90,9 +90,13 @@ public:
 
 class TestIoUringHandler : public IoUringHandler {
 public:
-  void onAcceptSocket(AcceptedSocketParam&) override {}
+  void onAcceptSocket(AcceptedSocketParam& param) override {
+    server_socket_fd_ = param.fd_;
+  }
   void onRead(ReadParam&) override {}
   void onWrite(WriteParam&) override {}
+
+  os_fd_t server_socket_fd_{INVALID_SOCKET};
 };
 
 class IoUringWorkerIntegraionTest : public testing::Test {
@@ -212,10 +216,7 @@ TEST_F(IoUringWorkerIntegraionTest, Accept) {
   connect();
 
   // Waiting for the listen socket accept.
-  struct sockaddr remote_addr;
-  socklen_t len = sizeof(remote_addr);
-  io_uring_worker_->submitAcceptRequest(socket, reinterpret_cast<sockaddr_storage*>(&remote_addr),
-                                        &len);
+  io_uring_worker_->submitAcceptRequest(socket);
   while (socket.accept_result_ == -1) {
     dispatcher_->run(Event::Dispatcher::RunType::NonBlock);
   }
@@ -468,6 +469,27 @@ TEST_F(IoUringWorkerIntegraionTest, MergeInjection) {
   EXPECT_TRUE(socket.is_read_injected_completion_);
   EXPECT_EQ(socket.read_result_, -EAGAIN);
   EXPECT_EQ(socket.nr_completion_, 1);
+}
+
+TEST_F(IoUringWorkerIntegraionTest, AcceptSocketBasic) {
+  init();
+  socket(false, true);
+  listen();
+
+  auto& socket = io_uring_worker_->addAcceptSocket(listen_socket_, io_uring_handler_);
+  connect();
+
+  while (!SOCKET_VALID(io_uring_handler_.server_socket_fd_)) {
+    dispatcher_->run(Event::Dispatcher::RunType::NonBlock);
+  }
+
+
+  socket.close();
+  ENVOY_LOG_MISC(debug, "########## after close #########");
+  while (socket.getStatus() != CLOSED) {
+    dispatcher_->run(Event::Dispatcher::RunType::NonBlock);
+  }
+
 }
 
 } // namespace
