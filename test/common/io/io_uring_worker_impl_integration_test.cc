@@ -97,28 +97,26 @@ public:
 
 class IoUringWorkerIntegraionTest : public testing::Test {
 public:
-  IoUringWorkerIntegraionTest() { should_skip_ = !isIoUringSupported(); }
+  IoUringWorkerIntegraionTest() : should_skip_(!isIoUringSupported()) {}
 
-  void SetUp() {
+  void SetUp() override {
     if (should_skip_) {
       GTEST_SKIP();
     }
   }
 
-  void init() {
+  void initialize() {
     api_ = Api::createApiForTest(time_system_);
     dispatcher_ = api_->allocateDispatcher("test_thread");
     io_uring_worker_ = std::make_unique<IoUringWorkerTestImpl>(
         std::make_unique<IoUringImpl>(8, false), *dispatcher_);
   }
-
   void initializeSockets() {
     socket(true, true);
     listen();
     connect();
     accept();
   }
-
   void cleanup() {
     Api::OsSysCallsSingleton::get().close(client_socket_);
     Api::OsSysCallsSingleton::get().close(server_socket_);
@@ -145,7 +143,6 @@ public:
             .return_value_;
     EXPECT_TRUE(SOCKET_VALID(client_socket_));
   }
-
   void listen() {
     struct sockaddr_in listen_addr;
     memset(&listen_addr, 0, sizeof(listen_addr));
@@ -159,14 +156,12 @@ public:
               0);
     EXPECT_EQ(Api::OsSysCallsSingleton::get().listen(listen_socket_, 5).return_value_, 0);
   }
-
   void connect() {
     struct sockaddr_in listen_addr = getListenSocketAddress();
     Api::OsSysCallsSingleton::get().connect(
         client_socket_, reinterpret_cast<struct sockaddr*>(&listen_addr), sizeof(listen_addr));
     EXPECT_EQ(errno, EINPROGRESS);
   }
-
   void accept() {
     auto file_event = dispatcher_->createFileEvent(
         listen_socket_,
@@ -200,7 +195,7 @@ public:
 };
 
 TEST_F(IoUringWorkerIntegraionTest, Accept) {
-  init();
+  initialize();
   socket(false, true);
   listen();
 
@@ -229,7 +224,7 @@ TEST_F(IoUringWorkerIntegraionTest, Accept) {
 }
 
 TEST_F(IoUringWorkerIntegraionTest, Close) {
-  init();
+  initialize();
   socket(false, true);
   listen();
 
@@ -252,7 +247,7 @@ TEST_F(IoUringWorkerIntegraionTest, Close) {
 }
 
 TEST_F(IoUringWorkerIntegraionTest, Connect) {
-  init();
+  initialize();
   socket(true, false);
   listen();
 
@@ -281,7 +276,7 @@ TEST_F(IoUringWorkerIntegraionTest, Connect) {
 }
 
 TEST_F(IoUringWorkerIntegraionTest, Read) {
-  init();
+  initialize();
   initializeSockets();
 
   auto& socket = dynamic_cast<IoUringTestSocket&>(
@@ -312,7 +307,7 @@ TEST_F(IoUringWorkerIntegraionTest, Read) {
 }
 
 TEST_F(IoUringWorkerIntegraionTest, Write) {
-  init();
+  initialize();
   initializeSockets();
 
   auto& socket = dynamic_cast<IoUringTestSocket&>(
@@ -347,7 +342,7 @@ TEST_F(IoUringWorkerIntegraionTest, Write) {
 }
 
 TEST_F(IoUringWorkerIntegraionTest, CancelRead) {
-  init();
+  initialize();
   initializeSockets();
 
   auto& socket = dynamic_cast<IoUringTestSocket&>(
@@ -376,7 +371,7 @@ TEST_F(IoUringWorkerIntegraionTest, CancelRead) {
 }
 
 TEST_F(IoUringWorkerIntegraionTest, Injection) {
-  init();
+  initialize();
   initializeSockets();
 
   auto& socket = dynamic_cast<IoUringTestSocket&>(
@@ -415,7 +410,7 @@ TEST_F(IoUringWorkerIntegraionTest, Injection) {
 }
 
 TEST_F(IoUringWorkerIntegraionTest, ReadAndInjection) {
-  init();
+  initialize();
   initializeSockets();
 
   auto& socket = dynamic_cast<IoUringTestSocket&>(
@@ -450,7 +445,7 @@ TEST_F(IoUringWorkerIntegraionTest, ReadAndInjection) {
 }
 
 TEST_F(IoUringWorkerIntegraionTest, MergeInjection) {
-  init();
+  initialize();
   initializeSockets();
 
   auto& socket = dynamic_cast<IoUringTestSocket&>(
