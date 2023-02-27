@@ -26,8 +26,10 @@ envoy_cc_library(
     ],
     deps = [
         "//envoy/registry",
+        "//envoy/ssl/private_key:private_key_interface",
         "//source/common/quic:envoy_quic_server_crypto_stream_factory_lib",
         "@envoy_api//envoy/extensions/quic/crypto_stream/v3:pkg_cc_proto",
+        "@com_github_google_quiche//:quic_server_http_spdy_session_lib",
     ],
     alwayslink = LEGACY_ALWAYSLINK,
 )

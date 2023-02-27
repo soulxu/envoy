@@ -3,6 +3,8 @@
 #include <string>
 
 #include "envoy/network/listener.h"
+#include "envoy/ssl/private_key/private_key.h"
+
 
 #include "source/common/quic/envoy_quic_server_crypto_stream_factory.h"
 #include "source/common/quic/envoy_quic_server_session.h"

@@ -939,10 +939,10 @@ def _com_googlesource_chromium_base_trace_event_common():
     )
 
 def _com_github_google_quiche():
-    external_http_archive(
+    native.new_local_repository(
         name = "com_github_google_quiche",
-        patch_cmds = ["find quiche/ -type f -name \"*.bazel\" -delete"],
         build_file = "@envoy//bazel/external:quiche.BUILD",
+        path = "/home/hejiexu/go/src/github.com/google/quiche",
     )
     native.bind(
         name = "quiche_common_platform",

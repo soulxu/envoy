@@ -22,7 +22,8 @@ public:
       quic::QuicCompressedCertsCache* compressed_certs_cache, quic::QuicSession* session,
       quic::QuicCryptoServerStreamBase::Helper* helper,
       OptRef<const Network::DownstreamTransportSocketFactory> transport_socket_factory,
-      Event::Dispatcher& dispatcher) PURE;
+      Event::Dispatcher& dispatcher,
+      Envoy::Ssl::PrivateKeyMethodProviderSharedPtr private_key_method = nullptr) PURE;
 };
 
 } // namespace Quic

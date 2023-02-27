@@ -10,6 +10,7 @@
 #include "source/common/common/safe_memcpy.h"
 #include "source/common/quic/envoy_quic_server_connection.h"
 #include "source/common/quic/envoy_quic_utils.h"
+#include "source/common/quic/quic_transport_socket_factory.h"
 
 namespace Envoy {
 namespace Quic {
@@ -97,11 +98,21 @@ std::unique_ptr<quic::QuicSession> EnvoyQuicDispatcher::CreateQuicSession(
       server_connection_id, self_address, peer_address, *helper(), *alarm_factory(), writer(),
       /*owns_writer=*/false, quic::ParsedQuicVersionVector{version}, std::move(connection_socket),
       connection_id_generator());
+
+
+  auto& transport_socket_factory =
+      dynamic_cast<const QuicServerTransportSocketFactory&>(filter_chain->transportSocketFactory());
+  std::vector<std::reference_wrapper<const Envoy::Ssl::TlsCertificateConfig>> tls_cert_configs =
+      transport_socket_factory.getTlsCertificates();
+  Envoy::Ssl::PrivateKeyMethodProviderSharedPtr private_key_method = tls_cert_configs[0].get().privateKeyMethod();
+  //ASSERT(private_key_method != nullptr);
+
   auto quic_session = std::make_unique<EnvoyQuicServerSession>(
       quic_config, quic::ParsedQuicVersionVector{version}, std::move(quic_connection), this,
       session_helper(), crypto_config(), compressed_certs_cache(), dispatcher_,
       listener_config_->perConnectionBufferLimitBytes(), quic_stat_names_,
-      listener_config_->listenerScope(), crypto_server_stream_factory_, std::move(stream_info));
+      listener_config_->listenerScope(), crypto_server_stream_factory_, std::move(stream_info),
+      private_key_method);
   if (filter_chain != nullptr) {
     // Setup filter chain before Initialize().
     const bool has_filter_initialized =

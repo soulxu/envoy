@@ -53,7 +53,8 @@ public:
                          Event::Dispatcher& dispatcher, uint32_t send_buffer_limit,
                          QuicStatNames& quic_stat_names, Stats::Scope& listener_scope,
                          EnvoyQuicCryptoServerStreamFactoryInterface& crypto_server_stream_factory,
-                         std::unique_ptr<StreamInfo::StreamInfo>&& stream_info);
+                         std::unique_ptr<StreamInfo::StreamInfo>&& stream_info,
+                         Envoy::Ssl::PrivateKeyMethodProviderSharedPtr private_key_method = nullptr);
 
   ~EnvoyQuicServerSession() override;
 
@@ -131,6 +132,7 @@ private:
 
   EnvoyQuicCryptoServerStreamFactoryInterface& crypto_server_stream_factory_;
   absl::optional<ConnectionMapPosition> position_;
+  Envoy::Ssl::PrivateKeyMethodProviderSharedPtr private_key_method_;
 };
 
 } // namespace Quic
