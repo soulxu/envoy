@@ -92,7 +92,7 @@ public:
       injected_completions_ &= ~RequestType::Close;
     }
   }
-  void onCancel(int32_t, bool injected) override {
+  void onCancel(Request*, int32_t, bool injected) override {
     if (injected && (injected_completions_ & RequestType::Cancel)) {
       injected_completions_ &= ~RequestType::Cancel;
     }
@@ -198,7 +198,7 @@ public:
   void onClose(int32_t result, bool injected) override;
   void onRead(Request* req, int32_t result, bool injected) override;
   void onWrite(int32_t result, bool injected) override;
-  void onCancel(int32_t, bool injected) override;
+  void onCancel(Request*, int32_t, bool injected) override;
   void onShutdown(int32_t, bool injected) override;
 
 private:
@@ -221,9 +221,12 @@ private:
   void submitReadRequest();
   void submitWriteRequest();
 
-  void clearReadRequest(void* request);
+  void clearReadRequest(Request* request);
   bool readRequestDone();
   void cancelReadRequest();
+
+  void clearCancelRequest(Request* request);
+  bool cancelRequestDone();
 };
 
 } // namespace Io

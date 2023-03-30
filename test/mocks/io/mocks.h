@@ -52,7 +52,7 @@ class MockIoUringSocket : public IoUringSocket {
   MOCK_METHOD(void, onRead, (Request * req, int32_t result, bool injected));
   MOCK_METHOD(void, onWrite, (int32_t result, bool injected));
   MOCK_METHOD(void, onClose, (int32_t result, bool injected));
-  MOCK_METHOD(void, onCancel, (int32_t result, bool injected));
+  MOCK_METHOD(void, onCancel, (Request * req, int32_t result, bool injected));
   MOCK_METHOD(void, onShutdown, (int32_t result, bool injected));
   MOCK_METHOD(void, injectCompletion, (uint32_t type));
   MOCK_METHOD(IoUringSocketStatus, getStatus, (), (const));

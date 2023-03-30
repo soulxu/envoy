@@ -279,7 +279,7 @@ void IoUringWorkerImpl::onFileEvent() {
     case RequestType::Cancel:
       ENVOY_LOG(trace, "receive cancel request completion, fd = {}, req = {}", req->socket().fd(),
                 fmt::ptr(req));
-      req->socket().onCancel(result, injected);
+      req->socket().onCancel(req, result, injected);
       break;
     case RequestType::Shutdown:
       ENVOY_LOG(trace, "receive shutdown request completion, fd = {}, req = {}", req->socket().fd(),
@@ -390,7 +390,7 @@ IoUringServerSocket::IoUringServerSocket(os_fd_t fd, IoUringWorkerImpl& parent,
 }
 
 void IoUringServerSocket::cancelReadRequest() {
-  if (cancel_req_ == nullptr && !readRequestDone()) {
+  if (cancelRequestDone() && !readRequestDone()) {
     ENVOY_LOG(trace, "cancel the read request, fd = {}", fd_);
     cancel_req_ = parent_.submitCancelRequest(*this, read_req_);
   }
@@ -407,7 +407,7 @@ void IoUringServerSocket::close() {
 
   IoUringSocketEntry::close();
 
-  if (readRequestDone() && write_req_ == nullptr && cancel_req_ == nullptr) {
+  if (readRequestDone() && write_req_ == nullptr && cancelRequestDone()) {
     ENVOY_LOG(trace, "ready to close, fd = {}", fd_);
     close_req_ = parent_.submitCloseRequest(*this);
     return;
@@ -490,7 +490,7 @@ void IoUringServerSocket::onClose(int32_t result, bool injected) {
   cleanup();
 }
 
-void IoUringServerSocket::clearReadRequest(void*) { read_req_ = nullptr; }
+void IoUringServerSocket::clearReadRequest(Request*) { read_req_ = nullptr; }
 
 // TODO(zhxie): concern submit multiple read requests or submit read request in advance to improve
 // performance in the next iteration.
@@ -503,7 +503,7 @@ void IoUringServerSocket::onRead(Request* req, int32_t result, bool injected) {
     clearReadRequest(req);
     // Close if it is in closing status and no write request.
     if (status_ == CLOSING && close_req_ == nullptr && write_req_ == nullptr &&
-        cancel_req_ == nullptr) {
+        cancelRequestDone()) {
       ENVOY_LOG(trace, "ready to close, fd = {}", fd_);
       close_req_ = parent_.submitCloseRequest(*this);
       return;
@@ -577,7 +577,7 @@ void IoUringServerSocket::onWrite(int32_t result, bool injected) {
 
   if (status_ == CLOSING) {
     // Close if it is in closing status and no read request.
-    if (readRequestDone() && close_req_ == nullptr && cancel_req_ == nullptr) {
+    if (readRequestDone() && close_req_ == nullptr && cancelRequestDone()) {
       close_req_ = parent_.submitCloseRequest(*this);
     }
     return;
@@ -620,12 +620,16 @@ void IoUringServerSocket::onWrite(int32_t result, bool injected) {
   }
 }
 
-void IoUringServerSocket::onCancel(int32_t result, bool injected) {
-  IoUringSocketEntry::onCancel(result, injected);
+bool IoUringServerSocket::cancelRequestDone() { return cancel_req_ == nullptr; }
+
+void IoUringServerSocket::clearCancelRequest(Request*) { cancel_req_ = nullptr; }
+
+void IoUringServerSocket::onCancel(Request* req, int32_t result, bool injected) {
+  IoUringSocketEntry::onCancel(req, result, injected);
   ASSERT(!injected);
   ENVOY_LOG(trace, "cancel done, result = {}, fd = {}", result, fd_);
 
-  cancel_req_ = nullptr;
+  clearCancelRequest(req);
   if (status_ == CLOSING && readRequestDone() && write_req_ == nullptr) {
     ENVOY_LOG(trace, "ready to close, fd = {}", fd_);
     close_req_ = parent_.submitCloseRequest(*this);
@@ -633,7 +637,7 @@ void IoUringServerSocket::onCancel(int32_t result, bool injected) {
 }
 
 void IoUringServerSocket::onShutdown(int32_t result, bool injected) {
-  IoUringSocketEntry::onCancel(result, injected);
+  IoUringSocketEntry::onShutdown(result, injected);
   ASSERT(!injected);
   ENVOY_LOG(trace, "shutdown done, result = {}, fd = {}", result, fd_);
   if (status_ == CLOSE_AFTER_SHUTDOWN_WRITE) {

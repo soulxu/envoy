@@ -55,8 +55,8 @@ public:
     is_close_injected_completion_ = injected;
     nr_completion_++;
   }
-  void onCancel(int32_t result, bool injected) override {
-    IoUringSocketEntry::onCancel(result, injected);
+  void onCancel(Request* req, int32_t result, bool injected) override {
+    IoUringSocketEntry::onCancel(req, result, injected);
     cancel_result_ = result;
     is_cancel_injected_completion_ = injected;
     nr_completion_++;

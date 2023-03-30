@@ -237,7 +237,7 @@ public:
   /**
    * On read request completed.
    * TODO (soulxu): wrap the raw result into a type. It can be `IoCallUint64Result`.
-   * @param req the ReadRequest object which is as request user data.
+   * @param req the Request object which is as request user data.
    * @param result the result of operation in the request.
    * @param injected indicates the completion is injected or not.
    */
@@ -262,10 +262,11 @@ public:
   /**
    * On cancel request completed.
    * TODO (soulxu): wrap the raw result into a type. It can be `IoCallUint64Result`.
+   * @param req the Request object which is as request user data.
    * @param result the result of operation in the request.
    * @param injected indicates the completion is injected or not.
    */
-  virtual void onCancel(int32_t result, bool injected) PURE;
+  virtual void onCancel(Request* req, int32_t result, bool injected) PURE;
 
   /**
    * On shutdown request completed.
