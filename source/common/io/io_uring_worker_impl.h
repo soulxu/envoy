@@ -36,16 +36,25 @@ public:
 
 class ReadRequest : public BaseRequest {
 public:
-  ReadRequest(IoUringSocket& socket, uint32_t size);
+  ReadRequest(IoUringSocket& socket, uint32_t size, int index);
 
   std::unique_ptr<uint8_t[]> buf_;
   std::unique_ptr<struct iovec> iov_;
+  int index_;
 };
+
 class WriteRequest : public BaseRequest {
 public:
   WriteRequest(IoUringSocket& socket, const Buffer::RawSliceVector& slices);
 
   std::unique_ptr<struct iovec[]> iov_;
+};
+
+class CancelRequest : public BaseRequest {
+public:
+  CancelRequest(IoUringSocket& socket, int index);
+
+  int index_;
 };
 
 class IoUringSocketEntry : public IoUringSocket,
@@ -133,10 +142,11 @@ public:
   Request* submitAcceptRequest(IoUringSocket& socket) override;
   Request* submitConnectRequest(IoUringSocket& socket,
                                 const Network::Address::InstanceConstSharedPtr& address) override;
-  Request* submitReadRequest(IoUringSocket& socket) override;
+  Request* submitReadRequest(IoUringSocket& socket, int index) override;
   Request* submitWriteRequest(IoUringSocket& socket, const Buffer::RawSliceVector& slices) override;
   Request* submitCloseRequest(IoUringSocket& socket) override;
-  Request* submitCancelRequest(IoUringSocket& socket, Request* request_to_cancel) override;
+  Request* submitCancelRequest(IoUringSocket& socket, Request* request_to_cancel,
+                               int index) override;
   Request* submitShutdownRequest(IoUringSocket& socket, int how) override;
 
   // From socket from the worker.
@@ -203,11 +213,15 @@ public:
 
 private:
   // For read.
-  Request* read_req_{};
   // TODO (soulxu): Add water mark here.
   Buffer::OwnedImpl buf_;
   // TODO (soulxu): using queue for completion.
   absl::optional<int32_t> read_error_;
+  static constexpr int max_read_requests_{16};
+  std::vector<Request*> read_requests_;
+  size_t read_request_count_{0};
+  std::vector<Request*> cancel_requests_;
+  size_t cancel_request_count_{0};
 
   // For write.
   Buffer::OwnedImpl write_buf_;
@@ -216,7 +230,6 @@ private:
 
   // This is used for avoid duplicated close or cancel
   Request* close_req_{nullptr};
-  Request* cancel_req_{nullptr};
 
   void submitReadRequest();
   void submitWriteRequest();

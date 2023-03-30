@@ -365,7 +365,7 @@ public:
   /**
    * Submit a read request for a socket.
    */
-  virtual Request* submitReadRequest(IoUringSocket& socket) PURE;
+  virtual Request* submitReadRequest(IoUringSocket& socket, int index) PURE;
 
   /**
    * Submit a write request for a socket.
@@ -381,7 +381,8 @@ public:
   /**
    * Submit a cancel request for a socket.
    */
-  virtual Request* submitCancelRequest(IoUringSocket& socket, Request* request_to_cancel) PURE;
+  virtual Request* submitCancelRequest(IoUringSocket& socket, Request* request_to_cancel,
+                                       int index) PURE;
 
   /**
    * Submit a shutdown request for a socket.

@@ -67,11 +67,12 @@ public:
   MOCK_METHOD(Request*, submitAcceptRequest, (IoUringSocket & socket));
   MOCK_METHOD(Request*, submitConnectRequest,
               (IoUringSocket & socket, const Network::Address::InstanceConstSharedPtr& address));
-  MOCK_METHOD(Request*, submitReadRequest, (IoUringSocket & socket));
+  MOCK_METHOD(Request*, submitReadRequest, (IoUringSocket & socket, int index));
   MOCK_METHOD(Request*, submitWriteRequest,
               (IoUringSocket & socket, const Buffer::RawSliceVector& slices));
   MOCK_METHOD(Request*, submitCloseRequest, (IoUringSocket & socket));
-  MOCK_METHOD(Request*, submitCancelRequest, (IoUringSocket & socket, Request* request_to_cancel));
+  MOCK_METHOD(Request*, submitCancelRequest,
+              (IoUringSocket & socket, Request* request_to_cancel, int index));
   MOCK_METHOD(Request*, submitShutdownRequest, (IoUringSocket & socket, int how));
 };
 

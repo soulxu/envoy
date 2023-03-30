@@ -1,3 +1,4 @@
+#include "io_uring_worker_impl.h"
 #include "source/common/io/io_uring_worker_impl.h"
 
 #include <sys/socket.h>
@@ -9,9 +10,9 @@ BaseRequest::BaseRequest(uint32_t type, IoUringSocket& socket) : type_(type), so
 
 AcceptRequest::AcceptRequest(IoUringSocket& socket) : BaseRequest(RequestType::Accept, socket) {}
 
-ReadRequest::ReadRequest(IoUringSocket& socket, uint32_t size)
+ReadRequest::ReadRequest(IoUringSocket& socket, uint32_t size, int index)
     : BaseRequest(RequestType::Read, socket), buf_(std::make_unique<uint8_t[]>(size)),
-      iov_(std::make_unique<struct iovec>()) {
+      iov_(std::make_unique<struct iovec>()), index_(index) {
   iov_->iov_base = buf_.get();
   iov_->iov_len = size;
 }
@@ -24,6 +25,9 @@ WriteRequest::WriteRequest(IoUringSocket& socket, const Buffer::RawSliceVector& 
     iov_[i].iov_len = slices[i].len_;
   }
 }
+
+CancelRequest::CancelRequest(IoUringSocket& socket, int index)
+    : BaseRequest(RequestType::Cancel, socket), index_(index) {}
 
 IoUringSocketEntry::IoUringSocketEntry(os_fd_t fd, IoUringWorkerImpl& parent,
                                        IoUringHandler& io_uring_handler)
@@ -147,8 +151,8 @@ IoUringWorkerImpl::submitConnectRequest(IoUringSocket& socket,
   return req;
 }
 
-Request* IoUringWorkerImpl::submitReadRequest(IoUringSocket& socket) {
-  ReadRequest* req = new ReadRequest(socket, read_buffer_size_);
+Request* IoUringWorkerImpl::submitReadRequest(IoUringSocket& socket, int index) {
+  ReadRequest* req = new ReadRequest(socket, read_buffer_size_, index);
 
   ENVOY_LOG(trace, "submit read request, fd = {}, read req = {}", socket.fd(), fmt::ptr(req));
 
@@ -196,8 +200,9 @@ Request* IoUringWorkerImpl::submitCloseRequest(IoUringSocket& socket) {
   return req;
 }
 
-Request* IoUringWorkerImpl::submitCancelRequest(IoUringSocket& socket, Request* request_to_cancel) {
-  Request* req = new BaseRequest(RequestType::Cancel, socket);
+Request* IoUringWorkerImpl::submitCancelRequest(IoUringSocket& socket, Request* request_to_cancel,
+                                                int index) {
+  Request* req = new CancelRequest(socket, index);
 
   ENVOY_LOG(trace, "submit cancel request, fd = {}, cancel req = {}, req to cancel = {}",
             socket.fd(), fmt::ptr(req), fmt::ptr(request_to_cancel));
@@ -322,7 +327,7 @@ void IoUringAcceptSocket::close() {
   // submitCancelRequest since io_uring can accept cancelling an invalid user_data.
   for (auto req : requests_) {
     if (req != nullptr) {
-      parent_.submitCancelRequest(*this, req);
+      parent_.submitCancelRequest(*this, req, 0);
     }
   }
 }
@@ -337,7 +342,7 @@ void IoUringAcceptSocket::disable() {
   // TODO (soulxu): after kernel 5.19, we are able to cancel all requests for the specific fd.
   for (auto req : requests_) {
     if (req != nullptr) {
-      parent_.submitCancelRequest(*this, req);
+      parent_.submitCancelRequest(*this, req, 0);
     }
   }
 }
@@ -385,14 +390,21 @@ void IoUringAcceptSocket::submitRequests() {
 
 IoUringServerSocket::IoUringServerSocket(os_fd_t fd, IoUringWorkerImpl& parent,
                                          IoUringHandler& io_uring_handler)
-    : IoUringSocketEntry(fd, parent, io_uring_handler) {
+    : IoUringSocketEntry(fd, parent, io_uring_handler), read_requests_(max_read_requests_, nullptr),
+      cancel_requests_(max_read_requests_, nullptr) {
   enable();
 }
 
 void IoUringServerSocket::cancelReadRequest() {
   if (cancelRequestDone() && !readRequestDone()) {
     ENVOY_LOG(trace, "cancel the read request, fd = {}", fd_);
-    cancel_req_ = parent_.submitCancelRequest(*this, read_req_);
+
+    for (auto i = 0; i < max_read_requests_; i++) {
+      if (read_requests_[i] != nullptr) {
+        cancel_requests_[i] = parent_.submitCancelRequest(*this, read_requests_[i], i);
+        cancel_request_count_++;
+      }
+    }
   }
 }
 
@@ -490,7 +502,10 @@ void IoUringServerSocket::onClose(int32_t result, bool injected) {
   cleanup();
 }
 
-void IoUringServerSocket::clearReadRequest(Request*) { read_req_ = nullptr; }
+void IoUringServerSocket::clearReadRequest(Request* req) {
+  read_requests_[static_cast<ReadRequest*>(req)->index_] = nullptr;
+  read_request_count_--;
+}
 
 // TODO(zhxie): concern submit multiple read requests or submit read request in advance to improve
 // performance in the next iteration.
@@ -502,10 +517,14 @@ void IoUringServerSocket::onRead(Request* req, int32_t result, bool injected) {
   if (!injected) {
     clearReadRequest(req);
     // Close if it is in closing status and no write request.
-    if (status_ == CLOSING && close_req_ == nullptr && write_req_ == nullptr &&
-        cancelRequestDone()) {
-      ENVOY_LOG(trace, "ready to close, fd = {}", fd_);
-      close_req_ = parent_.submitCloseRequest(*this);
+    if (status_ == CLOSING) {
+      ENVOY_LOG(trace, "check closing status, num read requests = {}, num cancel requests = {}",
+                read_request_count_, cancel_request_count_);
+      if (close_req_ == nullptr && write_req_ == nullptr && cancelRequestDone() &&
+          readRequestDone()) {
+        ENVOY_LOG(trace, "ready to close, fd = {}", fd_);
+        close_req_ = parent_.submitCloseRequest(*this);
+      }
       return;
     }
   }
@@ -563,7 +582,7 @@ void IoUringServerSocket::onRead(Request* req, int32_t result, bool injected) {
   }
 }
 
-bool IoUringServerSocket::readRequestDone() { return read_req_ == nullptr; }
+bool IoUringServerSocket::readRequestDone() { return read_request_count_ == 0; }
 
 void IoUringServerSocket::onWrite(int32_t result, bool injected) {
   IoUringSocketEntry::onWrite(result, injected);
@@ -620,9 +639,12 @@ void IoUringServerSocket::onWrite(int32_t result, bool injected) {
   }
 }
 
-bool IoUringServerSocket::cancelRequestDone() { return cancel_req_ == nullptr; }
+bool IoUringServerSocket::cancelRequestDone() { return cancel_request_count_ == 0; }
 
-void IoUringServerSocket::clearCancelRequest(Request*) { cancel_req_ = nullptr; }
+void IoUringServerSocket::clearCancelRequest(Request* req) {
+  cancel_requests_[static_cast<CancelRequest*>(req)->index_] = nullptr;
+  cancel_request_count_--;
+}
 
 void IoUringServerSocket::onCancel(Request* req, int32_t result, bool injected) {
   IoUringSocketEntry::onCancel(req, result, injected);
@@ -630,7 +652,9 @@ void IoUringServerSocket::onCancel(Request* req, int32_t result, bool injected) 
   ENVOY_LOG(trace, "cancel done, result = {}, fd = {}", result, fd_);
 
   clearCancelRequest(req);
-  if (status_ == CLOSING && readRequestDone() && write_req_ == nullptr) {
+  ENVOY_LOG(trace, "check closing status, num read requests = {}, num cancel requests = {}",
+            read_request_count_, cancel_request_count_);
+  if (status_ == CLOSING && readRequestDone() && write_req_ == nullptr && cancelRequestDone()) {
     ENVOY_LOG(trace, "ready to close, fd = {}", fd_);
     close_req_ = parent_.submitCloseRequest(*this);
   }
@@ -650,9 +674,12 @@ void IoUringServerSocket::onShutdown(int32_t result, bool injected) {
 }
 
 void IoUringServerSocket::submitReadRequest() {
-  if (readRequestDone()) {
-    read_req_ = parent_.submitReadRequest(*this);
+  for (auto i = 0; i < max_read_requests_; i++) {
+    if (read_requests_[i] == nullptr) {
+      read_requests_[i] = parent_.submitReadRequest(*this, i);
+    }
   }
+  read_request_count_ = max_read_requests_;
 }
 
 void IoUringServerSocket::submitWriteRequest() {
