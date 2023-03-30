@@ -220,6 +220,10 @@ private:
 
   void submitReadRequest();
   void submitWriteRequest();
+
+  void clearReadRequest(void* request);
+  bool readRequestDone();
+  void cancelReadRequest();
 };
 
 } // namespace Io
