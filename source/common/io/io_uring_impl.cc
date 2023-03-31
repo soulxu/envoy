@@ -151,14 +151,18 @@ IoUringResult IoUringImpl::prepareConnect(os_fd_t fd,
 }
 
 IoUringResult IoUringImpl::prepareReadv(os_fd_t fd, const struct iovec* iovecs, unsigned nr_vecs,
-                                        off_t offset, void* user_data) {
-  ENVOY_LOG(trace, "prepare readv for fd = {}", fd);
+                                        off_t offset, void* user_data, bool link) {
+  ENVOY_LOG(trace, "prepare readv for fd = {}, link = {}", fd, link);
   struct io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
   if (sqe == nullptr) {
     return IoUringResult::Failed;
   }
 
+  
   io_uring_prep_readv(sqe, fd, iovecs, nr_vecs, offset);
+  if (link) {
+    io_uring_sqe_set_flags(sqe, sqe->flags |= IOSQE_IO_LINK);
+  }
   io_uring_sqe_set_data(sqe, user_data);
   return IoUringResult::Ok;
 }

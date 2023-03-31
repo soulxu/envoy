@@ -37,7 +37,7 @@ public:
   IoUringResult prepareConnect(os_fd_t fd, const Network::Address::InstanceConstSharedPtr& address,
                                void* user_data) override;
   IoUringResult prepareReadv(os_fd_t fd, const struct iovec* iovecs, unsigned nr_vecs, off_t offset,
-                             void* user_data) override;
+                             void* user_data, bool link) override;
   IoUringResult prepareWritev(os_fd_t fd, const struct iovec* iovecs, unsigned nr_vecs,
                               off_t offset, void* user_data) override;
   IoUringResult prepareClose(os_fd_t fd, void* user_data) override;

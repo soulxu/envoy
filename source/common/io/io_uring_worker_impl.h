@@ -142,7 +142,7 @@ public:
   Request* submitAcceptRequest(IoUringSocket& socket) override;
   Request* submitConnectRequest(IoUringSocket& socket,
                                 const Network::Address::InstanceConstSharedPtr& address) override;
-  Request* submitReadRequest(IoUringSocket& socket, int index) override;
+  Request* submitReadRequest(IoUringSocket& socket, int index, bool link) override;
   Request* submitWriteRequest(IoUringSocket& socket, const Buffer::RawSliceVector& slices) override;
   Request* submitCloseRequest(IoUringSocket& socket) override;
   Request* submitCancelRequest(IoUringSocket& socket, Request* request_to_cancel,

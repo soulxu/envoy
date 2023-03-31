@@ -73,7 +73,7 @@ public:
    * and IoUringResult::Ok otherwise.
    */
   virtual IoUringResult prepareReadv(os_fd_t fd, const struct iovec* iovecs, unsigned nr_vecs,
-                                     off_t offset, void* user_data) PURE;
+                                     off_t offset, void* user_data, bool link) PURE;
 
   /**
    * Prepares a writev system call and puts it into the submission queue.
@@ -365,7 +365,7 @@ public:
   /**
    * Submit a read request for a socket.
    */
-  virtual Request* submitReadRequest(IoUringSocket& socket, int index) PURE;
+  virtual Request* submitReadRequest(IoUringSocket& socket, int index, bool link) PURE;
 
   /**
    * Submit a write request for a socket.

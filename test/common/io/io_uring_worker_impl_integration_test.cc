@@ -311,7 +311,7 @@ TEST_F(IoUringWorkerIntegrationTest, Read) {
   Api::OsSysCallsSingleton::get().write(client_socket_, write_data.data(), write_data.size());
 
   // Waiting for the server socket receive the data.
-  io_uring_worker_->submitReadRequest(socket, 0);
+  io_uring_worker_->submitReadRequest(socket, 0, false);
   while (socket.read_result_ == -1) {
     dispatcher_->run(Event::Dispatcher::RunType::NonBlock);
   }
@@ -390,7 +390,7 @@ TEST_F(IoUringWorkerIntegrationTest, CancelRead) {
   EXPECT_EQ(io_uring_worker_->getSockets().size(), 1);
 
   // Waiting for the server socket cancel receiving.
-  auto req = io_uring_worker_->submitReadRequest(socket, 0);
+  auto req = io_uring_worker_->submitReadRequest(socket, 0, false);
   io_uring_worker_->submitCancelRequest(socket, req, 0);
   while (socket.cancel_result_ == -1 || socket.read_result_ == -1) {
     dispatcher_->run(Event::Dispatcher::RunType::NonBlock);
@@ -461,7 +461,7 @@ TEST_F(IoUringWorkerIntegrationTest, ReadAndInjection) {
   Api::OsSysCallsSingleton::get().write(client_socket_, write_data.data(), write_data.size());
 
   // Waiting for server socket receive data and injected completion.
-  io_uring_worker_->submitReadRequest(socket, 0);
+  io_uring_worker_->submitReadRequest(socket, 0, false);
   while (socket.read_result_ == -1) {
     dispatcher_->run(Event::Dispatcher::RunType::NonBlock);
   }

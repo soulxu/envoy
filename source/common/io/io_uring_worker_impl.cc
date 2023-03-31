@@ -151,16 +151,16 @@ IoUringWorkerImpl::submitConnectRequest(IoUringSocket& socket,
   return req;
 }
 
-Request* IoUringWorkerImpl::submitReadRequest(IoUringSocket& socket, int index) {
+Request* IoUringWorkerImpl::submitReadRequest(IoUringSocket& socket, int index, bool link) {
   ReadRequest* req = new ReadRequest(socket, read_buffer_size_, index);
 
   ENVOY_LOG(trace, "submit read request, fd = {}, read req = {}", socket.fd(), fmt::ptr(req));
 
-  auto res = io_uring_->prepareReadv(socket.fd(), req->iov_.get(), 1, 0, req);
+  auto res = io_uring_->prepareReadv(socket.fd(), req->iov_.get(), 1, 0, req, link);
   if (res == IoUringResult::Failed) {
     // TODO(rojkov): handle `EBUSY` in case the completion queue is never reaped.
     submit();
-    res = io_uring_->prepareReadv(socket.fd(), req->iov_.get(), 1, 0, req);
+    res = io_uring_->prepareReadv(socket.fd(), req->iov_.get(), 1, 0, req, link);
     RELEASE_ASSERT(res == IoUringResult::Ok, "unable to prepare readv");
   }
   submit();
@@ -682,12 +682,14 @@ void IoUringServerSocket::onShutdown(int32_t result, bool injected) {
 }
 
 void IoUringServerSocket::submitReadRequest() {
-  for (auto i = 0; i < max_read_requests_; i++) {
-    if (read_requests_[i] == nullptr) {
-      read_requests_[i] = parent_.submitReadRequest(*this, i);
+  if (read_request_count_ == 0) {
+    for (auto i = 0; i < max_read_requests_; i++) {
+      ASSERT(read_requests_[i] == nullptr);
+      bool link = (i != (max_read_requests_ - 1));
+      read_requests_[i] = parent_.submitReadRequest(*this, i, link);
     }
+    read_request_count_ = max_read_requests_;
   }
-  read_request_count_ = max_read_requests_;
 }
 
 void IoUringServerSocket::submitWriteRequest() {
