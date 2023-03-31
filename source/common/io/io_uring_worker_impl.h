@@ -240,6 +240,8 @@ private:
 
   void clearCancelRequest(Request* request);
   bool cancelRequestDone();
+
+  bool remote_closed{false};
 };
 
 } // namespace Io

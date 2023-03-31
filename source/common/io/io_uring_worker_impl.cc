@@ -542,6 +542,14 @@ void IoUringServerSocket::onRead(Request* req, int32_t result, bool injected) {
   } else {
     if (result != -ECANCELED) {
       read_error_ = result;
+      if (result == 0) {
+        if (!remote_closed) {
+          remote_closed = true;
+        } else {
+          ENVOY_LOG(trace, "already remote closed, ignore this one");
+          return;
+        }
+      }
     }
   }
 

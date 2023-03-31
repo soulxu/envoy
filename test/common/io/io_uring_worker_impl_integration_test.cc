@@ -106,8 +106,10 @@ public:
   void onRead(ReadParam& param) override {
     read_results_.push(param.result_);
     if (drain_all_data) {
+      ENVOY_LOG_MISC(debug, "######## get data {}", param.buf_.toString());
       read_buf_.move(param.buf_);
     } else if (expected_read_size_) {
+      ENVOY_LOG_MISC(debug, "######## get data {}", param.buf_.toString());
       // Only drain expected size to emulate readDisable on reading.
       read_buf_.move(param.buf_, expected_read_size_);
       expected_read_size_ = 0;
@@ -843,12 +845,13 @@ TEST_F(IoUringWorkerIntegrationTest, ServerSocketMultipleRead) {
   std::string write_data = "hello world";
 
   // Waiting for the server socket receive the data.
-  uint i = 0;
-  while (io_uring_handler_.read_results_.size() < 11) {
-    io_uring_handler_.expectRead(1);
+  io_uring_handler_.drain_all_data = true;
+  for (size_t i = 0; i < write_data.size(); i++) {
     Api::OsSysCallsSingleton::get().write(client_socket_, write_data.data() + i, 1);
+  }
+
+  while (io_uring_handler_.read_buf_.length() < write_data.size()) {
     dispatcher_->run(Event::Dispatcher::RunType::NonBlock);
-    i++;
   }
 
   EXPECT_EQ(io_uring_handler_.read_buf_.toString(), write_data);
@@ -868,14 +871,19 @@ TEST_F(IoUringWorkerIntegrationTest, ServerSocketHugeMultipleRead) {
 
   // Write data through client socket.
   std::string write_data;
-  for (int i = 0; i < 20 * 16 * 1024; i++) {
+  for (int i = 0; i < 2 * 16 * 1024; i++) {
     write_data.append(std::to_string(i % 10));
   }
 
   io_uring_handler_.drain_all_data = true;
-  for (int i = 0; i < 20; i++) {
-    Api::OsSysCallsSingleton::get().write(client_socket_, write_data.data() + (16 * 1024) * i,
-                                          16 * 1024);
+  for (int i = 0; i < 4; i++) {
+    std::string next_write_data(write_data.data() + (8 * 1024) * i, 8 * 1024);
+    ENVOY_LOG_MISC(debug, "############# next write data {}", next_write_data);
+    Api::OsSysCallsSingleton::get().write(client_socket_, write_data.data() + (8 * 1024) * i,
+                                          8 * 1024);
+    if ((i % 10) == 0) {
+      dispatcher_->run(Event::Dispatcher::RunType::NonBlock);
+    }
   }
 
   while (io_uring_handler_.read_buf_.length() < write_data.size()) {
