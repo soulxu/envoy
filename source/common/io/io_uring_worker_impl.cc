@@ -163,7 +163,9 @@ Request* IoUringWorkerImpl::submitReadRequest(IoUringSocket& socket, int index, 
     res = io_uring_->prepareReadv(socket.fd(), req->iov_.get(), 1, 0, req, link);
     RELEASE_ASSERT(res == IoUringResult::Ok, "unable to prepare readv");
   }
-  submit();
+  if (!link) {
+    submit();
+  }
   return req;
 }
 
