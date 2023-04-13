@@ -342,7 +342,23 @@ Api::SysCallIntResult IoUringSocketHandleImpl::connect(Address::InstanceConstSha
     return shadow_io_handle_->connect(address);
   }
 
-  return Api::SysCallIntResult{0, 0};
+  io_uring_socket_->connect(address);
+  return Api::SysCallIntResult{-1, EINPROGRESS};
+}
+
+Api::SysCallIntResult IoUringSocketHandleImpl::getOption(int level, int optname, void* optval,
+                                                         socklen_t* optlen) {
+  // io_uring socket does not populate connect error in getsockopt. Instead, the connect error is
+  // returned in onConnect() handling. We will imitate the default socket behavior here for client
+  // socket and with optname SO_ERROR, which is only used to check connect error.
+  if (io_uring_socket_type_ == IoUringSocketType::Client && optname == SO_ERROR &&
+      write_param_.has_value()) {
+    auto intval = static_cast<int*>(optval);
+    *intval = -write_param_->result_;
+    return {0, 0};
+  }
+
+  return IoSocketHandleBaseImpl::getOption(level, optname, optval, optlen);
 }
 
 Api::SysCallIntResult IoUringSocketHandleImpl::shutdown(int how) {
@@ -426,7 +442,11 @@ void IoUringSocketHandleImpl::initializeFileEvent(Event::Dispatcher& dispatcher,
       shadow_io_handle_->setBlocking(false);
       shadow_io_handle_->initializeFileEvent(dispatcher, std::move(cb), trigger, events);
       return;
+    } else {
+      io_uring_socket_ = io_uring_factory_.getIoUringWorker()->addClientSocket(
+          fd_, *this, events & Event::FileReadyType::Closed);
     }
+    break;
   }
 
   cb_ = std::move(cb);

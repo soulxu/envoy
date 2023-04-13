@@ -111,7 +111,7 @@ public:
   void expectRead(std::function<void(ReadParam&)> on_read_cb) { on_read_cb_ = on_read_cb; }
 
   os_fd_t accept_result_{INVALID_SOCKET};
-  int32_t write_result_{0};
+  int32_t write_result_{-1};
   bool is_closed{false};
 
   std::function<void(ReadParam&)> on_read_cb_;
@@ -897,6 +897,72 @@ TEST_F(IoUringWorkerIntegrationTest, ServerSocketCloseWithAnyRequest) {
   // Close the socket now, it expected the socket will be close directly without cancel.
   socket.close(false);
   runToClose(server_socket_);
+  EXPECT_EQ(io_uring_worker_->getSockets().size(), 0);
+  cleanup();
+}
+
+TEST_F(IoUringWorkerIntegrationTest, ClientSocketConnect) {
+  initialize();
+  socket(true, false);
+  listen();
+
+  auto& socket = dynamic_cast<IoUringClientSocket&>(
+      io_uring_worker_->addClientSocket(client_socket_, io_uring_handler_, false));
+  EXPECT_EQ(io_uring_worker_->getSockets().size(), 1);
+
+  // Waiting for the client socket connect.
+  struct sockaddr_in listen_addr = getListenSocketAddress();
+  auto addr = std::make_shared<Network::Address::Ipv4Instance>(&listen_addr);
+  io_uring_worker_->submitConnectRequest(socket, addr);
+
+  // Accept through client socket.
+  accept();
+
+  // The client socket should be writable.
+  while (io_uring_handler_.write_result_ == -1) {
+    dispatcher_->run(Event::Dispatcher::RunType::NonBlock);
+  }
+  EXPECT_EQ(io_uring_handler_.write_result_, 0);
+
+  // Write data through server socket.
+  std::string write_data("Hello, world!");
+  write(server_socket_, write_data.data(), write_data.size());
+
+  // Waiting for the client socket receive the data.
+  absl::optional<int32_t> result = absl::nullopt;
+  io_uring_handler_.expectRead([&result](ReadParam& param) { result = param.result_; });
+  while (!result.has_value()) {
+    dispatcher_->run(Event::Dispatcher::RunType::NonBlock);
+  }
+  EXPECT_EQ(result.value(), write_data.length());
+
+  socket.close(false);
+  runToClose(client_socket_);
+  EXPECT_EQ(io_uring_worker_->getSockets().size(), 0);
+  cleanup();
+}
+
+TEST_F(IoUringWorkerIntegrationTest, ClientSocketConnectError) {
+  initialize();
+  socket(true, false);
+  listen();
+
+  auto& socket = dynamic_cast<IoUringClientSocket&>(
+      io_uring_worker_->addClientSocket(client_socket_, io_uring_handler_, false));
+  EXPECT_EQ(io_uring_worker_->getSockets().size(), 1);
+
+  // Waiting for the client socket connect.
+  auto addr = std::make_shared<Network::Address::Ipv4Instance>(0);
+  io_uring_worker_->submitConnectRequest(socket, addr);
+
+  // The client socket should be writable.
+  while (io_uring_handler_.write_result_ == -1) {
+    dispatcher_->run(Event::Dispatcher::RunType::NonBlock);
+  }
+  EXPECT_EQ(io_uring_handler_.write_result_, -ECONNREFUSED);
+
+  socket.close(false);
+  runToClose(client_socket_);
   EXPECT_EQ(io_uring_worker_->getSockets().size(), 0);
   cleanup();
 }
