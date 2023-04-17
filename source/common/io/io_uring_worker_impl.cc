@@ -462,8 +462,7 @@ void IoUringServerSocket::close(bool keep_fd_open) {
     cancel_read_req_ = parent_.submitCancelRequest(*this, read_req_);
   }
 
-  ASSERT(write_timeout_timer_ == nullptr);
-  if (cancel_write_req_ == nullptr && write_req_ != nullptr) {
+  if (write_timeout_timer_ == nullptr && cancel_write_req_ == nullptr && write_req_ != nullptr) {
     ENVOY_LOG(trace, "delay cancel write request, fd = {}", fd_);
     write_timeout_timer_ = parent_.dispatcher().createTimer([this]() {
       if (cancel_write_req_ == nullptr && write_req_ != nullptr) {
@@ -590,7 +589,7 @@ void IoUringServerSocket::onRead(Request* req, int32_t result, bool injected) {
   }
 
   if (status_ == ENABLED || status_ == DISABLED || status_ == SHUTDOWN_WRITE ||
-      status_ == CLOSE_AFTER_SHUTDOWN_WRITE || status_ == ALREADY_SHUTDOWN) {
+      status_ == ALREADY_SHUTDOWN) {
     // If the socket is enabled and there is bytes to read, notify the handler.
     if (buf_.length() > 0 && status_ != DISABLED) {
       ENVOY_LOG(trace, "read from socket, fd = {}, result = {}", fd_, buf_.length());
@@ -657,8 +656,8 @@ void IoUringServerSocket::onWrite(Request* req, int32_t result, bool injected) {
       write_timeout_timer_ = nullptr;
     }
     // Close if it is in closing status and can be closed.
-    if (read_req_ == nullptr && close_req_ == nullptr && cancel_read_req_ == nullptr &&
-        cancel_write_req_ == nullptr) {
+    if (read_req_ == nullptr && write_req_ == nullptr && close_req_ == nullptr &&
+        cancel_read_req_ == nullptr && cancel_write_req_ == nullptr) {
       if (keep_fd_open_) {
         cleanup();
       } else {
@@ -672,8 +671,12 @@ void IoUringServerSocket::onWrite(Request* req, int32_t result, bool injected) {
   if (injected) {
     ENVOY_LOG(trace,
               "there is a inject event, and same time we have regular write request, fd = {}", fd_);
-    WriteParam param{result};
-    io_uring_handler_.onWrite(param);
+    // There is case where write injection may come after CLOSING or CLOSE_AFTER_SHUTDOWN_WRITE
+    // which should be ignored since the I/O handle or connection may be released after closing.
+    if (status_ != CLOSING && status_ != CLOSE_AFTER_SHUTDOWN_WRITE) {
+      WriteParam param{result};
+      io_uring_handler_.onWrite(param);
+    }
     return;
   }
 
