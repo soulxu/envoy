@@ -1,4 +1,5 @@
 #include "source/common/io/io_uring_worker_impl.h"
+#include "source/common/network/address_impl.h"
 
 #include "test/mocks/event/mocks.h"
 #include "test/mocks/io/mocks.h"
@@ -451,11 +452,48 @@ TEST(IoUringWorkerImplTest, NoOnWriteCallingBackInCloseAfterShutdownWriteSocketI
   IoUringServerSocket socket(0, worker, handler, 0, false);
 
   EXPECT_CALL(mock_io_uring, submit());
-  EXPECT_CALL(mock_io_uring, prepareShutdown(socket.fd(), _, _));
+  void* shutdown_req = nullptr;
+  EXPECT_CALL(mock_io_uring, prepareShutdown(socket.fd(), _, _))
+      .WillOnce(DoAll(SaveArg<2>(&shutdown_req), Return<IoUringResult>(IoUringResult::Ok)));
   socket.shutdown(SHUT_WR);
   EXPECT_CALL(dispatcher, clearDeferredDeleteList());
   socket.close(false);
   socket.onWrite(nullptr, 0, true);
+  delete static_cast<Request*>(shutdown_req);
+}
+
+TEST(IoUringWorkerImplTest, NoOnConnectCallingBackInClosing) {
+  Event::MockDispatcher dispatcher;
+  IoUringPtr io_uring_instance = std::make_unique<MockIoUring>();
+  MockIoUring& mock_io_uring = *dynamic_cast<MockIoUring*>(io_uring_instance.get());
+  EXPECT_CALL(mock_io_uring, registerEventfd());
+  EXPECT_CALL(dispatcher, createFileEvent_(_, _, Event::PlatformDefaultTriggerType,
+                                           Event::FileReadyType::Read));
+  IoUringWorkerTestImpl worker(std::move(io_uring_instance), dispatcher);
+  MockIoUringHandler handler;
+  IoUringClientSocket socket(0, worker, handler, 0, false);
+
+  auto addr = std::make_shared<Network::Address::Ipv4Instance>("0.0.0.0");
+  EXPECT_CALL(mock_io_uring, submit()).Times(3);
+  void* connect_req = nullptr;
+  EXPECT_CALL(mock_io_uring, prepareConnect(socket.fd(), _, _))
+      .WillOnce(DoAll(SaveArg<2>(&connect_req), Return<IoUringResult>(IoUringResult::Ok)));
+  socket.connect(addr);
+  EXPECT_CALL(dispatcher, clearDeferredDeleteList());
+  void* cancel_req = nullptr;
+  EXPECT_CALL(mock_io_uring, prepareCancel(_, _))
+      .WillOnce(DoAll(SaveArg<1>(&cancel_req), Return<IoUringResult>(IoUringResult::Ok)))
+      .RetiresOnSaturation();
+  void* close_req = nullptr;
+  EXPECT_CALL(handler, onLocalClose());
+  EXPECT_CALL(mock_io_uring, prepareClose(socket.fd(), _))
+      .WillOnce(DoAll(SaveArg<1>(&close_req), Return<IoUringResult>(IoUringResult::Ok)));
+  socket.close(false);
+  socket.onCancel(static_cast<Request*>(cancel_req), 0, false);
+  socket.onConnect(nullptr, 0, false);
+  delete static_cast<Request*>(connect_req);
+  delete static_cast<Request*>(cancel_req);
+  delete static_cast<Request*>(close_req);
 }
 
 } // namespace

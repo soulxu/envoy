@@ -772,9 +772,9 @@ void IoUringClientSocket::enable() {
 }
 
 void IoUringClientSocket::connect(const Network::Address::InstanceConstSharedPtr& address) {
-  // Reuse write request since connect will activate write event eventually.
-  ASSERT(write_req_ == nullptr);
-  write_req_ = parent_.submitConnectRequest(*this, address);
+  // Reuse read request since there is no read on connecting and connect is cancellable.
+  ASSERT(read_req_ == nullptr);
+  read_req_ = parent_.submitConnectRequest(*this, address);
 }
 
 void IoUringClientSocket::onConnect(Request* req, int32_t result, bool injected) {
@@ -783,7 +783,16 @@ void IoUringClientSocket::onConnect(Request* req, int32_t result, bool injected)
   ENVOY_LOG(trace, "onConnect with result {}, fd = {}, injected = {}, status_ = {}", result, fd_,
             injected, status_);
 
-  write_req_ = nullptr;
+  read_req_ = nullptr;
+  // Socket may be closed on connecting like binding error. In this situation we may not callback
+  // on connecting completion.
+  if (status_ == CLOSING) {
+    if (close_req_ == nullptr && cancel_read_req_ == nullptr) {
+      close_req_ = parent_.submitCloseRequest(*this);
+    }
+    return;
+  }
+
   if (result == 0) {
     is_connected_ = true;
     enable();
