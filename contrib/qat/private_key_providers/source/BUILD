@@ -4,6 +4,10 @@ load(
     "envoy_cc_library",
     "envoy_contrib_package",
 )
+load(
+    "//bazel:envoy_internal.bzl",
+    "envoy_external_dep_path",
+)
 
 licenses(["notice"])  # Apache 2
 
@@ -18,8 +22,11 @@ envoy_cc_library(
     external_deps = ["ssl"],
     repository = "@envoy",
     # linkopts = ["-lqat_s", "-lusdm_drv_s"],
-    # copts = ["-I/external/com_github_intel_qatlib/quickassist"],
-    deps = ["//contrib/qat:qatlib"],
+    # copts = ["-I$EXT_BUILD_DEPS/com_github_intel_qatlib/quickassist"],
+    deps = [
+        "//contrib/qat:qatlib",
+        #envoy_external_dep_path("com_github_intel_qatlib"),
+    ],
 )
 
 envoy_cc_library(

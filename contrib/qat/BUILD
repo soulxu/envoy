@@ -37,8 +37,15 @@ configure_make(
         "libqat_s.so",
         "libusdm_drv_s.so",
     ],
+    #out_static_libs = [
+    #    "libqat.a",
+    #    "libusdm_drv.a",
+    #    "libadf.a",
+    #    "libosal.a",
+    #],
     target_compatible_with = envoy_contrib_linux_x86_64_constraints(),
     visibility = ["//visibility:public"],
     #deps = ["@boringssl//:ssl"],
-    #alwayslink = True,
+    alwayslink = True,
+    postfix_script = "mkdir -p $INSTALLDIR/include && cp -rL quickassist/include/* $INSTALLDIR/include && cp quickassist/utilities/libusdm_drv/qae_mem.h $INSTALLDIR/include && cp quickassist/lookaside/access_layer/include/*.h $INSTALLDIR/include && cp quickassist/include/dc/*.h $INSTALLDIR/include",
 )
