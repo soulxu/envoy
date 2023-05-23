@@ -15,23 +15,30 @@ envoy_contrib_package()
 
 configure_make(
     name = "qatlib",
-    autogen = True,
+    autogen = False,
     configure_in_place = True,
-    configure_options = [
-        "--disable-fast-crc-in-assembler",
-        "--disable-systemd",
-        "--disable-shared",
-        "--with-pic",
-        "--enable-static",
-        "--enable-samples=no",
+    #configure_options = [
+    #    "--enable-icp-sriov=guest",
+    #],
+    copts = [
+        "-Wno-unused-command-line-argument",
+        "-Wno-enum-conversion",
+        "-Wno-error=sizeof-array-decay",
+        "-Wno-error=unneeded-internal-declaration",
     ],
+    #copts = ["-Qunused-arguments",
+    #         "-Qenum-conversion"],
+    #env = {
+    #      "CXX": "/home/xuhj/clang+llvm-14.0.0-x86_64-linux-gnu-ubuntu-18.04/bin/clang++",
+    #      "CC": "/home/xuhj/clang+llvm-14.0.0-x86_64-linux-gnu-ubuntu-18.04/bin/clang",
+    #},
     lib_source = "@com_github_intel_qatlib//:all",
-    out_static_libs = [
-        "libqat.a",
-        "libusdm.a",
+    out_shared_libs = [
+        "libqat_s.so",
+        "libusdm_drv_s.so",
     ],
     target_compatible_with = envoy_contrib_linux_x86_64_constraints(),
     visibility = ["//visibility:public"],
-    deps = ["@boringssl//:ssl"],
-    alwayslink = True,
+    #deps = ["@boringssl//:ssl"],
+    #alwayslink = True,
 )

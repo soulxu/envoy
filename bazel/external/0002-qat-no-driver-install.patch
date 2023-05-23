@@ -1,0 +1,15 @@
+diff --git a/Makefile.in b/Makefile.in
+index 5601afe..1e22abd 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -396,8 +396,8 @@ num4xxxDevicesV := `lspci -n | egrep -c "$(INTEL_VENDORID):($(QAT_4XXX_DEVICE_NU
+ numVQATDevices := `lspci -vnd 8086: | egrep -c "$(INTEL_VENDORID):$(VQAT_DEVICE_NUMBER)"`
+ 
+ #Targets lists
+-ALL_TARGETS = qat-driver-all quickassist-all adf-ctl-all qat-service-all adf-rl-all
+-INSTALL_TARGETS = qat-driver-install quickassist-install adf-ctl-install qat-service-install
++ALL_TARGETS = qat-driver-all quickassist-all adf-ctl-all qat-service-all adf-rl-all
++INSTALL_TARGETS = quickassist-install adf-ctl-install
+ UNINSTALL_TARGETS = qat-driver-uninstall quickassist-uninstall qat-service-uninstall adf-ctl-uninstall sample-uninstall
+ CLEAN_TARGETS = qat-driver-clean quickassist-clean adf-ctl-clean qat-service-clean sample-clean
+ 

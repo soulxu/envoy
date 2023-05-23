@@ -17,6 +17,8 @@ envoy_cc_library(
     ],
     external_deps = ["ssl"],
     repository = "@envoy",
+    # linkopts = ["-lqat_s", "-lusdm_drv_s"],
+    # copts = ["-I/external/com_github_intel_qatlib/quickassist"],
     deps = ["//contrib/qat:qatlib"],
 )
 
