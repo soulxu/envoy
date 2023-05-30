@@ -96,7 +96,7 @@ class XdsDelegateExtensionIntegrationTest : public Grpc::UnifiedOrLegacyMuxInteg
                                             public HttpIntegrationTest {
 public:
   XdsDelegateExtensionIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP2, ipVersion(),
+      : HttpIntegrationTest(Http::CodecType::HTTP2, ipVersion(), socketInterface(),
                             ConfigHelper::baseConfigNoListeners()) {
     // TODO(abeyad): Add test for Unified SotW when the UnifiedMux support is implemented.
     use_lds_ = false;

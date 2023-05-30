@@ -14,7 +14,8 @@ namespace {
 class PrevioustHostsIntegrationTest : public testing::Test, public HttpIntegrationTest {
 public:
   PrevioustHostsIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP2, Network::Address::IpVersion::v4) {}
+      : HttpIntegrationTest(Http::CodecType::HTTP2, Network::Address::IpVersion::v4,
+                            Network::DefaultSocketInterface::Default) {}
 
   void initialize() override {
     setDeterministicValue();

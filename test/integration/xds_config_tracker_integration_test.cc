@@ -95,7 +95,7 @@ class XdsConfigTrackerIntegrationTest : public Grpc::DeltaSotwIntegrationParamTe
                                         public HttpIntegrationTest {
 public:
   XdsConfigTrackerIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP2, ipVersion(),
+      : HttpIntegrationTest(Http::CodecType::HTTP2, ipVersion(), socketInterface(),
                             ConfigHelper::clustersNoListenerBootstrap(
                                 sotwOrDelta() == Grpc::SotwOrDelta::Sotw ||
                                         sotwOrDelta() == Grpc::SotwOrDelta::UnifiedSotw

@@ -11,11 +11,14 @@ namespace HttpFilters {
 namespace HeaderMutation {
 namespace {
 
-class HeaderMutationIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                      public HttpIntegrationTest {
+class HeaderMutationIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
   HeaderMutationIntegrationTest()
-      : HttpIntegrationTest(Http::CodecClient::Type::HTTP1, GetParam()) {}
+      : HttpIntegrationTest(Http::CodecClient::Type::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void initializeFilter() {
     setUpstreamProtocol(FakeHttpConnection::Type::HTTP1);
@@ -108,9 +111,11 @@ typed_config:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, HeaderMutationIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, HeaderMutationIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(HeaderMutationIntegrationTest, TestHeaderMutation) {
   initializeFilter();

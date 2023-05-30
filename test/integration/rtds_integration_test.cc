@@ -84,7 +84,7 @@ class RtdsIntegrationTest : public Grpc::DeltaSotwIntegrationParamTest, public H
 public:
   RtdsIntegrationTest()
       : HttpIntegrationTest(
-            Http::CodecType::HTTP2, ipVersion(),
+            Http::CodecType::HTTP2, ipVersion(), socketInterface(),
             rtdsBootstrapConfig(sotwOrDelta() == Grpc::SotwOrDelta::Sotw ||
                                         sotwOrDelta() == Grpc::SotwOrDelta::UnifiedSotw
                                     ? "GRPC"

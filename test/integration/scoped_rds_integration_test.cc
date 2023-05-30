@@ -25,9 +25,12 @@ namespace {
 
 class InlineScopedRoutesIntegrationTest
     : public HttpIntegrationTest,
-      public testing::TestWithParam<Network::Address::IpVersion> {
+      public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>> {
 protected:
-  InlineScopedRoutesIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {}
+  InlineScopedRoutesIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void setScopedRoutesConfig(absl::string_view config_yaml) {
     config_helper_.addConfigModifier(
@@ -53,9 +56,11 @@ scope_key_builder:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, InlineScopedRoutesIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, InlineScopedRoutesIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(InlineScopedRoutesIntegrationTest, NoScopeFound) {
   absl::string_view config_yaml = R"EOF(

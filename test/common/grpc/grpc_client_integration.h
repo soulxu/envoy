@@ -22,6 +22,7 @@ class BaseGrpcClientIntegrationParamTest {
 public:
   virtual ~BaseGrpcClientIntegrationParamTest() = default;
   virtual Network::Address::IpVersion ipVersion() const PURE;
+  virtual Network::DefaultSocketInterface socketInterface() const PURE;
   virtual ClientType clientType() const PURE;
 
   void setGrpcService(envoy::config::core::v3::GrpcService& grpc_service,
@@ -48,15 +49,21 @@ public:
 
 class GrpcClientIntegrationParamTest
     : public BaseGrpcClientIntegrationParamTest,
-      public testing::TestWithParam<std::tuple<Network::Address::IpVersion, ClientType>> {
+      public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, ClientType>> {
 public:
   static std::string protocolTestParamsToString(
-      const ::testing::TestParamInfo<std::tuple<Network::Address::IpVersion, ClientType>>& p) {
-    return fmt::format("{}_{}", TestUtility::ipVersionToString(std::get<0>(p.param)),
-                       std::get<1>(p.param) == ClientType::GoogleGrpc ? "GoogleGrpc" : "EnvoyGrpc");
+      const ::testing::TestParamInfo<std::tuple<Network::Address::IpVersion,
+                                                Network::DefaultSocketInterface, ClientType>>& p) {
+    return fmt::format("{}_{}_{}", TestUtility::ipVersionToString(std::get<0>(p.param)),
+                       TestUtility::socketInterfaceToString(std::get<1>(p.param)),
+                       std::get<2>(p.param) == ClientType::GoogleGrpc ? "GoogleGrpc" : "EnvoyGrpc");
   }
   Network::Address::IpVersion ipVersion() const override { return std::get<0>(GetParam()); }
-  ClientType clientType() const override { return std::get<1>(GetParam()); }
+  Network::DefaultSocketInterface socketInterface() const override {
+    return std::get<1>(GetParam());
+  }
+  ClientType clientType() const override { return std::get<2>(GetParam()); }
 };
 
 // TODO(kbaichoo): Revert to using GrpcClientIntegrationParamTest for all
@@ -66,59 +73,78 @@ public:
 class GrpcClientIntegrationParamTestWithDeferredProcessing
     : public Grpc::BaseGrpcClientIntegrationParamTest,
       public testing::TestWithParam<
-          std::tuple<std::tuple<Network::Address::IpVersion, Grpc::ClientType>, bool>> {
+          std::tuple<std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface,
+                                Grpc::ClientType>,
+                     bool>> {
 public:
   static std::string protocolTestParamsToString(
       const ::testing::TestParamInfo<
-          std::tuple<std::tuple<Network::Address::IpVersion, Grpc::ClientType>, bool>>& p) {
+          std::tuple<std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface,
+                                Grpc::ClientType>,
+                     bool>>& p) {
     return fmt::format(
-        "{}_{}_{}", TestUtility::ipVersionToString(std::get<0>(std::get<0>(p.param))),
-        std::get<1>(std::get<0>(p.param)) == Grpc::ClientType::GoogleGrpc ? "GoogleGrpc"
+        "{}_{}_{}_{}", TestUtility::ipVersionToString(std::get<0>(std::get<0>(p.param))),
+        TestUtility::socketInterfaceToString(std::get<1>(std::get<0>(p.param))),
+        std::get<2>(std::get<0>(p.param)) == Grpc::ClientType::GoogleGrpc ? "GoogleGrpc"
                                                                           : "EnvoyGrpc",
         std::get<1>(p.param) ? "WithDeferredProcessing" : "NoDeferredProcessing");
   }
   Network::Address::IpVersion ipVersion() const override {
     return std::get<0>(std::get<0>(GetParam()));
   }
-  Grpc::ClientType clientType() const override { return std::get<1>(std::get<0>(GetParam())); }
+  Network::DefaultSocketInterface socketInterface() const override {
+    return std::get<1>(std::get<0>(GetParam()));
+  }
+  Grpc::ClientType clientType() const override { return std::get<2>(std::get<0>(GetParam())); }
   bool deferredProcessing() const { return std::get<1>(GetParam()); }
 };
 
 class UnifiedOrLegacyMuxIntegrationParamTest
     : public BaseGrpcClientIntegrationParamTest,
       public testing::TestWithParam<
-          std::tuple<Network::Address::IpVersion, ClientType, LegacyOrUnified>> {
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, ClientType,
+                     LegacyOrUnified>> {
 public:
   ~UnifiedOrLegacyMuxIntegrationParamTest() override = default;
   static std::string protocolTestParamsToString(
       const ::testing::TestParamInfo<
-          std::tuple<Network::Address::IpVersion, ClientType, LegacyOrUnified>>& p) {
-    return fmt::format("{}_{}_{}", TestUtility::ipVersionToString(std::get<0>(p.param)),
-                       std::get<1>(p.param) == ClientType::GoogleGrpc ? "GoogleGrpc" : "EnvoyGrpc",
-                       std::get<2>(p.param) == LegacyOrUnified::Legacy ? "Legacy" : "Unified");
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, ClientType,
+                     LegacyOrUnified>>& p) {
+    return fmt::format("{}_{}_{}_{}", TestUtility::ipVersionToString(std::get<0>(p.param)),
+                       TestUtility::socketInterfaceToString(std::get<1>(p.param)),
+                       std::get<2>(p.param) == ClientType::GoogleGrpc ? "GoogleGrpc" : "EnvoyGrpc",
+                       std::get<3>(p.param) == LegacyOrUnified::Legacy ? "Legacy" : "Unified");
   }
   Network::Address::IpVersion ipVersion() const override { return std::get<0>(GetParam()); }
-  ClientType clientType() const override { return std::get<1>(GetParam()); }
-  LegacyOrUnified unifiedOrLegacy() const { return std::get<2>(GetParam()); }
-  bool isUnified() const { return std::get<2>(GetParam()) == LegacyOrUnified::Unified; }
+  Network::DefaultSocketInterface socketInterface() const override {
+    return std::get<1>(GetParam());
+  }
+  ClientType clientType() const override { return std::get<2>(GetParam()); }
+  LegacyOrUnified unifiedOrLegacy() const { return std::get<3>(GetParam()); }
+  bool isUnified() const { return std::get<3>(GetParam()) == LegacyOrUnified::Unified; }
 };
 
 class DeltaSotwIntegrationParamTest
     : public BaseGrpcClientIntegrationParamTest,
-      public testing::TestWithParam<
-          std::tuple<Network::Address::IpVersion, ClientType, SotwOrDelta>> {
+      public testing::TestWithParam<std::tuple<
+          Network::Address::IpVersion, Network::DefaultSocketInterface, ClientType, SotwOrDelta>> {
 public:
   ~DeltaSotwIntegrationParamTest() override = default;
-  static std::string
-  protocolTestParamsToString(const ::testing::TestParamInfo<
-                             std::tuple<Network::Address::IpVersion, ClientType, SotwOrDelta>>& p) {
-    return fmt::format("{}_{}_{}", TestUtility::ipVersionToString(std::get<0>(p.param)),
-                       std::get<1>(p.param) == ClientType::GoogleGrpc ? "GoogleGrpc" : "EnvoyGrpc",
-                       std::get<2>(p.param) == SotwOrDelta::Delta ? "Delta" : "StateOfTheWorld");
+  static std::string protocolTestParamsToString(
+      const ::testing::TestParamInfo<std::tuple<
+          Network::Address::IpVersion, Network::DefaultSocketInterface, ClientType, SotwOrDelta>>&
+          p) {
+    return fmt::format("{}_{}_{}_{}", TestUtility::ipVersionToString(std::get<0>(p.param)),
+                       TestUtility::socketInterfaceToString(std::get<1>(p.param)),
+                       std::get<2>(p.param) == ClientType::GoogleGrpc ? "GoogleGrpc" : "EnvoyGrpc",
+                       std::get<3>(p.param) == SotwOrDelta::Delta ? "Delta" : "StateOfTheWorld");
   }
   Network::Address::IpVersion ipVersion() const override { return std::get<0>(GetParam()); }
-  ClientType clientType() const override { return std::get<1>(GetParam()); }
-  SotwOrDelta sotwOrDelta() const { return std::get<2>(GetParam()); }
+  Network::DefaultSocketInterface socketInterface() const override {
+    return std::get<1>(GetParam());
+  }
+  ClientType clientType() const override { return std::get<2>(GetParam()); }
+  SotwOrDelta sotwOrDelta() const { return std::get<3>(GetParam()); }
 };
 
 // Skip tests based on gRPC client type.
@@ -135,19 +161,23 @@ public:
 
 #define GRPC_CLIENT_INTEGRATION_PARAMS                                                             \
   testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),                     \
+                   testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),               \
                    testing::ValuesIn(TestEnvironment::getsGrpcVersionsForTest()))
 #define GRPC_CLIENT_INTEGRATION_DEFERRED_PROCESSING_PARAMS                                         \
   testing::Combine(GRPC_CLIENT_INTEGRATION_PARAMS, testing::Bool())
 #define DELTA_SOTW_GRPC_CLIENT_INTEGRATION_PARAMS                                                  \
   testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),                     \
+                   testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),               \
                    testing::ValuesIn(TestEnvironment::getsGrpcVersionsForTest()),                  \
                    testing::Values(Grpc::SotwOrDelta::Sotw, Grpc::SotwOrDelta::Delta))
 #define UNIFIED_LEGACY_GRPC_CLIENT_INTEGRATION_PARAMS                                              \
   testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),                     \
+                   testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),               \
                    testing::ValuesIn(TestEnvironment::getsGrpcVersionsForTest()),                  \
                    testing::Values(Grpc::LegacyOrUnified::Legacy, Grpc::LegacyOrUnified::Unified))
 #define DELTA_SOTW_UNIFIED_GRPC_CLIENT_INTEGRATION_PARAMS                                          \
   testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),                     \
+                   testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),               \
                    testing::ValuesIn(TestEnvironment::getsGrpcVersionsForTest()),                  \
                    testing::Values(Grpc::SotwOrDelta::Sotw, Grpc::SotwOrDelta::Delta,              \
                                    Grpc::SotwOrDelta::UnifiedSotw,                                 \

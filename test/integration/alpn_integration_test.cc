@@ -6,10 +6,14 @@
 namespace Envoy {
 namespace {
 
-class AlpnIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                            public HttpIntegrationTest {
+class AlpnIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
-  AlpnIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP2, GetParam()) {}
+  AlpnIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP2, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void SetUp() override {
     autonomous_upstream_ = true;
@@ -48,9 +52,11 @@ public:
   std::vector<Http::CodecType> protocols_;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, AlpnIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, AlpnIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(AlpnIntegrationTest, Http2New) {
   setUpstreamProtocol(Http::CodecType::HTTP2);

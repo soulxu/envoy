@@ -92,7 +92,8 @@ class SdsGenericSecretIntegrationTest : public Grpc::GrpcClientIntegrationParamT
                                         public HttpIntegrationTest {
 public:
   SdsGenericSecretIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, ipVersion()), registration_(factory_) {}
+      : HttpIntegrationTest(Http::CodecType::HTTP1, ipVersion(), socketInterface()),
+        registration_(factory_) {}
 
   void initialize() override {
     config_helper_.addConfigModifier([](envoy::config::bootstrap::v3::Bootstrap& bootstrap) {

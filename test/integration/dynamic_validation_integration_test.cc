@@ -47,24 +47,30 @@ private:
 
 // Pretty-printing of parameterized test names.
 std::string dynamicValidationTestParamsToString(
-    const ::testing::TestParamInfo<std::tuple<Network::Address::IpVersion, bool, bool>>& params) {
+    const ::testing::TestParamInfo<
+        std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, bool, bool>>&
+        params) {
   return fmt::format(
       "{}_{}_{}",
-      TestUtility::ipTestParamsToString(
-          ::testing::TestParamInfo<Network::Address::IpVersion>(std::get<0>(params.param), 0)),
-      std::get<1>(params.param) ? "with_reject_unknown_fields" : "without_reject_unknown_fields",
-      std::get<2>(params.param) ? "with_ignore_unknown_fields" : "without_ignore_unknown_fields");
+      TestUtility::ipAndSocketInterfaceTestParamsToString(
+          ::testing::TestParamInfo<
+              std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>(
+              std::make_tuple(std::get<0>(params.param), std::get<1>(params.param)), 0)),
+      std::get<2>(params.param) ? "with_reject_unknown_fields" : "without_reject_unknown_fields",
+      std::get<3>(params.param) ? "with_ignore_unknown_fields" : "without_ignore_unknown_fields");
 }
 
 // Validate unknown field handling in dynamic configuration.
 class DynamicValidationIntegrationTest
-    : public testing::TestWithParam<std::tuple<Network::Address::IpVersion, bool, bool>>,
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, bool, bool>>,
       public HttpIntegrationTest {
 public:
   DynamicValidationIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP2, std::get<0>(GetParam())),
-        reject_unknown_dynamic_fields_(std::get<1>(GetParam())),
-        ignore_unknown_dynamic_fields_(std::get<2>(GetParam())) {
+      : HttpIntegrationTest(Http::CodecType::HTTP2, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())),
+        reject_unknown_dynamic_fields_(std::get<2>(GetParam())),
+        ignore_unknown_dynamic_fields_(std::get<3>(GetParam())) {
     setUpstreamProtocol(Http::CodecType::HTTP2);
   }
 
@@ -89,8 +95,9 @@ private:
 
 INSTANTIATE_TEST_SUITE_P(
     IpVersions, DynamicValidationIntegrationTest,
-    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()), testing::Bool(),
-                     testing::Bool()),
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
+                     testing::Bool(), testing::Bool()),
     dynamicValidationTestParamsToString);
 
 // Protocol options in CDS with unknown fields are rejected if and only if strict.

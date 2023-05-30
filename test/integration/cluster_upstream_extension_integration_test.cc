@@ -16,11 +16,13 @@ namespace Envoy {
 
 namespace {
 class ClusterUpstreamExtensionIntegrationTest
-    : public testing::TestWithParam<Network::Address::IpVersion>,
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
       public HttpIntegrationTest {
 public:
   ClusterUpstreamExtensionIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {}
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void populateMetadataTestData(envoy::config::core::v3::Metadata& metadata,
                                 const std::string& key1, const std::string& key2,
@@ -49,9 +51,11 @@ public:
   PerHostGenericConnPoolFactory per_host_upstream_factory_;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, ClusterUpstreamExtensionIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, ClusterUpstreamExtensionIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // This test verifies that cluster upstream extensions can fulfill the requirement that they rewrite
 // http headers after cluster and host are selected. See

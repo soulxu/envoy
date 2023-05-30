@@ -101,19 +101,25 @@ public:
   }
 };
 
-class UpstreamAccessLogTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                              public HttpIntegrationTest {
+class UpstreamAccessLogTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
-  UpstreamAccessLogTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {}
+  UpstreamAccessLogTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
   SocketConfigFactory socket_factory_;
 
   Registry::InjectFactory<Server::Configuration::UpstreamTransportSocketConfigFactory>
       registered_socket_factory_{socket_factory_};
 };
 
-INSTANTIATE_TEST_SUITE_P(Params, UpstreamAccessLogTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    Params, UpstreamAccessLogTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 /*
  * Verifies that the Http Router's `upstream_log` correctly reflects the upstream filter state data

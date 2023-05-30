@@ -22,10 +22,14 @@ namespace {
 
 // Tests a downstream HTTP2 client sending gRPC requests that are converted into HTTP/1.1 for a
 // HTTP1 upstream.
-class ReverseBridgeIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                     public HttpIntegrationTest {
+class ReverseBridgeIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
-  ReverseBridgeIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP2, GetParam()) {}
+  ReverseBridgeIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP2, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void initialize() override { initialize(absl::nullopt); }
 
@@ -60,9 +64,11 @@ protected:
   Http::CodecType upstream_protocol_;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, ReverseBridgeIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, ReverseBridgeIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Verifies that we don't do anything with the request when it's hitting a route that
 // doesn't enable the bridge.

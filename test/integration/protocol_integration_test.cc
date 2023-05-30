@@ -4282,6 +4282,10 @@ public:
 };
 
 TEST_P(DownstreamProtocolIntegrationTest, HandleDownstreamSocketFail) {
+  // TODO(zhxie): io_uring is not compatible with SocketInterfaceSwap.
+  if (GetParam().interface == Network::DefaultSocketInterface::IoUring) {
+    GTEST_SKIP();
+  }
   // Make sure for HTTP/3 Envoy will use sendmsg, so the write_matcher will work.
   NoUdpGso reject_gso_;
   TestThreadsafeSingletonInjector<Api::OsSysCallsImpl> os_calls{&reject_gso_};
@@ -4322,6 +4326,10 @@ TEST_P(DownstreamProtocolIntegrationTest, HandleDownstreamSocketFail) {
 }
 
 TEST_P(ProtocolIntegrationTest, HandleUpstreamSocketFail) {
+  // TODO(zhxie): io_uring is not compatible with SocketInterfaceSwap.
+  if (GetParam().interface == Network::DefaultSocketInterface::IoUring) {
+    GTEST_SKIP();
+  }
   SocketInterfaceSwap socket_swap(upstreamProtocol() == Http::CodecType::HTTP3
                                       ? Network::Socket::Type::Datagram
                                       : Network::Socket::Type::Stream);

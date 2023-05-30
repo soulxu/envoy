@@ -21,7 +21,8 @@ namespace {
 class MetricsServiceIntegrationTest : public Grpc::GrpcClientIntegrationParamTest,
                                       public HttpIntegrationTest {
 public:
-  MetricsServiceIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, ipVersion()) {
+  MetricsServiceIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, ipVersion(), socketInterface()) {
     // TODO(ggreenway): add tag extraction rules.
     // Missing stat tag-extraction rule for stat 'grpc.metrics_service.streams_closed_14' and
     // stat_prefix 'metrics_service'.

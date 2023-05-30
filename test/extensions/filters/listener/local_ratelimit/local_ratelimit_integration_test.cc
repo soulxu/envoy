@@ -15,11 +15,14 @@
 
 namespace Envoy {
 
-class LocalRateLimitTcpIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                         public BaseIntegrationTest {
+class LocalRateLimitTcpIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
   LocalRateLimitTcpIntegrationTest()
-      : BaseIntegrationTest(GetParam(), ConfigHelper::tcpProxyConfig()) {}
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            ConfigHelper::tcpProxyConfig()) {}
 
   void setup(const std::string& yaml) {
     ::envoy::extensions::filters::listener::local_ratelimit::v3::LocalRateLimit local_ratelimit;
@@ -36,9 +39,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, LocalRateLimitTcpIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, LocalRateLimitTcpIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(LocalRateLimitTcpIntegrationTest, NoRateLimiting) {
   setup(R"EOF(

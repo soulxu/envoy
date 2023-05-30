@@ -143,8 +143,9 @@ private:
 // A test that sets up its own client connection with customized quic version and connection ID.
 class QuicHttpIntegrationTestBase : public HttpIntegrationTest {
 public:
-  QuicHttpIntegrationTestBase(Network::Address::IpVersion version, std::string config)
-      : HttpIntegrationTest(Http::CodecType::HTTP3, version, config),
+  QuicHttpIntegrationTestBase(Network::Address::IpVersion version,
+                              Network::DefaultSocketInterface interface, std::string config)
+      : HttpIntegrationTest(Http::CodecType::HTTP3, version, interface, config),
         supported_versions_(quic::CurrentSupportedHttp3Versions()), conn_helper_(*dispatcher_),
         alarm_factory_(*dispatcher_, *conn_helper_.GetClock()) {}
 
@@ -374,19 +375,24 @@ protected:
       quic::kQuicDefaultConnectionIdLength};
 };
 
-class QuicHttpIntegrationTest : public QuicHttpIntegrationTestBase,
-                                public testing::TestWithParam<Network::Address::IpVersion> {
+class QuicHttpIntegrationTest
+    : public QuicHttpIntegrationTestBase,
+      public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>> {
 public:
   QuicHttpIntegrationTest()
-      : QuicHttpIntegrationTestBase(GetParam(), ConfigHelper::quicHttpProxyConfig()) {}
+      : QuicHttpIntegrationTestBase(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                                    ConfigHelper::quicHttpProxyConfig()) {}
 };
 
 class QuicHttpMultiAddressesIntegrationTest
     : public QuicHttpIntegrationTestBase,
-      public testing::TestWithParam<Network::Address::IpVersion> {
+      public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>> {
 public:
   QuicHttpMultiAddressesIntegrationTest()
-      : QuicHttpIntegrationTestBase(GetParam(), ConfigHelper::quicHttpProxyConfig(true)) {}
+      : QuicHttpIntegrationTestBase(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                                    ConfigHelper::quicHttpProxyConfig(true)) {}
 
   void testMultipleQuicConnections() {
     // Enabling SO_REUSEPORT with 8 workers. Unfortunately this setting makes the test rarely flaky
@@ -487,14 +493,17 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(QuicHttpIntegrationTests, QuicHttpIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    QuicHttpIntegrationTests, QuicHttpIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
-INSTANTIATE_TEST_SUITE_P(QuicHttpMultiAddressesIntegrationTest,
-                         QuicHttpMultiAddressesIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    QuicHttpMultiAddressesIntegrationTest, QuicHttpMultiAddressesIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(QuicHttpIntegrationTest, GetRequestAndEmptyResponse) {
   useAccessLog("%DOWNSTREAM_TLS_VERSION% %DOWNSTREAM_TLS_CIPHER% %DOWNSTREAM_TLS_SESSION_ID%");
@@ -938,7 +947,7 @@ TEST_P(QuicHttpIntegrationTest, ResetRequestWithInvalidCharacter) {
   EXPECT_FALSE(response->complete());
 
   // Verify stream error counters are correctly incremented.
-  std::string counter_scope = GetParam() == Network::Address::IpVersion::v4
+  std::string counter_scope = std::get<0>(GetParam()) == Network::Address::IpVersion::v4
                                   ? "listener.127.0.0.1_0.http3.downstream.tx."
                                   : "listener.[__1]_0.http3.downstream.tx.";
   std::string error_code = "quic_connection_close_error_code_QUIC_HTTP_FRAME_ERROR";
@@ -1476,9 +1485,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(QuicHttpIntegrationTests, QuicInplaceLdsIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    QuicHttpIntegrationTests, QuicInplaceLdsIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(QuicInplaceLdsIntegrationTest, ReloadConfigUpdateNonDefaultFilterChain) {
   inplaceInitialize(/*add_default_filter_chain=*/false);

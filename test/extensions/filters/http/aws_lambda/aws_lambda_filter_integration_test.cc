@@ -13,10 +13,14 @@ using source::extensions::filters::http::aws_lambda::Request;
 namespace Envoy {
 namespace {
 
-class AwsLambdaFilterIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                       public HttpIntegrationTest {
+class AwsLambdaFilterIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
-  AwsLambdaFilterIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP2, GetParam()) {}
+  AwsLambdaFilterIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP2, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void SetUp() override {
     // Set these environment variables to quickly sign credentials instead of attempting to query
@@ -152,9 +156,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, AwsLambdaFilterIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, AwsLambdaFilterIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(AwsLambdaFilterIntegrationTest, JsonWrappedHeaderOnlyRequest) {
   setupLambdaFilter(false /*passthrough*/);

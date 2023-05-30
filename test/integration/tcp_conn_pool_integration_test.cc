@@ -109,11 +109,14 @@ public:
 
 } // namespace
 
-class TcpConnPoolIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                   public BaseIntegrationTest {
+class TcpConnPoolIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
   TcpConnPoolIntegrationTest()
-      : BaseIntegrationTest(GetParam(), tcp_conn_pool_config), filter_resolver_(config_factory_) {}
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()), tcp_conn_pool_config),
+        filter_resolver_(config_factory_) {}
 
   // Called once by the gtest framework before any tests are run.
   static void SetUpTestSuite() { // NOLINT(readability-identifier-naming)
@@ -130,9 +133,11 @@ private:
   Registry::InjectFactory<Server::Configuration::NamedNetworkFilterConfigFactory> filter_resolver_;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, TcpConnPoolIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, TcpConnPoolIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(TcpConnPoolIntegrationTest, SingleRequest) {
   initialize();

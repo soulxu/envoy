@@ -198,9 +198,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, SslIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, SslIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Test that Envoy behaves correctly when receiving an SSLAlert for an unspecified code. The codes
 // are defined in the standard, and assigned codes have a string associated with them in BoringSSL,
@@ -561,9 +563,11 @@ protected:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, RawWriteSslIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, RawWriteSslIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Regression test for https://github.com/envoyproxy/envoy/issues/12304
 TEST_P(RawWriteSslIntegrationTest, HighWatermarkReadResumptionProcessingHeaders) {
@@ -623,11 +627,12 @@ TEST_P(RawWriteSslIntegrationTest, HighWatermarkReadResumptionProcesingLargerBod
 // Validate certificate selection across different certificate types and client TLS versions.
 class SslCertficateIntegrationTest
     : public testing::TestWithParam<
-          std::tuple<Network::Address::IpVersion,
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface,
                      envoy::extensions::transport_sockets::tls::v3::TlsParameters::TlsProtocol>>,
       public SslIntegrationTestBase {
 public:
-  SslCertficateIntegrationTest() : SslIntegrationTestBase(std::get<0>(GetParam())) {
+  SslCertficateIntegrationTest()
+      : SslIntegrationTestBase(std::get<0>(GetParam()), std::get<1>(GetParam())) {
     server_tlsv1_3_ = true;
   }
 
@@ -659,21 +664,23 @@ public:
 
   static std::string ipClientVersionTestParamsToString(
       const ::testing::TestParamInfo<
-          std::tuple<Network::Address::IpVersion,
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface,
                      envoy::extensions::transport_sockets::tls::v3::TlsParameters::TlsProtocol>>&
           params) {
-    return fmt::format("{}_TLSv1_{}", TestUtility::ipVersionToString(std::get<0>(params.param)),
-                       std::get<1>(params.param) - 1);
+    return fmt::format("{}_{}_TLSv1_{}", TestUtility::ipVersionToString(std::get<0>(params.param)),
+                       TestUtility::socketInterfaceToString(std::get<1>(params.param)),
+                       std::get<2>(params.param) - 1);
   }
 
   const envoy::extensions::transport_sockets::tls::v3::TlsParameters::TlsProtocol tls_version_{
-      std::get<1>(GetParam())};
+      std::get<2>(GetParam())};
 };
 
 INSTANTIATE_TEST_SUITE_P(
     IpVersionsClientVersions, SslCertficateIntegrationTest,
     testing::Combine(
         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+        testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
         testing::Values(envoy::extensions::transport_sockets::tls::v3::TlsParameters::TLSv1_2,
                         envoy::extensions::transport_sockets::tls::v3::TlsParameters::TLSv1_3)),
     SslCertficateIntegrationTest::ipClientVersionTestParamsToString);
@@ -985,9 +992,11 @@ public:
   bool streaming_tap_{};
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, SslTapIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, SslTapIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Validate two back-to-back requests with binary proto output.
 TEST_P(SslTapIntegrationTest, TwoRequestsWithBinaryProto) {
@@ -1218,9 +1227,11 @@ TEST_P(SslTapIntegrationTest, RequestWithStreamingUpstreamTap) {
 }
 #endif
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, SslKeyLogTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, SslKeyLogTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(SslKeyLogTest, SetLocalFilter) {
   setLogPath();

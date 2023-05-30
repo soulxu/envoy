@@ -14,7 +14,8 @@ class WasmIntegrationTest : public HttpIntegrationTest,
                             public testing::TestWithParam<std::tuple<std::string, std::string>> {
 public:
   WasmIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, Network::Address::IpVersion::v4) {}
+      : HttpIntegrationTest(Http::CodecType::HTTP1, Network::Address::IpVersion::v4,
+                            Network::DefaultSocketInterface::Default) {}
 
   void createUpstreams() override {
     HttpIntegrationTest::createUpstreams();

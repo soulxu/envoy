@@ -15,6 +15,7 @@
 #include "source/common/common/macros.h"
 #include "source/common/common/utility.h"
 #include "source/common/filesystem/directory.h"
+#include "source/common/io/io_uring_impl.h"
 
 #include "absl/container/node_hash_map.h"
 
@@ -247,6 +248,17 @@ std::vector<Network::Address::IpVersion> TestEnvironment::getIpVersionsForTest()
             version_string, version_string);
       }
     }
+  }
+  return parameters;
+}
+
+std::vector<Network::DefaultSocketInterface> TestEnvironment::getSocketInterfacesForTest() {
+  std::vector<Network::DefaultSocketInterface> parameters{Network::DefaultSocketInterface::Default};
+  if (Envoy::Io::isIoUringSupported()) {
+    parameters.push_back(Network::DefaultSocketInterface::IoUring);
+  } else {
+    ENVOY_LOG_TO_LOGGER(Logger::Registry::getLog(Logger::Id::testing), warn,
+                        "io_uring may not be supported on this machine.");
   }
   return parameters;
 }

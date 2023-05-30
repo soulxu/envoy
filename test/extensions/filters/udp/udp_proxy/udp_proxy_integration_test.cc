@@ -50,11 +50,14 @@ public:
   std::string name() const override { return "test.udp_listener.reverse"; }
 };
 
-class UdpProxyIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                public BaseIntegrationTest {
+class UdpProxyIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
   UdpProxyIntegrationTest()
-      : BaseIntegrationTest(GetParam(), ConfigHelper::baseUdpListenerConfig()),
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            ConfigHelper::baseUdpListenerConfig()),
         registration_(factory_) {}
 
   void setup(uint32_t upstream_count,
@@ -75,7 +78,7 @@ public:
                   ->add_lb_endpoints()
                   ->mutable_endpoint()
                   ->MergeFrom(ConfigHelper::buildEndpoint(
-                      Network::Test::getLoopbackAddressString(GetParam())));
+                      Network::Test::getLoopbackAddressString(std::get<0>(GetParam()))));
             }
           });
     }
@@ -198,9 +201,11 @@ name: test.udp_listener.reverse
   Registry::InjectFactory<Server::Configuration::NamedUdpListenerFilterConfigFactory> registration_;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, UdpProxyIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, UdpProxyIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Make sure that we gracefully fail if the user does not configure reuse_port and concurrency is
 // > 1.
@@ -237,7 +242,7 @@ TEST_P(UdpProxyIntegrationTest, DownstreamDrop) {
   const uint64_t large_datagram_size =
       (Network::DEFAULT_UDP_MAX_DATAGRAM_SIZE * Network::NUM_DATAGRAMS_PER_RECEIVE) + 1024;
   client.write(std::string(large_datagram_size, 'a'), *listener_address);
-  if (GetParam() == Network::Address::IpVersion::v4) {
+  if (std::get<0>(GetParam()) == Network::Address::IpVersion::v4) {
     test_server_->waitForCounterEq("listener.0.0.0.0_0.udp.downstream_rx_datagram_dropped", 1);
   } else {
     test_server_->waitForCounterEq("listener.[__]_0.udp.downstream_rx_datagram_dropped", 1);

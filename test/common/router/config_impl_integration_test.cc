@@ -52,7 +52,8 @@ public:
 class ConfigImplIntegrationTest : public Envoy::HttpIntegrationTest, public testing::Test {
 public:
   ConfigImplIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, Network::Address::IpVersion::v4) {}
+      : HttpIntegrationTest(Http::CodecType::HTTP1, Network::Address::IpVersion::v4,
+                            Network::DefaultSocketInterface::Default) {}
 
   void initializeRoute(const std::string& vhost_config_yaml) {
     envoy::config::route::v3::VirtualHost vhost;

@@ -9,6 +9,7 @@
 #include "envoy/api/api.h"
 #include "envoy/buffer/buffer.h"
 #include "envoy/network/address.h"
+#include "envoy/network/socket_interface.h"
 #include "envoy/stats/stats.h"
 #include "envoy/stats/store.h"
 #include "envoy/thread/thread.h"
@@ -525,6 +526,15 @@ public:
     return ip_version == Network::Address::IpVersion::v4 ? "IPv4" : "IPv6";
   }
 
+  static std::string socketInterfaceToString(Network::DefaultSocketInterface interface) {
+    switch (interface) {
+    case Network::DefaultSocketInterface::Default:
+      return "Default";
+    case Network::DefaultSocketInterface::IoUring:
+      return "IoUring";
+    }
+  }
+
   // Allows pretty printed test names for TEST_P using TestEnvironment::getIpVersionsForTest().
   //
   // Tests using this will be of the form IpVersions/SslSocketTest.HalfClose/IPv4
@@ -532,6 +542,13 @@ public:
   static std::string
   ipTestParamsToString(const ::testing::TestParamInfo<Network::Address::IpVersion>& params) {
     return ipVersionToString(params.param);
+  }
+
+  static std::string ipAndSocketInterfaceTestParamsToString(
+      const ::testing::TestParamInfo<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>& params) {
+    return fmt::format("{}_{}", ipVersionToString(std::get<0>(params.param)),
+                       socketInterfaceToString(std::get<1>(params.param)));
   }
 
   /**

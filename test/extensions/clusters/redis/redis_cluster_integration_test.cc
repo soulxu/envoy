@@ -142,12 +142,14 @@ std::string makeBulkStringArray(std::vector<std::string>&& command_strings) {
   return result.str();
 }
 
-class RedisClusterIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                    public BaseIntegrationTest {
+class RedisClusterIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
   RedisClusterIntegrationTest(const std::string& config = testConfig(), int num_upstreams = 2)
-      : BaseIntegrationTest(GetParam(), config), num_upstreams_(num_upstreams),
-        version_(GetParam()) {}
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()), config),
+        num_upstreams_(num_upstreams), version_(std::get<0>(GetParam())) {}
 
   void initialize() override {
     setUpstreamCount(num_upstreams_);
@@ -407,21 +409,29 @@ public:
       : RedisClusterIntegrationTest(config, num_upstreams) {}
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, RedisClusterIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, RedisClusterIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, RedisClusterWithAuthIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, RedisClusterWithAuthIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, RedisClusterWithReadPolicyIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, RedisClusterWithReadPolicyIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, RedisClusterWithRefreshIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, RedisClusterWithRefreshIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // This test sends a simple "get foo" command from a fake
 // downstream client through the proxy to a fake upstream

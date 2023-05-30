@@ -23,7 +23,7 @@ namespace Envoy {
 
 AdsIntegrationTest::AdsIntegrationTest()
     : HttpIntegrationTest(
-          Http::CodecType::HTTP2, ipVersion(),
+          Http::CodecType::HTTP2, ipVersion(), socketInterface(),
           ConfigHelper::adsBootstrap((sotwOrDelta() == Grpc::SotwOrDelta::Sotw) ||
                                              (sotwOrDelta() == Grpc::SotwOrDelta::UnifiedSotw)
                                          ? "GRPC"

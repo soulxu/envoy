@@ -13,7 +13,9 @@ using Envoy::Extensions::Common::Aws::Utility;
 class AwsMetadataIntegrationTestBase : public ::testing::Test, public BaseIntegrationTest {
 public:
   AwsMetadataIntegrationTestBase(int status_code, int delay_s)
-      : BaseIntegrationTest(Network::Address::IpVersion::v4, renderConfig(status_code, delay_s)) {}
+      : BaseIntegrationTest(Network::Address::IpVersion::v4,
+                            Network::DefaultSocketInterface::Default,
+                            renderConfig(status_code, delay_s)) {}
 
   static std::string renderConfig(int status_code, int delay_s) {
     return absl::StrCat(ConfigHelper::baseConfig(),

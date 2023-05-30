@@ -44,9 +44,11 @@ void TcpProxyIntegrationTest::setupByteMeterAccessLog() {
                        "UPSTREAM_WIRE_BYTES_RECEIVED=%UPSTREAM_WIRE_BYTES_RECEIVED%");
 }
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, TcpProxyIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, TcpProxyIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Test upstream writing before downstream does.
 TEST_P(TcpProxyIntegrationTest, TcpProxyUpstreamWritesFirst) {
@@ -274,13 +276,10 @@ TEST_P(TcpProxyIntegrationTest, TcpProxyLargeWrite) {
 
 // Test that a downstream flush works correctly (all data is flushed)
 TEST_P(TcpProxyIntegrationTest, TcpProxyDownstreamFlush) {
-
-  // TODO (soulxu): skip this test for iouring, since this test depends on the io behavior.
-  // After we enable the parameter test for iouring and
-  // default socket, then we should run this test for default socket, and write another version for
-  // the iouring.
-  GTEST_SKIP();
-
+  // TODO(zhxie): io_uring works asynchronously and the counter may not reach the value expected.
+  if (interface_ == Network::DefaultSocketInterface::IoUring) {
+    GTEST_SKIP();
+  }
   // Use a very large size to make sure it is larger than the kernel socket read buffer.
   const uint32_t size = 50 * 1024 * 1024;
   config_helper_.setBufferLimits(size / 4, size / 4);
@@ -1114,9 +1113,11 @@ void TcpProxyMetadataMatchIntegrationTest::expectEndpointNotToMatchRoute(
   tcp_client->close();
 }
 
-INSTANTIATE_TEST_SUITE_P(TcpProxyIntegrationTestParams, TcpProxyMetadataMatchIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    TcpProxyIntegrationTestParams, TcpProxyMetadataMatchIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Test subset load balancing for a regular cluster when endpoint selector is defined at the top
 // level.
@@ -1343,9 +1344,11 @@ public:
       factory_};
 };
 
-INSTANTIATE_TEST_SUITE_P(TcpProxyIntegrationTestParams, TcpProxyDynamicMetadataMatchIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    TcpProxyIntegrationTestParams, TcpProxyDynamicMetadataMatchIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(TcpProxyDynamicMetadataMatchIntegrationTest, DynamicMetadataMatch) {
   tcp_proxy_.set_stat_prefix("tcp_stats");
@@ -1388,9 +1391,11 @@ TEST_P(TcpProxyDynamicMetadataMatchIntegrationTest, DynamicMetadataNonMatch) {
   expectEndpointNotToMatchRoute("does_not_match_role_primary");
 }
 
-INSTANTIATE_TEST_SUITE_P(TcpProxyIntegrationTestParams, TcpProxySslIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    TcpProxyIntegrationTestParams, TcpProxySslIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 void TcpProxySslIntegrationTest::initialize() {
   config_helper_.addSslConfig();
@@ -1676,8 +1681,10 @@ TEST_P(MysqlIntegrationTest, PreconnectWithTls) {
   testPreconnect();
 }
 
-INSTANTIATE_TEST_SUITE_P(TcpProxyIntegrationTestParams, MysqlIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    TcpProxyIntegrationTestParams, MysqlIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 } // namespace Envoy

@@ -18,10 +18,14 @@ namespace LoadBalancingPolices {
 namespace Random {
 namespace {
 
-class RandomIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                              public HttpIntegrationTest {
+class RandomIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
-  RandomIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {
+  RandomIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {
     // Create 3 different upstream server for stateful session test.
     setUpstreamCount(3);
 
@@ -50,7 +54,8 @@ public:
                 port_value: 0
       )EOF";
 
-      const std::string local_address = Network::Test::getLoopbackAddressString(GetParam());
+      const std::string local_address =
+          Network::Test::getLoopbackAddressString(std::get<0>(GetParam()));
       TestUtility::loadFromYaml(
           fmt::format(endpoints_yaml, local_address, local_address, local_address), *endpoint);
 
@@ -69,9 +74,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, RandomIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, RandomIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(RandomIntegrationTest, NormalLoadBalancing) {
   initialize();

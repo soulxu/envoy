@@ -22,7 +22,8 @@ namespace {
 class StatefulSessionIntegrationTest : public Envoy::HttpIntegrationTest, public testing::Test {
 public:
   StatefulSessionIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, Network::Address::IpVersion::v4) {
+      : HttpIntegrationTest(Http::CodecType::HTTP1, Network::Address::IpVersion::v4,
+                            Network::DefaultSocketInterface::Default) {
     // Create 4 different upstream server for stateful session test.
     setUpstreamCount(4);
 

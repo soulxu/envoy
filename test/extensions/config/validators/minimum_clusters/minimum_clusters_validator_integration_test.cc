@@ -30,7 +30,7 @@ class MinimumClustersValidatorIntegrationTest : public Grpc::DeltaSotwIntegratio
                                                 public HttpIntegrationTest {
 public:
   MinimumClustersValidatorIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP2, ipVersion(),
+      : HttpIntegrationTest(Http::CodecType::HTTP2, ipVersion(), socketInterface(),
                             ConfigHelper::discoveredClustersBootstrap(
                                 sotwOrDelta() == Grpc::SotwOrDelta::Sotw ||
                                         sotwOrDelta() == Grpc::SotwOrDelta::UnifiedSotw

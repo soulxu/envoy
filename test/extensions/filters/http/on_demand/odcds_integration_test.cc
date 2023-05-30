@@ -226,7 +226,7 @@ class OdCdsIntegrationTestBase : public HttpIntegrationTest,
                                  public Grpc::GrpcClientIntegrationParamTest {
 public:
   OdCdsIntegrationTestBase()
-      : HttpIntegrationTest(Http::CodecClient::Type::HTTP2, ipVersion(),
+      : HttpIntegrationTest(Http::CodecClient::Type::HTTP2, ipVersion(), socketInterface(),
                             OdCdsIntegrationHelper::bootstrapConfig()) {}
 
   void clearOnDemandConfig() {
@@ -570,6 +570,7 @@ public:
 INSTANTIATE_TEST_SUITE_P(
     IpVersionsClientTypeDeltaWildcard, OdCdsAdsIntegrationTest,
     testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
                      testing::ValuesIn(TestEnvironment::getsGrpcVersionsForTest()),
                      // Only delta xDS is supported for on-demand CDS.
                      testing::Values(Grpc::SotwOrDelta::Delta, Grpc::SotwOrDelta::UnifiedDelta),

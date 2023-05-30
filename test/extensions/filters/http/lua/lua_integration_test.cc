@@ -12,12 +12,15 @@ using Envoy::Http::HeaderValueOf;
 namespace Envoy {
 namespace {
 
-class LuaIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                           public HttpIntegrationTest {
+class LuaIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
   LuaIntegrationTest() : LuaIntegrationTest(Http::CodecType::HTTP1) {}
   LuaIntegrationTest(Http::CodecType downstream_protocol)
-      : HttpIntegrationTest(downstream_protocol, GetParam()) {}
+      : HttpIntegrationTest(downstream_protocol, std::get<0>(GetParam()), std::get<1>(GetParam())) {
+  }
 
   void createUpstreams() override {
     HttpIntegrationTest::createUpstreams();
@@ -228,9 +231,11 @@ public:
   FakeStreamPtr lua_request_;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, LuaIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, LuaIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Regression test for pulling route info during early local replies using the Lua filter
 // metadata() API. Covers both the upgrade required and no authority cases.
@@ -406,19 +411,19 @@ typed_config:
                        ->value()
                        .getStringView());
 
-  EXPECT_TRUE(
-      absl::StrContains(upstream_request_->headers()
-                            .get(Http::LowerCaseString("request_downstream_local_address_value"))[0]
-                            ->value()
-                            .getStringView(),
-                        GetParam() == Network::Address::IpVersion::v4 ? "127.0.0.1:" : "[::1]:"));
+  EXPECT_TRUE(absl::StrContains(
+      upstream_request_->headers()
+          .get(Http::LowerCaseString("request_downstream_local_address_value"))[0]
+          ->value()
+          .getStringView(),
+      std::get<0>(GetParam()) == Network::Address::IpVersion::v4 ? "127.0.0.1:" : "[::1]:"));
 
   EXPECT_TRUE(absl::StrContains(
       upstream_request_->headers()
           .get(Http::LowerCaseString("request_downstream_directremote_address_value"))[0]
           ->value()
           .getStringView(),
-      GetParam() == Network::Address::IpVersion::v4 ? "127.0.0.1:" : "[::1]:"));
+      std::get<0>(GetParam()) == Network::Address::IpVersion::v4 ? "127.0.0.1:" : "[::1]:"));
 
   EXPECT_EQ("", upstream_request_->headers()
                     .get(Http::LowerCaseString("request_requested_server_name"))[0]
@@ -1265,9 +1270,11 @@ protected:
   Http2LuaIntegrationTest() : LuaIntegrationTest(Http::CodecType::HTTP2) {}
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, Http2LuaIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, Http2LuaIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Test sending local reply due to too much data. HTTP2 is needed as it
 // will propagate the end stream from the downstream in the same decodeData

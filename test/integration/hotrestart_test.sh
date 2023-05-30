@@ -22,71 +22,80 @@ JSON_TEST_ARRAY=()
 mkdir -p "${TEST_TMPDIR}"/test/common/runtime/test_data/current/envoy
 mkdir -p "${TEST_TMPDIR}"/test/common/runtime/test_data/current/envoy_override
 
-# Parameterize IPv4 and IPv6 testing.
-if [[ -z "${ENVOY_IP_TEST_VERSIONS}" ]] || [[ "${ENVOY_IP_TEST_VERSIONS}" == "all" ]] \
-  || [[ "${ENVOY_IP_TEST_VERSIONS}" == "v4only" ]]; then
-  HOT_RESTART_JSON_V4="${TEST_TMPDIR}"/hot_restart_v4.yaml
+# Parameterize socket interface testing.
+for ENABLE_IO_URING in "false" "true"
+do
+  # Parameterize IPv4 and IPv6 testing.
+  if [[ -z "${ENVOY_IP_TEST_VERSIONS}" ]] || [[ "${ENVOY_IP_TEST_VERSIONS}" == "all" ]] \
+    || [[ "${ENVOY_IP_TEST_VERSIONS}" == "v4only" ]]; then
+    HOT_RESTART_JSON_V4="${TEST_TMPDIR}"/hot_restart_v4.yaml
+    echo "building ${HOT_RESTART_JSON_V4} ..."
+    sed -e "s#{{ upstream_. }}#0#g" "${TEST_SRCDIR}/envoy"/test/config/integration/server.yaml | \
+      sed -e "s#{{ test_rundir }}#$TEST_SRCDIR/envoy#" | \
+      sed -e "s#{{ test_tmpdir }}#$TEST_TMPDIR#" | \
+      sed -e "s#{{ ip_loopback_address }}#127.0.0.1#" | \
+      sed -e "s#{{ enable_reuse_port }}#false#" | \
+      sed -e "s#{{ dns_lookup_family }}#V4_ONLY#" | \
+      sed -e "s#{{ null_device_path }}#/dev/null#" | \
+      sed -e "s#{{ enable_io_uring }}#$ENABLE_IO_URING#" | \
+      cat > "${HOT_RESTART_JSON_V4}"
+    JSON_TEST_ARRAY+=("${HOT_RESTART_JSON_V4}")
+  fi
+
+  if [[ -z "${ENVOY_IP_TEST_VERSIONS}" ]] || [[ "${ENVOY_IP_TEST_VERSIONS}" == "all" ]] \
+    || [[ "${ENVOY_IP_TEST_VERSIONS}" == "v6only" ]]; then
+    HOT_RESTART_JSON_V6="${TEST_TMPDIR}"/hot_restart_v6.yaml
+    sed -e "s#{{ upstream_. }}#0#g" "${TEST_SRCDIR}/envoy"/test/config/integration/server.yaml | \
+      sed -e "s#{{ test_rundir }}#$TEST_SRCDIR/envoy#" | \
+      sed -e "s#{{ test_tmpdir }}#$TEST_TMPDIR#" | \
+      sed -e "s#{{ ip_loopback_address }}#::1#" | \
+      sed -e "s#{{ enable_reuse_port }}#false#" | \
+      sed -e "s#{{ dns_lookup_family }}#v6_only#" | \
+      sed -e "s#{{ null_device_path }}#/dev/null#" | \
+      sed -e "s#{{ enable_io_uring }}#$ENABLE_IO_URING#" | \
+      cat > "${HOT_RESTART_JSON_V6}"
+    JSON_TEST_ARRAY+=("${HOT_RESTART_JSON_V6}")
+  fi
+
+  # Also test for listening on UNIX domain sockets. We use IPv4 for the
+  # upstreams to avoid too much wild sedding.
+  HOT_RESTART_JSON_UDS="${TEST_TMPDIR}"/hot_restart_uds.yaml
+  SOCKET_DIR="$(mktemp -d /tmp/envoy_test_hotrestart.XXXXXX)"
+  sed -e "s#{{ socket_dir }}#${SOCKET_DIR}#" "${TEST_SRCDIR}/envoy"/test/config/integration/server_unix_listener.yaml | \
+    sed -e "s#{{ ip_loopback_address }}#127.0.0.1#" | \
+    sed -e "s#{{ null_device_path }}#/dev/null#" | \
+    sed -e "s#{{ enable_io_uring }}#$ENABLE_IO_URING#" | \
+    cat > "${HOT_RESTART_JSON_UDS}"
+  JSON_TEST_ARRAY+=("${HOT_RESTART_JSON_UDS}")
+
+  # Test reuse_port listener.
+  HOT_RESTART_JSON_REUSE_PORT="${TEST_TMPDIR}"/hot_restart_v4.yaml
   echo "building ${HOT_RESTART_JSON_V4} ..."
   sed -e "s#{{ upstream_. }}#0#g" "${TEST_SRCDIR}/envoy"/test/config/integration/server.yaml | \
     sed -e "s#{{ test_rundir }}#$TEST_SRCDIR/envoy#" | \
     sed -e "s#{{ test_tmpdir }}#$TEST_TMPDIR#" | \
     sed -e "s#{{ ip_loopback_address }}#127.0.0.1#" | \
-    sed -e "s#{{ enable_reuse_port }}#false#" | \
+    sed -e "s#{{ enable_reuse_port }}#true#" | \
     sed -e "s#{{ dns_lookup_family }}#V4_ONLY#" | \
     sed -e "s#{{ null_device_path }}#/dev/null#" | \
-    cat > "${HOT_RESTART_JSON_V4}"
-  JSON_TEST_ARRAY+=("${HOT_RESTART_JSON_V4}")
-fi
+    sed -e "s#{{ enable_io_uring }}#$ENABLE_IO_URING#" | \
+    cat > "${HOT_RESTART_JSON_REUSE_PORT}"
+  JSON_TEST_ARRAY+=("${HOT_RESTART_JSON_REUSE_PORT}")
 
-if [[ -z "${ENVOY_IP_TEST_VERSIONS}" ]] || [[ "${ENVOY_IP_TEST_VERSIONS}" == "all" ]] \
-  || [[ "${ENVOY_IP_TEST_VERSIONS}" == "v6only" ]]; then
-  HOT_RESTART_JSON_V6="${TEST_TMPDIR}"/hot_restart_v6.yaml
-  sed -e "s#{{ upstream_. }}#0#g" "${TEST_SRCDIR}/envoy"/test/config/integration/server.yaml | \
+  # Test reuse_port listener with multiple addresses.
+  HOT_RESTART_JSON_REUSE_PORT_MULTI_ADDRESSES="${TEST_TMPDIR}"/hot_restart_v4_multiple_addresses.yaml
+  echo "building ${HOT_RESTART_JSON_V4} ..."
+  sed -e "s#{{ upstream_. }}#0#g" "${TEST_SRCDIR}/envoy"/test/config/integration/server_multiple_addresses.yaml | \
     sed -e "s#{{ test_rundir }}#$TEST_SRCDIR/envoy#" | \
     sed -e "s#{{ test_tmpdir }}#$TEST_TMPDIR#" | \
-    sed -e "s#{{ ip_loopback_address }}#::1#" | \
-    sed -e "s#{{ enable_reuse_port }}#false#" | \
-    sed -e "s#{{ dns_lookup_family }}#v6_only#" | \
+    sed -e "s#{{ ip_loopback_address }}#127.0.0.1#" | \
+    sed -e "s#{{ enable_reuse_port }}#true#" | \
+    sed -e "s#{{ dns_lookup_family }}#V4_ONLY#" | \
     sed -e "s#{{ null_device_path }}#/dev/null#" | \
-    cat > "${HOT_RESTART_JSON_V6}"
-  JSON_TEST_ARRAY+=("${HOT_RESTART_JSON_V6}")
-fi
-
-# Also test for listening on UNIX domain sockets. We use IPv4 for the
-# upstreams to avoid too much wild sedding.
-HOT_RESTART_JSON_UDS="${TEST_TMPDIR}"/hot_restart_uds.yaml
-SOCKET_DIR="$(mktemp -d /tmp/envoy_test_hotrestart.XXXXXX)"
-sed -e "s#{{ socket_dir }}#${SOCKET_DIR}#" "${TEST_SRCDIR}/envoy"/test/config/integration/server_unix_listener.yaml | \
-  sed -e "s#{{ ip_loopback_address }}#127.0.0.1#" | \
-  sed -e "s#{{ null_device_path }}#/dev/null#" | \
-  cat > "${HOT_RESTART_JSON_UDS}"
-JSON_TEST_ARRAY+=("${HOT_RESTART_JSON_UDS}")
-
-# Test reuse_port listener.
-HOT_RESTART_JSON_REUSE_PORT="${TEST_TMPDIR}"/hot_restart_v4.yaml
-echo "building ${HOT_RESTART_JSON_V4} ..."
-sed -e "s#{{ upstream_. }}#0#g" "${TEST_SRCDIR}/envoy"/test/config/integration/server.yaml | \
-  sed -e "s#{{ test_rundir }}#$TEST_SRCDIR/envoy#" | \
-  sed -e "s#{{ test_tmpdir }}#$TEST_TMPDIR#" | \
-  sed -e "s#{{ ip_loopback_address }}#127.0.0.1#" | \
-  sed -e "s#{{ enable_reuse_port }}#true#" | \
-  sed -e "s#{{ dns_lookup_family }}#V4_ONLY#" | \
-  sed -e "s#{{ null_device_path }}#/dev/null#" | \
-  cat > "${HOT_RESTART_JSON_REUSE_PORT}"
-JSON_TEST_ARRAY+=("${HOT_RESTART_JSON_REUSE_PORT}")
-
-# Test reuse_port listener with multiple addresses.
-HOT_RESTART_JSON_REUSE_PORT_MULTI_ADDRESSES="${TEST_TMPDIR}"/hot_restart_v4_multiple_addresses.yaml
-echo "building ${HOT_RESTART_JSON_V4} ..."
-sed -e "s#{{ upstream_. }}#0#g" "${TEST_SRCDIR}/envoy"/test/config/integration/server_multiple_addresses.yaml | \
-  sed -e "s#{{ test_rundir }}#$TEST_SRCDIR/envoy#" | \
-  sed -e "s#{{ test_tmpdir }}#$TEST_TMPDIR#" | \
-  sed -e "s#{{ ip_loopback_address }}#127.0.0.1#" | \
-  sed -e "s#{{ enable_reuse_port }}#true#" | \
-  sed -e "s#{{ dns_lookup_family }}#V4_ONLY#" | \
-  sed -e "s#{{ null_device_path }}#/dev/null#" | \
-  cat > "${HOT_RESTART_JSON_REUSE_PORT_MULTI_ADDRESSES}"
-JSON_TEST_ARRAY+=("${HOT_RESTART_JSON_REUSE_PORT_MULTI_ADDRESSES}")
+    sed -e "s#{{ enable_io_uring }}#$ENABLE_IO_URING#" | \
+    cat > "${HOT_RESTART_JSON_REUSE_PORT_MULTI_ADDRESSES}"
+  JSON_TEST_ARRAY+=("${HOT_RESTART_JSON_REUSE_PORT_MULTI_ADDRESSES}")
+done
 
 # Shared memory size varies by architecture
 SHARED_MEMORY_SIZE="104"

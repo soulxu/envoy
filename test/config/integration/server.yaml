@@ -175,3 +175,9 @@ admin:
     socket_address:
       address: "{{ ip_loopback_address }}"
       port_value: 0
+default_socket_interface: "envoy.extensions.network.socket_interface.default_socket_interface"
+bootstrap_extensions:
+- name: envoy.extensions.network.socket_interface.default_socket_interface
+  typed_config:
+    "@type": type.googleapis.com/envoy.extensions.network.socket_interface.v3.DefaultSocketInterface
+    enable_io_uring: "{{ enable_io_uring }}"

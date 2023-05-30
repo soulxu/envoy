@@ -13,7 +13,8 @@ namespace Formatter {
 class CommandFormatterExtensionIntegrationTest : public testing::Test, public HttpIntegrationTest {
 public:
   CommandFormatterExtensionIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, Network::Address::IpVersion::v4) {}
+      : HttpIntegrationTest(Http::CodecType::HTTP1, Network::Address::IpVersion::v4,
+                            Network::DefaultSocketInterface::Default) {}
 };
 
 TEST_F(CommandFormatterExtensionIntegrationTest, BasicExtension) {

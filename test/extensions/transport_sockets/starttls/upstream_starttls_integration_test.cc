@@ -192,13 +192,15 @@ private:
   Network::ConnectionCallbacks* upstream_callbacks_;
 };
 
-using StartTlsTestParamsType = std::pair<Network::Address::IpVersion, absl::string_view>;
+using StartTlsTestParamsType =
+    std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, absl::string_view>;
 // Fixture class for integration tests.
 class StartTlsIntegrationTest : public testing::TestWithParam<StartTlsTestParamsType>,
                                 public BaseIntegrationTest {
 public:
   StartTlsIntegrationTest()
-      : BaseIntegrationTest(GetParam().first, ConfigHelper::baseConfig()),
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            ConfigHelper::baseConfig()),
         stream_info_(timeSystem(), nullptr) {}
   void initialize() override;
 
@@ -329,9 +331,9 @@ TEST_P(StartTlsIntegrationTest, SwitchToTlsFromClient) {
   // Send a message which will trigger upstream starttls to use secure mode.
   // The message is a test parameter and upstream starttls will be switched to secure
   // mode either directly by the terminal test filter or via filter manager.
-  ASSERT_TRUE(tcp_client->write(GetParam().second.data()));
+  ASSERT_TRUE(tcp_client->write(std::get<2>(GetParam()).data()));
   // Make sure the data makes it upstream.
-  ASSERT_TRUE(fake_upstream_connection->waitForData(5 + GetParam().second.length()));
+  ASSERT_TRUE(fake_upstream_connection->waitForData(5 + std::get<2>(GetParam()).length()));
 
   // Send a message from upstream down through Envoy to tcp_client.
   ASSERT_TRUE(fake_upstream_connection->write("upstream"));
@@ -351,8 +353,11 @@ std::vector<StartTlsTestParamsType> generateTestParams() {
   std::vector<StartTlsTestParamsType> testParams;
 
   for (const Network::Address::IpVersion ip_version : TestEnvironment::getIpVersionsForTest()) {
-    for (const absl::string_view& message_from_client : switch_messages) {
-      testParams.emplace_back(ip_version, message_from_client);
+    for (const Network::DefaultSocketInterface interface :
+         TestEnvironment::getSocketInterfacesForTest()) {
+      for (const absl::string_view& message_from_client : switch_messages) {
+        testParams.emplace_back(ip_version, interface, message_from_client);
+      }
     }
   }
 

@@ -6,9 +6,11 @@ namespace Envoy {
 
 using testing::HasSubstr;
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, HttpTimeoutIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, HttpTimeoutIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Sends a request with a global timeout specified, sleeps for longer than the
 // timeout, and ensures that a timeout is received.

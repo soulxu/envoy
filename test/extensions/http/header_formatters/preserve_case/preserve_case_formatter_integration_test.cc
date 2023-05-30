@@ -12,13 +12,15 @@ namespace {
 
 struct FormatterOnEnvoyHeadersTestParams {
   Network::Address::IpVersion ip_version;
+  Network::DefaultSocketInterface interface;
   envoy::extensions::http::header_formatters::preserve_case::v3::PreserveCaseFormatterConfig::
       FormatterTypeOnEnvoyHeaders formatter_type_on_envoy_headers;
 };
 
 std::string formatterOnEnvoyHeadersTestParamsToString(
     const ::testing::TestParamInfo<FormatterOnEnvoyHeadersTestParams>& p) {
-  return fmt::format("{}_{}", TestUtility::ipVersionToString(p.param.ip_version),
+  return fmt::format("{}_{}_{}", TestUtility::ipVersionToString(p.param.ip_version),
+                     TestUtility::socketInterfaceToString(p.param.interface),
                      p.param.formatter_type_on_envoy_headers);
 }
 
@@ -26,12 +28,16 @@ std::vector<FormatterOnEnvoyHeadersTestParams> getFormatterOnEnvoyHeadersTestPar
   std::vector<FormatterOnEnvoyHeadersTestParams> ret;
 
   for (auto ip_version : TestEnvironment::getIpVersionsForTest()) {
-    ret.push_back(FormatterOnEnvoyHeadersTestParams{
-        ip_version, envoy::extensions::http::header_formatters::preserve_case::v3::
-                        PreserveCaseFormatterConfig::DEFAULT});
-    ret.push_back(FormatterOnEnvoyHeadersTestParams{
-        ip_version, envoy::extensions::http::header_formatters::preserve_case::v3::
-                        PreserveCaseFormatterConfig::PROPER_CASE});
+    for (auto interface : TestEnvironment::getSocketInterfacesForTest()) {
+      ret.push_back(FormatterOnEnvoyHeadersTestParams{
+          ip_version, interface,
+          envoy::extensions::http::header_formatters::preserve_case::v3::
+              PreserveCaseFormatterConfig::DEFAULT});
+      ret.push_back(FormatterOnEnvoyHeadersTestParams{
+          ip_version, interface,
+          envoy::extensions::http::header_formatters::preserve_case::v3::
+              PreserveCaseFormatterConfig::PROPER_CASE});
+    }
   }
 
   return ret;
@@ -67,7 +73,7 @@ class PreserveCaseIntegrationTest
       public HttpIntegrationTest {
 public:
   PreserveCaseIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam().ip_version),
+      : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam().ip_version, GetParam().interface),
         registration_(factory_) {}
 
   void initialize() override {

@@ -28,8 +28,8 @@ class ListenerExtensionDiscoveryIntegrationTest : public Grpc::GrpcClientIntegra
                                                   public BaseIntegrationTest {
 public:
   ListenerExtensionDiscoveryIntegrationTest()
-      : BaseIntegrationTest(ipVersion(), ConfigHelper::baseConfig()), filter_name_("foo"),
-        data_("HelloWorld"), port_name_("http") {
+      : BaseIntegrationTest(ipVersion(), socketInterface(), ConfigHelper::baseConfig()),
+        filter_name_("foo"), data_("HelloWorld"), port_name_("http") {
     // TODO(ggreenway): add tag extraction rules.
     // Missing stat tag-extraction rule for stat
     // 'extension_config_discovery.tcp_listener_filter.foo.grpc.ecds_cluster.streams_closed_7' and

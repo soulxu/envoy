@@ -3,14 +3,20 @@
 namespace Envoy {
 namespace {
 
-class IpTaggingIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                 public HttpIntegrationTest {
+class IpTaggingIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
-  IpTaggingIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {}
+  IpTaggingIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, IpTaggingIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()));
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, IpTaggingIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())));
 
 // Just IP tagging for now.
 const char ExampleIpTaggingConfig[] = R"EOF(

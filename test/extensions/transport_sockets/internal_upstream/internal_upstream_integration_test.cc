@@ -21,6 +21,7 @@ class InternalUpstreamIntegrationTest : public testing::Test, public HttpIntegra
 public:
   InternalUpstreamIntegrationTest()
       : HttpIntegrationTest(Http::CodecType::HTTP1, TestEnvironment::getIpVersionsForTest().front(),
+                            TestEnvironment::getSocketInterfacesForTest().front(),
                             ConfigHelper::httpProxyConfig()) {
     setUpstreamCount(1);
   }

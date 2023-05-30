@@ -17,12 +17,14 @@
 namespace Envoy {
 
 class UdsUpstreamIntegrationTest
-    : public testing::TestWithParam<std::tuple<Network::Address::IpVersion, bool>>,
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, bool>>,
       public HttpIntegrationTest {
 public:
   UdsUpstreamIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam())),
-        abstract_namespace_(std::get<1>(GetParam())) {}
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())),
+        abstract_namespace_(std::get<2>(GetParam())) {}
 
   void createUpstreams() override {
     FakeUpstreamConfig config = upstreamConfig();
@@ -60,12 +62,14 @@ protected:
 };
 
 class UdsListenerIntegrationTest
-    : public testing::TestWithParam<std::tuple<Network::Address::IpVersion, bool, mode_t>>,
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, bool, mode_t>>,
       public HttpIntegrationTest {
 public:
   UdsListenerIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam())),
-        abstract_namespace_(std::get<1>(GetParam())), mode_(std::get<2>(GetParam())) {}
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())),
+        abstract_namespace_(std::get<2>(GetParam())), mode_(std::get<3>(GetParam())) {}
 
   void initialize() override;
 

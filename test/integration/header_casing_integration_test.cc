@@ -10,10 +10,14 @@
 
 namespace Envoy {
 
-class HeaderCasingIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                    public HttpIntegrationTest {
+class HeaderCasingIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
-  HeaderCasingIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {}
+  HeaderCasingIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void SetUp() override {
     setDownstreamProtocol(Http::CodecType::HTTP1);
@@ -43,9 +47,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, HeaderCasingIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, HeaderCasingIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(HeaderCasingIntegrationTest, VerifyCasedHeaders) {
   initialize();

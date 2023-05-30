@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "envoy/network/address.h"
+#include "envoy/network/socket_interface.h"
 #include "envoy/server/options.h"
 
 #include "source/common/json/json_loader.h"
@@ -61,6 +62,12 @@ public:
    * types to test.
    */
   static std::vector<Network::Address::IpVersion> getIpVersionsForTest();
+
+  /**
+   * Return a vector of socket interface parameters to test.
+   * @return std::vector<Network::DefaultSocketInterface> vector of socket interface types to test.
+   */
+  static std::vector<Network::DefaultSocketInterface> getSocketInterfacesForTest();
 
   /**
    * Return a vector of spdlog loggers as parameters to test. Tests are mainly

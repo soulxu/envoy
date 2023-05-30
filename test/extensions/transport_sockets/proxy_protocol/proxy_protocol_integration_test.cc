@@ -11,11 +11,14 @@ using envoy::config::core::v3::ProxyProtocolPassThroughTLVs;
 namespace Envoy {
 namespace {
 
-class ProxyProtocolTcpIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                        public BaseIntegrationTest {
+class ProxyProtocolTcpIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
   ProxyProtocolTcpIntegrationTest()
-      : BaseIntegrationTest(GetParam(), ConfigHelper::tcpProxyConfig()) {}
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            ConfigHelper::tcpProxyConfig()) {}
 
   void TearDown() override {
     test_server_.reset();
@@ -73,9 +76,11 @@ private:
   std::string inner_socket_;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, ProxyProtocolTcpIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, ProxyProtocolTcpIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Test sending proxy protocol v1
 TEST_P(ProxyProtocolTcpIntegrationTest, TestV1ProxyProtocol) {
@@ -89,10 +94,10 @@ TEST_P(ProxyProtocolTcpIntegrationTest, TestV1ProxyProtocol) {
 
   std::string observed_data;
   ASSERT_TRUE(tcp_client->write("data"));
-  if (GetParam() == Network::Address::IpVersion::v4) {
+  if (std::get<0>(GetParam()) == Network::Address::IpVersion::v4) {
     ASSERT_TRUE(fake_upstream_connection_->waitForData(48, &observed_data));
     EXPECT_THAT(observed_data, testing::StartsWith("PROXY TCP4 127.0.0.1 127.0.0.1 "));
-  } else if (GetParam() == Network::Address::IpVersion::v6) {
+  } else if (std::get<0>(GetParam()) == Network::Address::IpVersion::v6) {
     ASSERT_TRUE(fake_upstream_connection_->waitForData(36, &observed_data));
     EXPECT_THAT(observed_data, testing::StartsWith("PROXY TCP6 ::1 ::1 "));
   }
@@ -109,7 +114,7 @@ TEST_P(ProxyProtocolTcpIntegrationTest, TestV1ProxyProtocol) {
 }
 
 TEST_P(ProxyProtocolTcpIntegrationTest, TestV1ProxyProtocolMultipleConnections) {
-  if (GetParam() != Network::Address::IpVersion::v4) {
+  if (std::get<0>(GetParam()) != Network::Address::IpVersion::v4) {
     return;
   }
 
@@ -148,10 +153,10 @@ TEST_P(ProxyProtocolTcpIntegrationTest, TestTLSSocket) {
   ASSERT_TRUE(fake_upstreams_[0]->waitForRawConnection(fake_upstream_connection_));
 
   ASSERT_TRUE(tcp_client->write("data"));
-  if (GetParam() == Network::Address::IpVersion::v4) {
+  if (std::get<0>(GetParam()) == Network::Address::IpVersion::v4) {
     ASSERT_TRUE(fake_upstream_connection_->waitForData(
         fake_upstream_connection_->waitForInexactMatch("PROXY TCP4 127.0.0.1 127.0.0.1 ")));
-  } else if (GetParam() == Network::Address::IpVersion::v6) {
+  } else if (std::get<0>(GetParam()) == Network::Address::IpVersion::v6) {
     ASSERT_TRUE(fake_upstream_connection_->waitForData(
         fake_upstream_connection_->waitForInexactMatch("PROXY TCP6 ::1 ::1 ")));
   }
@@ -169,10 +174,10 @@ TEST_P(ProxyProtocolTcpIntegrationTest, TestProxyProtocolHealthCheck) {
   on_server_init_function_ = [&](void) -> void {
     std::string observed_data;
     ASSERT_TRUE(fake_upstreams_[0]->waitForRawConnection(fake_upstream_health_connection));
-    if (GetParam() == Network::Address::IpVersion::v4) {
+    if (std::get<0>(GetParam()) == Network::Address::IpVersion::v4) {
       ASSERT_TRUE(fake_upstream_health_connection->waitForData(48, &observed_data));
       EXPECT_THAT(observed_data, testing::StartsWith("PROXY TCP4 127.0.0.1 127.0.0.1 "));
-    } else if (GetParam() == Network::Address::IpVersion::v6) {
+    } else if (std::get<0>(GetParam()) == Network::Address::IpVersion::v6) {
       ASSERT_TRUE(fake_upstream_health_connection->waitForData(36, &observed_data));
       EXPECT_THAT(observed_data, testing::StartsWith("PROXY TCP6 ::1 ::1 "));
     }
@@ -197,7 +202,7 @@ TEST_P(ProxyProtocolTcpIntegrationTest, TestV2ProxyProtocol) {
 
   std::string observed_data;
   ASSERT_TRUE(tcp_client->write("data"));
-  if (GetParam() == Envoy::Network::Address::IpVersion::v4) {
+  if (std::get<0>(GetParam()) == Envoy::Network::Address::IpVersion::v4) {
     ASSERT_TRUE(fake_upstream_connection_->waitForData(32, &observed_data));
     // - signature
     // - version and command type, address family and protocol, length of addresses
@@ -208,7 +213,7 @@ TEST_P(ProxyProtocolTcpIntegrationTest, TestV2ProxyProtocol) {
     EXPECT_THAT(observed_data, testing::StartsWith(header_start));
     EXPECT_EQ(static_cast<uint8_t>(observed_data[26]), listener_port >> 8);
     EXPECT_EQ(static_cast<uint8_t>(observed_data[27]), listener_port & 0xFF);
-  } else if (GetParam() == Envoy::Network::Address::IpVersion::v6) {
+  } else if (std::get<0>(GetParam()) == Envoy::Network::Address::IpVersion::v6) {
     ASSERT_TRUE(fake_upstream_connection_->waitForData(56, &observed_data));
     // - signature
     // - version and command type, address family and protocol, length of addresses
@@ -234,11 +239,14 @@ TEST_P(ProxyProtocolTcpIntegrationTest, TestV2ProxyProtocol) {
   ASSERT_TRUE(fake_upstream_connection_->waitForDisconnect());
 }
 
-class ProxyProtocolHttpIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                         public HttpIntegrationTest {
+class ProxyProtocolHttpIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
   ProxyProtocolHttpIntegrationTest()
-      : HttpIntegrationTest(Http::CodecClient::Type::HTTP1, GetParam()) {}
+      : HttpIntegrationTest(Http::CodecClient::Type::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void TearDown() override {
     test_server_.reset();
@@ -292,9 +300,11 @@ private:
   std::string inner_socket_;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, ProxyProtocolHttpIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, ProxyProtocolHttpIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Test sending proxy protocol over http
 TEST_P(ProxyProtocolHttpIntegrationTest, TestV1ProxyProtocol) {
@@ -309,11 +319,11 @@ TEST_P(ProxyProtocolHttpIntegrationTest, TestV1ProxyProtocol) {
   ASSERT_TRUE(fake_upstreams_[0]->waitForRawConnection(fake_upstream_raw_connection_));
 
   std::string observed_data;
-  if (GetParam() == Network::Address::IpVersion::v4) {
+  if (std::get<0>(GetParam()) == Network::Address::IpVersion::v4) {
     ASSERT_TRUE(fake_upstream_raw_connection_->waitForData(
         FakeRawConnection::waitForAtLeastBytes(70), &observed_data));
     EXPECT_THAT(observed_data, testing::StartsWith("PROXY TCP4 127.0.0.1 127.0.0.1 "));
-  } else if (GetParam() == Network::Address::IpVersion::v6) {
+  } else if (std::get<0>(GetParam()) == Network::Address::IpVersion::v6) {
     ASSERT_TRUE(fake_upstream_raw_connection_->waitForData(
         FakeRawConnection::waitForAtLeastBytes(58), &observed_data));
     EXPECT_THAT(observed_data, testing::StartsWith("PROXY TCP6 ::1 ::1 "));
@@ -340,7 +350,7 @@ TEST_P(ProxyProtocolHttpIntegrationTest, TestV1ProxyProtocol) {
 
 // Test sending proxy protocol over multiple http connections
 TEST_P(ProxyProtocolHttpIntegrationTest, TestV1ProxyProtocolMultipleConnections) {
-  if (GetParam() != Network::Address::IpVersion::v4) {
+  if (std::get<0>(GetParam()) != Network::Address::IpVersion::v4) {
     return;
   }
 
@@ -381,11 +391,11 @@ TEST_P(ProxyProtocolHttpIntegrationTest, TestProxyProtocolHealthCheck) {
   on_server_init_function_ = [&](void) -> void {
     std::string observed_data;
     ASSERT_TRUE(fake_upstreams_[0]->waitForRawConnection(fake_upstream_health_connection));
-    if (GetParam() == Network::Address::IpVersion::v4) {
+    if (std::get<0>(GetParam()) == Network::Address::IpVersion::v4) {
       ASSERT_TRUE(fake_upstream_health_connection->waitForData(
           FakeRawConnection::waitForAtLeastBytes(48), &observed_data));
       EXPECT_THAT(observed_data, testing::StartsWith("PROXY TCP4 127.0.0.1 127.0.0.1 "));
-    } else if (GetParam() == Network::Address::IpVersion::v6) {
+    } else if (std::get<0>(GetParam()) == Network::Address::IpVersion::v6) {
       ASSERT_TRUE(fake_upstream_health_connection->waitForData(
           FakeRawConnection::waitForAtLeastBytes(36), &observed_data));
       EXPECT_THAT(observed_data, testing::StartsWith("PROXY TCP6 ::1 ::1 "));
@@ -400,11 +410,14 @@ TEST_P(ProxyProtocolHttpIntegrationTest, TestProxyProtocolHealthCheck) {
   ASSERT_TRUE(fake_upstream_health_connection->waitForDisconnect());
 }
 
-class ProxyProtocolTLVsIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                         public BaseIntegrationTest {
+class ProxyProtocolTLVsIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
   ProxyProtocolTLVsIntegrationTest()
-      : BaseIntegrationTest(GetParam(), ConfigHelper::tcpProxyConfig()){};
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            ConfigHelper::tcpProxyConfig()){};
 
   void TearDown() override {
     test_server_.reset();
@@ -476,9 +489,11 @@ private:
   std::vector<uint8_t> tlvs_upstream_;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, ProxyProtocolTLVsIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, ProxyProtocolTLVsIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // This test adding the listener proxy protocol filter and upstream proxy filter, the TLVs
 // are passed by listener and re-generated in transport socket based on API config.
@@ -488,7 +503,7 @@ TEST_P(ProxyProtocolTLVsIntegrationTest, TestV2TLVProxyProtocolPassSepcificTLVs)
 
   IntegrationTcpClientPtr tcp_client = makeTcpConnection(lookupPort("listener_0"));
   std::string observed_data;
-  if (GetParam() == Envoy::Network::Address::IpVersion::v4) {
+  if (std::get<0>(GetParam()) == Envoy::Network::Address::IpVersion::v4) {
     // 2 TLVs are included:
     // 0x05, 0x00, 0x02, 0x06, 0x07
     // 0x06, 0x00, 0x02, 0x11, 0x12
@@ -515,7 +530,7 @@ TEST_P(ProxyProtocolTLVsIntegrationTest, TestV2TLVProxyProtocolPassSepcificTLVs)
     EXPECT_EQ(static_cast<uint8_t>(observed_data[30]), 0x02);
     EXPECT_EQ(static_cast<uint8_t>(observed_data[31]), 0x11);
     EXPECT_EQ(static_cast<uint8_t>(observed_data[32]), 0x12);
-  } else if (GetParam() == Envoy::Network::Address::IpVersion::v6) {
+  } else if (std::get<0>(GetParam()) == Envoy::Network::Address::IpVersion::v6) {
     // 2 TLVs are included:
     // 0x05, 0x00, 0x02, 0x06, 0x07
     // 0x06, 0x00, 0x02, 0x09, 0x0A
@@ -559,7 +574,7 @@ TEST_P(ProxyProtocolTLVsIntegrationTest, TestV2TLVProxyProtocolPassAll) {
   IntegrationTcpClientPtr tcp_client = makeTcpConnection(lookupPort("listener_0"));
   ;
   std::string observed_data;
-  if (GetParam() == Envoy::Network::Address::IpVersion::v4) {
+  if (std::get<0>(GetParam()) == Envoy::Network::Address::IpVersion::v4) {
     // 2 TLVs are included:
     // 0x05, 0x00, 0x02, 0x06, 0x07
     // 0x06, 0x00, 0x02, 0x11, 0x12
@@ -591,7 +606,7 @@ TEST_P(ProxyProtocolTLVsIntegrationTest, TestV2TLVProxyProtocolPassAll) {
     EXPECT_EQ(static_cast<uint8_t>(observed_data[35]), 0x02);
     EXPECT_EQ(static_cast<uint8_t>(observed_data[36]), 0x11);
     EXPECT_EQ(static_cast<uint8_t>(observed_data[37]), 0x12);
-  } else if (GetParam() == Envoy::Network::Address::IpVersion::v6) {
+  } else if (std::get<0>(GetParam()) == Envoy::Network::Address::IpVersion::v6) {
     // 2 TLVs are included:
     // 0x05, 0x00, 0x02, 0x06, 0x07
     // 0x06, 0x00, 0x02, 0x09, 0x0A

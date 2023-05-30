@@ -13,10 +13,13 @@ using testing::ReturnRef;
 namespace Envoy {
 namespace {
 
-class ApiListenerIntegrationTest : public BaseIntegrationTest,
-                                   public testing::TestWithParam<Network::Address::IpVersion> {
+class ApiListenerIntegrationTest
+    : public BaseIntegrationTest,
+      public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>> {
 public:
-  ApiListenerIntegrationTest() : BaseIntegrationTest(GetParam(), bootstrapConfig()) {
+  ApiListenerIntegrationTest()
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()), bootstrapConfig()) {
     use_lds_ = false;
     autonomous_upstream_ = true;
     defer_listener_finalization_ = true;
@@ -79,9 +82,11 @@ api_listener:
 
 ACTION_P(Notify, notification) { notification->Notify(); }
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, ApiListenerIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, ApiListenerIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(ApiListenerIntegrationTest, Basic) {
   BaseIntegrationTest::initialize();

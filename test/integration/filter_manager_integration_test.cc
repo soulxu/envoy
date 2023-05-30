@@ -390,24 +390,30 @@ private:
  * Inherits from BaseIntegrationTest; parameterized with IP version and auxiliary filter.
  */
 class InjectDataToFilterChainIntegrationTest
-    : public testing::TestWithParam<std::tuple<Network::Address::IpVersion, std::string>>,
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, std::string>>,
       public BaseIntegrationTest,
       public TestWithAuxiliaryFilter {
 public:
   // Allows pretty printed test names of the form
   // FooTestCase.BarInstance/IPv4_no_inject_data
   static std::string testParamsToString(
-      const testing::TestParamInfo<std::tuple<Network::Address::IpVersion, std::string>>& params) {
+      const testing::TestParamInfo<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, std::string>>&
+          params) {
     return fmt::format(
         "{}_{}",
-        TestUtility::ipTestParamsToString(testing::TestParamInfo<Network::Address::IpVersion>(
-            std::get<0>(params.param), params.index)),
-        std::regex_replace(std::get<1>(params.param), invalidParamNameRegex(), "_"));
+        TestUtility::ipAndSocketInterfaceTestParamsToString(
+            testing::TestParamInfo<
+                std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>(
+                std::make_tuple(std::get<0>(params.param), std::get<1>(params.param)),
+                params.index)),
+        std::regex_replace(std::get<2>(params.param), invalidParamNameRegex(), "_"));
   }
 
   explicit InjectDataToFilterChainIntegrationTest(const std::string& config)
-      : BaseIntegrationTest(std::get<0>(GetParam()), config),
-        TestWithAuxiliaryFilter(std::get<1>(GetParam())) {}
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()), config),
+        TestWithAuxiliaryFilter(std::get<2>(GetParam())) {}
 
   void SetUp() override { addAuxiliaryFilter(config_helper_); }
 
@@ -444,6 +450,7 @@ public:
 INSTANTIATE_TEST_SUITE_P(
     Params, InjectDataWithEchoFilterIntegrationTest,
     testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
                      testing::ValuesIn(auxiliaryFilters())),
     InjectDataToFilterChainIntegrationTest::testParamsToString);
 
@@ -490,6 +497,7 @@ public:
 INSTANTIATE_TEST_SUITE_P(
     Params, InjectDataWithTcpProxyFilterIntegrationTest,
     testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
                      testing::ValuesIn(auxiliaryFilters())),
     InjectDataToFilterChainIntegrationTest::testParamsToString);
 
@@ -523,16 +531,21 @@ TEST_P(InjectDataWithTcpProxyFilterIntegrationTest, UsageOfInjectDataMethodsShou
   tcp_client->waitForDisconnect();
 }
 
-class FilterChainAccessLogTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                 public BaseIntegrationTest {
+class FilterChainAccessLogTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
   explicit FilterChainAccessLogTest()
-      : BaseIntegrationTest(GetParam(), ConfigHelper::tcpProxyConfig()) {}
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            ConfigHelper::tcpProxyConfig()) {}
 };
 
-INSTANTIATE_TEST_SUITE_P(Params, FilterChainAccessLogTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    Params, FilterChainAccessLogTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(FilterChainAccessLogTest, FilterChainName) {
   auto log_file = TestEnvironment::temporaryPath(TestUtility::uniqueFilename());
@@ -581,26 +594,32 @@ TEST_P(FilterChainAccessLogTest, FilterChainName) {
  */
 class InjectDataWithHttpConnectionManagerIntegrationTest
     : public testing::TestWithParam<
-          std::tuple<Network::Address::IpVersion, Http::CodecType, std::string>>,
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, Http::CodecType,
+                     std::string>>,
       public HttpIntegrationTest,
       public TestWithAuxiliaryFilter {
 public:
   // Allows pretty printed test names of the form
   // FooTestCase.BarInstance/IPv4_Http_no_inject_data
-  static std::string testParamsToString(
-      const testing::TestParamInfo<
-          std::tuple<Network::Address::IpVersion, Http::CodecType, std::string>>& params) {
+  static std::string
+  testParamsToString(const testing::TestParamInfo<
+                     std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface,
+                                Http::CodecType, std::string>>& params) {
     return fmt::format(
         "{}_{}_{}",
-        TestUtility::ipTestParamsToString(testing::TestParamInfo<Network::Address::IpVersion>(
-            std::get<0>(params.param), params.index)),
-        (std::get<1>(params.param) == Http::CodecType::HTTP2 ? "Http2" : "Http"),
-        std::regex_replace(std::get<2>(params.param), invalidParamNameRegex(), "_"));
+        TestUtility::ipAndSocketInterfaceTestParamsToString(
+            testing::TestParamInfo<
+                std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>(
+                std::make_tuple(std::get<0>(params.param), std::get<1>(params.param)),
+                params.index)),
+        (std::get<2>(params.param) == Http::CodecType::HTTP2 ? "Http2" : "Http"),
+        std::regex_replace(std::get<3>(params.param), invalidParamNameRegex(), "_"));
   }
 
   InjectDataWithHttpConnectionManagerIntegrationTest()
-      : HttpIntegrationTest(std::get<1>(GetParam()), std::get<0>(GetParam())),
-        TestWithAuxiliaryFilter(std::get<2>(GetParam())) {}
+      : HttpIntegrationTest(std::get<2>(GetParam()), std::get<0>(GetParam()),
+                            std::get<1>(GetParam())),
+        TestWithAuxiliaryFilter(std::get<3>(GetParam())) {}
 
   void SetUp() override { addAuxiliaryFilter(config_helper_); }
 
@@ -624,6 +643,7 @@ protected:
 INSTANTIATE_TEST_SUITE_P(
     Params, InjectDataWithHttpConnectionManagerIntegrationTest,
     testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
                      testing::Values(Http::CodecType::HTTP1, Http::CodecType::HTTP2),
                      testing::ValuesIn(auxiliaryFilters())),
     InjectDataWithHttpConnectionManagerIntegrationTest::testParamsToString);

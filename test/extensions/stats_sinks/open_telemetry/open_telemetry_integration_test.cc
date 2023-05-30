@@ -23,7 +23,8 @@ namespace {
 class OpenTelemetryGrpcIntegrationTest : public Grpc::GrpcClientIntegrationParamTest,
                                          public HttpIntegrationTest {
 public:
-  OpenTelemetryGrpcIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, ipVersion()) {
+  OpenTelemetryGrpcIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, ipVersion(), socketInterface()) {
     // TODO(ohadvano): add tag extraction rules.
     // Missing stat tag-extraction rule for stat 'grpc.otlp_collector.streams_closed_x' and
     // stat_prefix 'otlp_collector'.

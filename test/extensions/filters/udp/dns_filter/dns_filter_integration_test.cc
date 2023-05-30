@@ -15,11 +15,14 @@ namespace {
 
 using ResponseValidator = Utils::DnsResponseValidator;
 
-class DnsFilterIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                 public BaseIntegrationTest {
+class DnsFilterIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
   DnsFilterIntegrationTest()
-      : BaseIntegrationTest(GetParam(), configToUse()), api_(Api::createApiForTest()),
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()), configToUse()),
+        api_(Api::createApiForTest()),
         counters_(mock_query_buffer_underflow_, mock_record_name_overflow_, query_parsing_failure_,
                   queries_with_additional_rrs_, queries_with_ans_or_authority_rrs_) {
     // TODO(ggreenway): add tag extraction rules.
@@ -58,7 +61,7 @@ static_resources:
                 port_value: 0
     )EOF",
                        Platform::null_device_path,
-                       Network::Test::getLoopbackAddressString(GetParam()));
+                       Network::Test::getLoopbackAddressString(std::get<0>(GetParam())));
   }
 
   Network::Address::InstanceConstSharedPtr getListenerBindAddressAndPort() {
@@ -189,7 +192,7 @@ listener_filters:
                   ->add_lb_endpoints()
                   ->mutable_endpoint()
                   ->MergeFrom(ConfigHelper::buildEndpoint(
-                      Network::Test::getLoopbackAddressString(GetParam())));
+                      Network::Test::getLoopbackAddressString(std::get<0>(GetParam()))));
             }
           });
     }
@@ -225,9 +228,11 @@ listener_filters:
   DnsQueryContextPtr response_ctx_;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, DnsFilterIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, DnsFilterIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(DnsFilterIntegrationTest, ExternalLookupTest) {
   setup(0);

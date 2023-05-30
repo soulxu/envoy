@@ -11,12 +11,14 @@ namespace {
 
 struct TestParams {
   Network::Address::IpVersion ip_version;
+  Network::DefaultSocketInterface interface;
   Http1ParserImpl parser_impl;
   bool forward_reason_phrase;
 };
 
 std::string testParamsToString(const ::testing::TestParamInfo<TestParams>& p) {
-  return fmt::format("{}_{}_{}", TestUtility::ipVersionToString(p.param.ip_version),
+  return fmt::format("{}_{}_{}_{}", TestUtility::ipVersionToString(p.param.ip_version),
+                     TestUtility::socketInterfaceToString(p.param.interface),
                      TestUtility::http1ParserImplToString(p.param.parser_impl),
                      p.param.forward_reason_phrase ? "enabled" : "disabled");
 }
@@ -25,9 +27,11 @@ std::vector<TestParams> getTestsParams() {
   std::vector<TestParams> ret;
 
   for (auto ip_version : TestEnvironment::getIpVersionsForTest()) {
-    for (auto parser_impl : {Http1ParserImpl::HttpParser, Http1ParserImpl::BalsaParser}) {
-      ret.push_back(TestParams{ip_version, parser_impl, true});
-      ret.push_back(TestParams{ip_version, parser_impl, false});
+    for (auto interface : TestEnvironment::getSocketInterfacesForTest()) {
+      for (auto parser_impl : {Http1ParserImpl::HttpParser, Http1ParserImpl::BalsaParser}) {
+        ret.push_back(TestParams{ip_version, interface, parser_impl, true});
+        ret.push_back(TestParams{ip_version, interface, parser_impl, false});
+      }
     }
   }
 
@@ -38,7 +42,7 @@ class PreserveCaseFormatterReasonPhraseIntegrationTest : public testing::TestWit
                                                          public HttpIntegrationTest {
 public:
   PreserveCaseFormatterReasonPhraseIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam().ip_version) {}
+      : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam().ip_version, GetParam().interface) {}
 
   void SetUp() override {
     setDownstreamProtocol(Http::CodecType::HTTP1);

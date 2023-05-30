@@ -27,11 +27,14 @@ void updateResource(AtomicFileUpdater& updater, double pressure) {
   updater.update(absl::StrCat(pressure));
 }
 
-class OverloadIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                public HttpIntegrationTest {
+class OverloadIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
   OverloadIntegrationTest()
-      : HttpIntegrationTest(Http::CodecClient::Type::HTTP1, GetParam()),
+      : HttpIntegrationTest(Http::CodecClient::Type::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())),
         injected_resource_filename_1_(TestEnvironment::temporaryPath("injected_resource_1")),
         injected_resource_filename_2_(TestEnvironment::temporaryPath("injected_resource_2")),
         file_updater_1_(injected_resource_filename_1_),
@@ -103,9 +106,11 @@ protected:
   AtomicFileUpdater file_updater_2_;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, OverloadIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, OverloadIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(OverloadIntegrationTest, StopAcceptingConnectionsWhenOverloaded) {
   initialize();

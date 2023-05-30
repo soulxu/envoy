@@ -46,6 +46,7 @@ INSTANTIATE_TEST_SUITE_P(
     IpVersionsClientVersions, SslCertValidatorIntegrationTest,
     testing::Combine(
         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+        testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
         testing::Values(envoy::extensions::transport_sockets::tls::v3::TlsParameters::TLSv1_2,
                         envoy::extensions::transport_sockets::tls::v3::TlsParameters::TLSv1_3)),
     SslCertValidatorIntegrationTest::ipClientVersionTestParamsToString);

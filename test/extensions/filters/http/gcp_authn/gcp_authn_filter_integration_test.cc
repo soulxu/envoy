@@ -32,11 +32,14 @@ constexpr absl::string_view MockTokenString =
     "Ny1oEG72xKhYdKTYAxJCYB8I1Yh3hUL8SU43OxHqpaRJ_Sr680FnKgjXjIRL9sBeu_D8-"
     "jkaDD39vBNKlQvlZm7p6qpOgCy0j_TxYABFQ-A";
 
-class GcpAuthnFilterIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                      public HttpIntegrationTest {
+class GcpAuthnFilterIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
   GcpAuthnFilterIntegrationTest()
-      : HttpIntegrationTest(Http::CodecClient::Type::HTTP2, GetParam()) {}
+      : HttpIntegrationTest(Http::CodecClient::Type::HTTP2, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void createUpstreams() override {
     setUpstreamProtocol(FakeHttpConnection::Type::HTTP2);
@@ -211,9 +214,11 @@ public:
   envoy::extensions::filters::http::gcp_authn::v3::GcpAuthnFilterConfig proto_config_{};
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, GcpAuthnFilterIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, GcpAuthnFilterIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(GcpAuthnFilterIntegrationTest, Basicflow) {
   initializeConfig(/*add_audience=*/true);

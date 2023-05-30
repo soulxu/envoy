@@ -50,6 +50,7 @@ public:
 
   HttpSubsetLbIntegrationTest()
       : HttpIntegrationTest(Http::CodecType::HTTP1, TestEnvironment::getIpVersionsForTest().front(),
+                            TestEnvironment::getSocketInterfacesForTest().front(),
                             ConfigHelper::httpProxyConfig()),
         is_hash_lb_(GetParam() == envoy::config::cluster::v3::Cluster::RING_HASH ||
                     GetParam() == envoy::config::cluster::v3::Cluster::MAGLEV) {

@@ -30,13 +30,16 @@ insertProxyProtocolFilterConfigModifier(envoy::config::bootstrap::v3::Bootstrap&
 }
 
 ProxyProtoIntegrationTest::ProxyProtoIntegrationTest()
-    : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {
+    : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                          std::get<1>(GetParam())) {
   config_helper_.addConfigModifier(insertProxyProtocolFilterConfigModifier);
 }
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, ProxyProtoIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, ProxyProtoIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(ProxyProtoIntegrationTest, CaptureTlvToMetadata) {
   useListenerAccessLog(
@@ -156,7 +159,7 @@ TEST_P(ProxyProtoIntegrationTest, AccessLog) {
   const std::vector<absl::string_view> tokens = StringUtil::splitToken(log_line, " ", false, true);
 
   ASSERT_EQ(2, tokens.size());
-  EXPECT_EQ(tokens[0], Network::Test::getLoopbackAddressString(GetParam()));
+  EXPECT_EQ(tokens[0], Network::Test::getLoopbackAddressString(std::get<0>(GetParam())));
   EXPECT_EQ(tokens[1], "1.2.3.4:12345");
 }
 
@@ -176,11 +179,12 @@ TEST_P(ProxyProtoIntegrationTest, ClusterProvided) {
     // Create proxy protocol line that has the fake upstream address as the destination address.
     // This address will become the "restored" address for the server connection and will
     // be used as the destination address by the original destination cluster.
-    std::string proxyLine = fmt::format(
-        "PROXY {} {} 65535 {}\r\n",
-        GetParam() == Network::Address::IpVersion::v4 ? "TCP4 1.2.3.4" : "TCP6 1:2:3::4",
-        Network::Test::getLoopbackAddressString(GetParam()),
-        fake_upstreams_[0]->localAddress()->ip()->port());
+    std::string proxyLine =
+        fmt::format("PROXY {} {} 65535 {}\r\n",
+                    std::get<0>(GetParam()) == Network::Address::IpVersion::v4 ? "TCP4 1.2.3.4"
+                                                                               : "TCP6 1:2:3::4",
+                    Network::Test::getLoopbackAddressString(std::get<0>(GetParam())),
+                    fake_upstreams_[0]->localAddress()->ip()->port());
 
     Buffer::OwnedImpl buf(proxyLine);
     conn->write(buf, false);
@@ -191,14 +195,17 @@ TEST_P(ProxyProtoIntegrationTest, ClusterProvided) {
 }
 
 ProxyProtoTcpIntegrationTest::ProxyProtoTcpIntegrationTest()
-    : BaseIntegrationTest(GetParam(), ConfigHelper::tcpProxyConfig()) {
+    : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                          ConfigHelper::tcpProxyConfig()) {
   config_helper_.addConfigModifier(insertProxyProtocolFilterConfigModifier);
   config_helper_.renameListener("tcp_proxy");
 }
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, ProxyProtoTcpIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, ProxyProtoTcpIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // This tests that the StreamInfo contains the correct addresses.
 TEST_P(ProxyProtoTcpIntegrationTest, AccessLog) {
@@ -327,9 +334,11 @@ void ProxyProtoFilterChainMatchIntegrationTest::send(const std::string& data) {
   tcp_client->waitForDisconnect();
 }
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, ProxyProtoFilterChainMatchIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, ProxyProtoFilterChainMatchIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Validate that source IP and direct source IP match correctly.
 TEST_P(ProxyProtoFilterChainMatchIntegrationTest, MatchDirectSourceAndSource) {

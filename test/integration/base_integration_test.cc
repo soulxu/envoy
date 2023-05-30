@@ -11,6 +11,7 @@
 #include "envoy/buffer/buffer.h"
 #include "envoy/config/bootstrap/v3/bootstrap.pb.h"
 #include "envoy/config/endpoint/v3/endpoint_components.pb.h"
+#include "envoy/extensions/network/socket_interface/v3/default_socket_interface.pb.h"
 #include "envoy/extensions/transport_sockets/quic/v3/quic_transport.pb.h"
 #include "envoy/extensions/transport_sockets/tls/v3/cert.pb.h"
 #include "envoy/service/discovery/v3/discovery.pb.h"
@@ -40,12 +41,13 @@ using ::testing::ReturnRef;
 
 BaseIntegrationTest::BaseIntegrationTest(const InstanceConstSharedPtrFn& upstream_address_fn,
                                          Network::Address::IpVersion version,
+                                         Network::DefaultSocketInterface interface,
                                          const std::string& config)
     : api_(Api::createApiForTest(stats_store_, time_system_)),
       mock_buffer_factory_(new NiceMock<MockBufferFactory>),
       dispatcher_(api_->allocateDispatcher("test_thread",
                                            Buffer::WatermarkFactoryPtr{mock_buffer_factory_})),
-      version_(version), upstream_address_fn_(upstream_address_fn),
+      version_(version), interface_(interface), upstream_address_fn_(upstream_address_fn),
       config_helper_(version, *api_, config),
       default_log_level_(TestEnvironment::getOptions().logLevel()) {
   Envoy::Server::validateProtoDescriptors();
@@ -66,6 +68,21 @@ BaseIntegrationTest::BaseIntegrationTest(const InstanceConstSharedPtrFn& upstrea
   // Allow extension lookup by name in the integration tests.
   config_helper_.addRuntimeOverride("envoy.reloadable_features.no_extension_lookup_by_name",
                                     "false");
+  switch (interface_) {
+  case Network::DefaultSocketInterface::Default:
+    break;
+  case Network::DefaultSocketInterface::IoUring:
+    config_helper_.addConfigModifier([&](envoy::config::bootstrap::v3::Bootstrap& bootstrap) {
+      bootstrap.set_default_socket_interface(
+          "envoy.extensions.network.socket_interface.default_socket_interface");
+      auto extension = bootstrap.add_bootstrap_extensions();
+      extension->set_name("envoy.extensions.network.socket_interface.default_socket_interface");
+      envoy::extensions::network::socket_interface::v3::DefaultSocketInterface interface;
+      interface.set_enable_io_uring(true);
+      extension->mutable_typed_config()->PackFrom(interface);
+    });
+    break;
+  }
 
 #ifndef ENVOY_ADMIN_FUNCTIONALITY
   config_helper_.addConfigModifier(
@@ -74,13 +91,14 @@ BaseIntegrationTest::BaseIntegrationTest(const InstanceConstSharedPtrFn& upstrea
 }
 
 BaseIntegrationTest::BaseIntegrationTest(Network::Address::IpVersion version,
+                                         Network::DefaultSocketInterface interface,
                                          const std::string& config)
     : BaseIntegrationTest(
           [version](int) {
             return Network::Utility::parseInternetAddress(
                 Network::Test::getLoopbackAddressString(version), 0);
           },
-          version, config) {}
+          version, interface, config) {}
 
 Network::ClientConnectionPtr BaseIntegrationTest::makeClientConnection(uint32_t port) {
   return makeClientConnectionWithOptions(port, nullptr);

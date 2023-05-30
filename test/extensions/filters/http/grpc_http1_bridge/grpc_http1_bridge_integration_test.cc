@@ -7,10 +7,14 @@ namespace {
 
 // A test class for testing HTTP/1.1 upstream and downstreams
 
-class GrpcIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                            public HttpIntegrationTest {
+class GrpcIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
-  GrpcIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {}
+  GrpcIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 };
 
 // Test hitting the bridge filter with too many response bytes to buffer. Given
@@ -45,9 +49,11 @@ TEST_P(GrpcIntegrationTest, HittingGrpcFilterLimitBufferingHeaders) {
               HeaderValueOf(Http::Headers::get().GrpcStatus, "2")); // Unknown gRPC error
 }
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, GrpcIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, GrpcIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 } // namespace
 } // namespace Envoy

@@ -1180,7 +1180,7 @@ class AdsFailIntegrationTest : public AdsDeltaSotwIntegrationSubStateParamTest,
 public:
   AdsFailIntegrationTest()
       : HttpIntegrationTest(
-            Http::CodecType::HTTP2, ipVersion(),
+            Http::CodecType::HTTP2, ipVersion(), socketInterface(),
             ConfigHelper::adsBootstrap((sotwOrDelta() == Grpc::SotwOrDelta::Sotw) ||
                                                (sotwOrDelta() == Grpc::SotwOrDelta::UnifiedSotw)
                                            ? "GRPC"
@@ -1235,7 +1235,7 @@ class AdsConfigIntegrationTest : public AdsDeltaSotwIntegrationSubStateParamTest
 public:
   AdsConfigIntegrationTest()
       : HttpIntegrationTest(
-            Http::CodecType::HTTP2, ipVersion(),
+            Http::CodecType::HTTP2, ipVersion(), socketInterface(),
             ConfigHelper::adsBootstrap((sotwOrDelta() == Grpc::SotwOrDelta::Sotw) ||
                                                (sotwOrDelta() == Grpc::SotwOrDelta::UnifiedSotw)
                                            ? "GRPC"
@@ -1436,7 +1436,7 @@ class AdsClusterFromFileIntegrationTest : public AdsDeltaSotwIntegrationSubState
 public:
   AdsClusterFromFileIntegrationTest()
       : HttpIntegrationTest(
-            Http::CodecType::HTTP2, ipVersion(),
+            Http::CodecType::HTTP2, ipVersion(), socketInterface(),
             ConfigHelper::adsBootstrap((sotwOrDelta() == Grpc::SotwOrDelta::Sotw) ||
                                                (sotwOrDelta() == Grpc::SotwOrDelta::UnifiedSotw)
                                            ? "GRPC"
@@ -1731,6 +1731,7 @@ public:
 INSTANTIATE_TEST_SUITE_P(
     IpVersionsClientTypeDeltaWildcard, XdsTpAdsIntegrationTest,
     testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
                      // There should be no variation across clients.
                      testing::Values(Grpc::ClientType::EnvoyGrpc),
                      testing::Values(Grpc::SotwOrDelta::Sotw, Grpc::SotwOrDelta::UnifiedSotw,

@@ -21,11 +21,12 @@ std::string rbac_config;
 } // namespace
 
 class RoleBasedAccessControlNetworkFilterIntegrationTest
-    : public testing::TestWithParam<Network::Address::IpVersion>,
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
       public BaseIntegrationTest {
 public:
   RoleBasedAccessControlNetworkFilterIntegrationTest()
-      : BaseIntegrationTest(GetParam(), rbac_config) {
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()), rbac_config) {
     // TODO(ggreenway): add tag extraction rules.
     // Missing stat tag-extraction rule for stat 'tcp.shadow_denied' and stat_prefix 'tcp.'.
     skip_tag_extraction_rule_check_ = true;
@@ -66,9 +67,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, RoleBasedAccessControlNetworkFilterIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, RoleBasedAccessControlNetworkFilterIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(RoleBasedAccessControlNetworkFilterIntegrationTest, Allowed) {
   initializeFilter(R"EOF(

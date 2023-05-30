@@ -47,7 +47,8 @@ using namespace std::chrono_literals;
 class ExtProcIntegrationTest : public HttpIntegrationTest,
                                public Grpc::GrpcClientIntegrationParamTestWithDeferredProcessing {
 protected:
-  ExtProcIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP2, ipVersion()) {}
+  ExtProcIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP2, ipVersion(), socketInterface()) {}
 
   void createUpstreams() override {
     HttpIntegrationTest::createUpstreams();

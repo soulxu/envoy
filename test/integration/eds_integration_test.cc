@@ -18,11 +18,14 @@ namespace {
 
 // Integration test for EDS features. EDS is consumed via filesystem
 // subscription.
-class EdsIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                           public HttpIntegrationTest {
+class EdsIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
   EdsIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()),
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())),
         codec_client_type_(envoy::type::v3::HTTP1) {}
 
   // We need to supply the endpoints via EDS to provide health status. Use a
@@ -167,8 +170,10 @@ public:
   envoy::config::cluster::v3::Cluster cluster_;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, EdsIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()));
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, EdsIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())));
 
 // Validates that endpoints can be added and then moved to other priorities without causing crashes.
 // Primarily as a regression test for https://github.com/envoyproxy/envoy/issues/8764

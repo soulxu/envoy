@@ -24,12 +24,15 @@ namespace Envoy {
 namespace {
 
 std::string ipSuppressEnvoyHeadersTestParamsToString(
-    const ::testing::TestParamInfo<std::tuple<Network::Address::IpVersion, bool>>& params) {
+    const ::testing::TestParamInfo<
+        std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, bool>>& params) {
   return fmt::format(
       "{}_{}",
-      TestUtility::ipTestParamsToString(
-          ::testing::TestParamInfo<Network::Address::IpVersion>(std::get<0>(params.param), 0)),
-      std::get<1>(params.param) ? "with_x_envoy_from_router" : "without_x_envoy_from_router");
+      TestUtility::ipAndSocketInterfaceTestParamsToString(
+          ::testing::TestParamInfo<
+              std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>(
+              std::make_tuple(std::get<0>(params.param), std::get<1>(params.param)), 0)),
+      std::get<2>(params.param) ? "with_x_envoy_from_router" : "without_x_envoy_from_router");
 }
 
 void disableHeaderValueOptionAppend(
@@ -178,12 +181,15 @@ route_config:
 } // namespace
 
 class HeaderIntegrationTest
-    : public testing::TestWithParam<std::tuple<Network::Address::IpVersion, bool>>,
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, bool>>,
       public HttpIntegrationTest {
 public:
-  HeaderIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam())) {}
+  HeaderIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
-  bool routerSuppressEnvoyHeaders() const { return std::get<1>(GetParam()); }
+  bool routerSuppressEnvoyHeaders() const { return std::get<2>(GetParam()); }
 
   enum HeaderMode {
     Append = 1,
@@ -466,7 +472,9 @@ protected:
 
 INSTANTIATE_TEST_SUITE_P(
     IpVersionsSuppressEnvoyHeaders, HeaderIntegrationTest,
-    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()), testing::Bool()),
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
+                     testing::Bool()),
     ipSuppressEnvoyHeadersTestParamsToString);
 
 TEST_P(HeaderIntegrationTest, WeightedClusterWithClusterHeader) {

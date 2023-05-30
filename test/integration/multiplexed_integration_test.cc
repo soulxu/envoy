@@ -1803,22 +1803,27 @@ TEST_P(MultiplexedRingHashIntegrationTest, CookieRoutingWithCookieWithTtlSet) {
 
 struct FrameIntegrationTestParam {
   Network::Address::IpVersion ip_version;
+  Network::DefaultSocketInterface interface;
 };
 
 std::string
 frameIntegrationTestParamToString(const testing::TestParamInfo<FrameIntegrationTestParam>& params) {
-  return TestUtility::ipVersionToString(params.param.ip_version);
+  return fmt::format("{}_{}", TestUtility::ipVersionToString(params.param.ip_version),
+                     TestUtility::socketInterfaceToString(params.param.interface));
 }
 
 class Http2FrameIntegrationTest : public testing::TestWithParam<FrameIntegrationTestParam>,
                                   public Http2RawFrameIntegrationTest {
 public:
-  Http2FrameIntegrationTest() : Http2RawFrameIntegrationTest(GetParam().ip_version) {}
+  Http2FrameIntegrationTest()
+      : Http2RawFrameIntegrationTest(GetParam().ip_version, GetParam().interface) {}
 
   static std::vector<FrameIntegrationTestParam> testParams() {
     std::vector<FrameIntegrationTestParam> v;
     for (auto ip_version : TestEnvironment::getIpVersionsForTest()) {
-      v.push_back({ip_version});
+      for (auto interface : TestEnvironment::getSocketInterfacesForTest()) {
+        v.push_back({ip_version, interface});
+      }
     }
     return v;
   }
@@ -2412,6 +2417,13 @@ public:
       : SocketInterfaceSwap(GetParam().downstream_protocol == Http::CodecType::HTTP3
                                 ? Network::Socket::Type::Datagram
                                 : Network::Socket::Type::Stream) {}
+
+  void SetUp() override {
+    // TODO(zhxie): io_uring is not compatible with SocketInterfaceSwap.
+    if (GetParam().interface == Network::DefaultSocketInterface::IoUring) {
+      GTEST_SKIP();
+    }
+  }
 };
 
 INSTANTIATE_TEST_SUITE_P(IpVersions, SocketSwappableMultiplexedIntegrationTest,

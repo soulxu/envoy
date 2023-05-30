@@ -209,9 +209,11 @@ void XfccIntegrationTest::testRequestAndResponseWithXfccHeader(std::string previ
   EXPECT_TRUE(response->complete());
 }
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, XfccIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, XfccIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(XfccIntegrationTest, MtlsForwardOnly) {
   fcc_ = envoy::extensions::filters::network::http_connection_manager::v3::HttpConnectionManager::

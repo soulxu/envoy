@@ -25,20 +25,24 @@ namespace {
 constexpr char UnexpectedHeaderValue[] = "Unexpected header value";
 
 std::string ipAndDeferredProcessingParamsToString(
-    const ::testing::TestParamInfo<std::tuple<Network::Address::IpVersion, bool>>& p) {
-  return fmt::format("{}_{}", TestUtility::ipVersionToString(std::get<0>(p.param)),
-                     std::get<1>(p.param) ? "WithDeferredProcessing" : "NoDeferredProcessing");
+    const ::testing::TestParamInfo<
+        std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, bool>>& p) {
+  return fmt::format("{}_{}_{}", TestUtility::ipVersionToString(std::get<0>(p.param)),
+                     TestUtility::socketInterfaceToString(std::get<1>(p.param)),
+                     std::get<2>(p.param) ? "WithDeferredProcessing" : "NoDeferredProcessing");
 }
 
 // TODO(kbaichoo): Remove parameterizing by deferred processing when the feature
 // is enabled by default. The parameterization is to avoid bit rot since it's
 // off by default.
 class GrpcJsonTranscoderIntegrationTest
-    : public testing::TestWithParam<std::tuple<Network::Address::IpVersion, bool>>,
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, bool>>,
       public HttpIntegrationTest {
 public:
   GrpcJsonTranscoderIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam())) {
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {
     // Parameterize with defer processing to prevent bit rot as filter made
     // assumptions of data flow, prior relying on eager processing.
     config_helper_.addRuntimeOverride(Runtime::defer_processing_backedup_streams,
@@ -240,7 +244,7 @@ typed_config:
     config_helper_.addConfigModifier(modifier);
   }
 
-  bool deferredProcessing() const { return std::get<1>(GetParam()); }
+  bool deferredProcessing() const { return std::get<2>(GetParam()); }
 };
 
 class GrpcJsonTranscoderIntegrationTestWithSizeLimit : public GrpcJsonTranscoderIntegrationTest {
@@ -277,19 +281,27 @@ protected:
 
 INSTANTIATE_TEST_SUITE_P(
     IpVersionsDeferredProcessing, GrpcJsonTranscoderIntegrationTest,
-    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()), testing::Bool()),
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
+                     testing::Bool()),
     ipAndDeferredProcessingParamsToString);
 INSTANTIATE_TEST_SUITE_P(
     IpVersionsDeferredProcessing, GrpcJsonTranscoderIntegrationTestWithSizeLimit1024,
-    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()), testing::Bool()),
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
+                     testing::Bool()),
     ipAndDeferredProcessingParamsToString);
 INSTANTIATE_TEST_SUITE_P(
     IpVersionsDeferredProcessing, GrpcJsonTranscoderIntegrationTestWithSizeLimit1,
-    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()), testing::Bool()),
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
+                     testing::Bool()),
     ipAndDeferredProcessingParamsToString);
 INSTANTIATE_TEST_SUITE_P(
     IpVersionsDeferredProcessing, GrpcJsonTranscoderIntegrationTestWithSizeLimit35,
-    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()), testing::Bool()),
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
+                     testing::Bool()),
     ipAndDeferredProcessingParamsToString);
 
 TEST_P(GrpcJsonTranscoderIntegrationTest, UnaryPost) {
@@ -1669,7 +1681,9 @@ public:
 };
 INSTANTIATE_TEST_SUITE_P(
     IpVersionsDeferredProcessing, OverrideConfigGrpcJsonTranscoderIntegrationTest,
-    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()), testing::Bool()),
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
+                     testing::Bool()),
     ipAndDeferredProcessingParamsToString);
 
 TEST_P(OverrideConfigGrpcJsonTranscoderIntegrationTest, RouteOverride) {

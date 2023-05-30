@@ -529,7 +529,8 @@ TEST_P(IntegrationAdminTest, AdminCpuProfilerStart) {
 class IntegrationAdminIpv4Ipv6Test : public testing::Test, public HttpIntegrationTest {
 public:
   IntegrationAdminIpv4Ipv6Test()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, Network::Address::IpVersion::v4) {
+      : HttpIntegrationTest(Http::CodecType::HTTP1, Network::Address::IpVersion::v4,
+                            Network::DefaultSocketInterface::Default) {
     // This test doesn't have any configuration that creates stats, and one of the tests is failing
     // for unknown reason on Windows only, so disable.
     skip_tag_extraction_rule_check_ = true;
@@ -571,9 +572,12 @@ TEST_F(IntegrationAdminIpv4Ipv6Test, Ipv4Ipv6Listen) {
 class StatsMatcherIntegrationTest
     : public testing::Test,
       public HttpIntegrationTest,
-      public testing::WithParamInterface<Network::Address::IpVersion> {
+      public testing::WithParamInterface<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>> {
 public:
-  StatsMatcherIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {}
+  StatsMatcherIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void initialize() override {
     config_helper_.addConfigModifier(
@@ -592,9 +596,11 @@ public:
   BufferingStreamDecoderPtr response_;
   envoy::config::metrics::v3::StatsMatcher stats_matcher_;
 };
-INSTANTIATE_TEST_SUITE_P(IpVersions, StatsMatcherIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, StatsMatcherIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Verify that StatsMatcher prevents the printing of uninstantiated stats.
 TEST_P(StatsMatcherIntegrationTest, ExcludePrefixServerDot) {

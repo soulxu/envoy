@@ -14,18 +14,27 @@ namespace Envoy {
 namespace {
 
 class ShadowPolicyIntegrationTest
-    : public testing::TestWithParam<std::tuple<Network::Address::IpVersion, bool>>,
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, bool>>,
       public HttpIntegrationTest,
       public SocketInterfaceSwap {
 public:
   ShadowPolicyIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP2, std::get<0>(GetParam())),
+      : HttpIntegrationTest(Http::CodecType::HTTP2, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())),
         SocketInterfaceSwap(Network::Socket::Type::Stream) {
     scoped_runtime_.mergeValues(
         {{"envoy.reloadable_features.streaming_shadow", streaming_shadow_ ? "true" : "false"}});
     setUpstreamProtocol(Http::CodecType::HTTP2);
     autonomous_upstream_ = true;
     setUpstreamCount(2);
+  }
+
+  void SetUp() override {
+    // TODO(zhxie): io_uring is not compatible with SocketInterfaceSwap.
+    if (std::get<1>(GetParam()) == Network::DefaultSocketInterface::IoUring) {
+      GTEST_SKIP();
+    }
   }
 
   // Adds a mirror policy that routes to cluster_header or cluster_name, in that order. Additionally
@@ -94,7 +103,7 @@ public:
     cleanupUpstreamAndDownstream();
   }
 
-  const bool streaming_shadow_ = std::get<1>(GetParam());
+  const bool streaming_shadow_ = std::get<2>(GetParam());
   absl::optional<int> cluster_with_custom_filter_;
   std::string filter_name_ = "on-local-reply-filter";
   std::unique_ptr<Http::TestRequestHeaderMapImpl> upstream_headers_;
@@ -104,11 +113,14 @@ public:
 
 INSTANTIATE_TEST_SUITE_P(
     IpVersionsAndStreaming, ShadowPolicyIntegrationTest,
-    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()), testing::Bool()),
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
+                     testing::Bool()),
     [](const ::testing::TestParamInfo<ShadowPolicyIntegrationTest::ParamType>& params) {
       return absl::StrCat(std::get<0>(params.param) == Network::Address::IpVersion::v4 ? "IPv4"
                                                                                        : "IPv6",
-                          "_", std::get<1>(params.param) ? "streaming_shadow" : "buffered_shadow");
+                          "_", TestUtility::socketInterfaceToString(std::get<1>(params.param)), "_",
+                          std::get<2>(params.param) ? "streaming_shadow" : "buffered_shadow");
     });
 
 TEST_P(ShadowPolicyIntegrationTest, Basic) {

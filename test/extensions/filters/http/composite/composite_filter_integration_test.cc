@@ -8,10 +8,14 @@
 
 namespace Envoy {
 
-class CompositeFilterIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                       public HttpIntegrationTest {
+class CompositeFilterIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
-  CompositeFilterIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {}
+  CompositeFilterIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void initialize() override {
     config_helper_.prependFilter(R"EOF(
@@ -46,9 +50,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, CompositeFilterIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, CompositeFilterIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Verifies that if we don't match the match action the request is proxied as normal, while if the
 // match action is hit we apply the specified filter to the stream.

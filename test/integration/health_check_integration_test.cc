@@ -20,8 +20,9 @@ namespace {
 class HealthCheckIntegrationTestBase : public HttpIntegrationTest {
 public:
   HealthCheckIntegrationTestBase(Network::Address::IpVersion ip_version,
+                                 Network::DefaultSocketInterface interface,
                                  Http::CodecType upstream_protocol = Http::CodecType::HTTP2)
-      : HttpIntegrationTest(Http::CodecType::HTTP2, ip_version,
+      : HttpIntegrationTest(Http::CodecType::HTTP2, ip_version, interface,
                             ConfigHelper::discoveredClustersBootstrap("GRPC")),
         ip_version_(ip_version), upstream_protocol_(upstream_protocol) {}
 
@@ -137,6 +138,7 @@ public:
 
 struct HttpHealthCheckIntegrationTestParams {
   Network::Address::IpVersion ip_version;
+  Network::DefaultSocketInterface interface;
   Http::CodecType upstream_protocol;
 };
 
@@ -145,7 +147,8 @@ class HttpHealthCheckIntegrationTestBase
       public HealthCheckIntegrationTestBase {
 public:
   HttpHealthCheckIntegrationTestBase()
-      : HealthCheckIntegrationTestBase(GetParam().ip_version, GetParam().upstream_protocol) {}
+      : HealthCheckIntegrationTestBase(GetParam().ip_version, GetParam().interface,
+                                       GetParam().upstream_protocol) {}
 
   // Returns the 4 combinations for testing:
   // [HTTP1, HTTP2] x [IPv4, IPv6]
@@ -154,8 +157,11 @@ public:
     std::vector<HttpHealthCheckIntegrationTestParams> ret;
 
     for (auto ip_version : TestEnvironment::getIpVersionsForTest()) {
-      for (auto upstream_protocol : {Http::CodecType::HTTP1, Http::CodecType::HTTP2}) {
-        ret.push_back(HttpHealthCheckIntegrationTestParams{ip_version, upstream_protocol});
+      for (auto interface : TestEnvironment::getSocketInterfacesForTest()) {
+        for (auto upstream_protocol : {Http::CodecType::HTTP1, Http::CodecType::HTTP2}) {
+          ret.push_back(
+              HttpHealthCheckIntegrationTestParams{ip_version, interface, upstream_protocol});
+        }
       }
     }
     return ret;
@@ -165,6 +171,7 @@ public:
       const ::testing::TestParamInfo<HttpHealthCheckIntegrationTestParams>& params) {
     return absl::StrCat(
         (params.param.ip_version == Network::Address::IpVersion::v4 ? "IPv4_" : "IPv6_"),
+        fmt::format("{}_", TestUtility::socketInterfaceToString(params.param.interface)),
         (params.param.upstream_protocol == Http::CodecType::HTTP2 ? "Http2Upstream"
                                                                   : "HttpUpstream"));
   }
@@ -538,11 +545,14 @@ TEST_P(RealTimeHttpHealthCheckIntegrationTest, SingleEndpointGoAwayErroSingleEnd
   EXPECT_EQ(1, test_server_->counter("cluster.cluster_1.health_check.failure")->value());
 }
 
-class TcpHealthCheckIntegrationTest : public Event::TestUsingSimulatedTime,
-                                      public testing::TestWithParam<Network::Address::IpVersion>,
-                                      public HealthCheckIntegrationTestBase {
+class TcpHealthCheckIntegrationTest
+    : public Event::TestUsingSimulatedTime,
+      public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HealthCheckIntegrationTestBase {
 public:
-  TcpHealthCheckIntegrationTest() : HealthCheckIntegrationTestBase(GetParam()) {}
+  TcpHealthCheckIntegrationTest()
+      : HealthCheckIntegrationTestBase(std::get<0>(GetParam()), std::get<1>(GetParam())) {}
 
   void TearDown() override {
     cleanupHostConnections();
@@ -570,9 +580,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, TcpHealthCheckIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, TcpHealthCheckIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Tests that a healthy endpoint returns a valid TCP health check response.
 TEST_P(TcpHealthCheckIntegrationTest, SingleEndpointHealthyTcp) {
@@ -621,11 +633,14 @@ TEST_P(TcpHealthCheckIntegrationTest, SingleEndpointTimeoutTcp) {
   EXPECT_EQ(1, test_server_->counter("cluster.cluster_1.health_check.failure")->value());
 }
 
-class GrpcHealthCheckIntegrationTest : public Event::TestUsingSimulatedTime,
-                                       public testing::TestWithParam<Network::Address::IpVersion>,
-                                       public HealthCheckIntegrationTestBase {
+class GrpcHealthCheckIntegrationTest
+    : public Event::TestUsingSimulatedTime,
+      public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HealthCheckIntegrationTestBase {
 public:
-  GrpcHealthCheckIntegrationTest() : HealthCheckIntegrationTestBase(GetParam()) {}
+  GrpcHealthCheckIntegrationTest()
+      : HealthCheckIntegrationTestBase(std::get<0>(GetParam()), std::get<1>(GetParam())) {}
 
   void TearDown() override {
     cleanupHostConnections();
@@ -670,9 +685,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, GrpcHealthCheckIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, GrpcHealthCheckIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Tests that a healthy endpoint returns a valid gRPC health check response.
 TEST_P(GrpcHealthCheckIntegrationTest, SingleEndpointServingGrpc) {
@@ -781,10 +798,12 @@ TEST_P(GrpcHealthCheckIntegrationTest, SingleEndpointUnknownStatusGrpc) {
 
 class ExternalHealthCheckIntegrationTest
     : public Event::TestUsingSimulatedTime,
-      public testing::TestWithParam<Network::Address::IpVersion>,
+      public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
       public HealthCheckIntegrationTestBase {
 public:
-  ExternalHealthCheckIntegrationTest() : HealthCheckIntegrationTestBase(GetParam()) {}
+  ExternalHealthCheckIntegrationTest()
+      : HealthCheckIntegrationTestBase(std::get<0>(GetParam()), std::get<1>(GetParam())) {}
 
   void TearDown() override {
     cleanupHostConnections();
@@ -825,9 +844,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, ExternalHealthCheckIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, ExternalHealthCheckIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Tests that a healthy endpoint returns a valid EXTERNAL health check response.
 TEST_P(ExternalHealthCheckIntegrationTest, SingleEndpointHealthyExternal) {

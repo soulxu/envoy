@@ -52,12 +52,14 @@ const envoy::service::secret::v3::SdsDummy _sds_dummy;
 
 struct TestParams {
   Network::Address::IpVersion ip_version;
+  Network::DefaultSocketInterface interface;
   Grpc::ClientType sds_grpc_type;
   bool test_quic;
 };
 
 std::string sdsTestParamsToString(const ::testing::TestParamInfo<TestParams>& p) {
-  return fmt::format("{}_{}_{}", TestUtility::ipVersionToString(p.param.ip_version),
+  return fmt::format("{}_{}_{}_{}", TestUtility::ipVersionToString(p.param.ip_version),
+                     TestUtility::socketInterfaceToString(p.param.interface),
                      p.param.sds_grpc_type == Grpc::ClientType::GoogleGrpc ? "GoogleGrpc"
                                                                            : "EnvoyGrpc",
                      p.param.test_quic ? "UsesQuic" : "UsesTcp");
@@ -66,16 +68,18 @@ std::string sdsTestParamsToString(const ::testing::TestParamInfo<TestParams>& p)
 std::vector<TestParams> getSdsTestsParams(bool disable_quic = false) {
   std::vector<TestParams> ret;
   for (auto ip_version : TestEnvironment::getIpVersionsForTest()) {
-    for (auto sds_grpc_type : TestEnvironment::getsGrpcVersionsForTest()) {
-      ret.push_back(TestParams{ip_version, sds_grpc_type, false});
+    for (auto interface : TestEnvironment::getSocketInterfacesForTest()) {
+      for (auto sds_grpc_type : TestEnvironment::getsGrpcVersionsForTest()) {
+        ret.push_back(TestParams{ip_version, interface, sds_grpc_type, false});
 #ifdef ENVOY_ENABLE_QUIC
-      if (!disable_quic) {
-        ret.push_back(TestParams{ip_version, sds_grpc_type, true});
-      }
+        if (!disable_quic) {
+          ret.push_back(TestParams{ip_version, interface, sds_grpc_type, true});
+        }
 #else
-      UNREFERENCED_PARAMETER(disable_quic);
-      ENVOY_LOG_MISC(warn, "Skipping HTTP/3 as support is compiled out");
+        UNREFERENCED_PARAMETER(disable_quic);
+        ENVOY_LOG_MISC(warn, "Skipping HTTP/3 as support is compiled out");
 #endif
+      }
     }
   }
   return ret;
@@ -89,7 +93,7 @@ class SdsDynamicIntegrationBaseTest : public Grpc::BaseGrpcClientIntegrationPara
                                       public testing::TestWithParam<TestParams> {
 public:
   SdsDynamicIntegrationBaseTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam().ip_version),
+      : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam().ip_version, GetParam().interface),
         test_quic_(GetParam().test_quic) {
     // TODO(ggreenway): add tag extraction rules.
     // Missing stat tag-extraction rule for stat
@@ -99,8 +103,10 @@ public:
   }
 
   SdsDynamicIntegrationBaseTest(Http::CodecType downstream_protocol,
-                                Network::Address::IpVersion version, const std::string& config)
-      : HttpIntegrationTest(downstream_protocol, version, config),
+                                Network::Address::IpVersion version,
+                                Network::DefaultSocketInterface interface,
+                                const std::string& config)
+      : HttpIntegrationTest(downstream_protocol, version, interface, config),
         test_quic_(GetParam().test_quic) {
     // TODO(ggreenway): add tag extraction rules.
     // Missing stat tag-extraction rule for stat
@@ -110,6 +116,7 @@ public:
   }
 
   Network::Address::IpVersion ipVersion() const override { return GetParam().ip_version; }
+  Network::DefaultSocketInterface socketInterface() const override { return GetParam().interface; }
   Grpc::ClientType clientType() const override { return GetParam().sds_grpc_type; }
 
 protected:
@@ -213,7 +220,8 @@ public:
   SdsDynamicDownstreamIntegrationTest()
       : SdsDynamicIntegrationBaseTest(
             (GetParam().test_quic ? Http::CodecType::HTTP3 : Http::CodecType::HTTP1),
-            GetParam().ip_version, ConfigHelper::httpProxyConfig(GetParam().test_quic)) {}
+            GetParam().ip_version, GetParam().interface,
+            ConfigHelper::httpProxyConfig(GetParam().test_quic)) {}
 
   void initialize() override {
     ASSERT(test_quic_ ? downstream_protocol_ == Http::CodecType::HTTP3

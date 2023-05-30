@@ -104,8 +104,10 @@ void AdaptiveConcurrencyIntegrationTest::respondToRequest(bool expect_forwarded)
   responses_.pop_front();
 }
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, AdaptiveConcurrencyIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()));
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, AdaptiveConcurrencyIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())));
 
 // Test a single request returns successfully.
 TEST_P(AdaptiveConcurrencyIntegrationTest, TestConcurrency1) {

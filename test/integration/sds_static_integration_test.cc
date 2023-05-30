@@ -31,10 +31,13 @@ namespace Envoy {
 namespace Ssl {
 
 class SdsStaticDownstreamIntegrationTest
-    : public testing::TestWithParam<Network::Address::IpVersion>,
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
       public HttpIntegrationTest {
 public:
-  SdsStaticDownstreamIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {}
+  SdsStaticDownstreamIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void initialize() override {
     config_helper_.addConfigModifier([](envoy::config::bootstrap::v3::Bootstrap& bootstrap) {
@@ -94,9 +97,11 @@ private:
   Network::UpstreamTransportSocketFactoryPtr client_ssl_ctx_;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, SdsStaticDownstreamIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, SdsStaticDownstreamIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(SdsStaticDownstreamIntegrationTest, RouterRequestAndResponseWithGiantBodyBuffer) {
   ConnectionCreationFunction creator = [&]() -> Network::ClientConnectionPtr {
@@ -105,10 +110,14 @@ TEST_P(SdsStaticDownstreamIntegrationTest, RouterRequestAndResponseWithGiantBody
   testRouterRequestAndResponseWithBody(16 * 1024 * 1024, 16 * 1024 * 1024, false, false, &creator);
 }
 
-class SdsStaticUpstreamIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                         public HttpIntegrationTest {
+class SdsStaticUpstreamIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
-  SdsStaticUpstreamIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {}
+  SdsStaticUpstreamIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void initialize() override {
     config_helper_.addConfigModifier([](envoy::config::bootstrap::v3::Bootstrap& bootstrap) {
@@ -151,9 +160,11 @@ private:
   Extensions::TransportSockets::Tls::ContextManagerImpl context_manager_{timeSystem()};
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, SdsStaticUpstreamIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, SdsStaticUpstreamIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(SdsStaticUpstreamIntegrationTest, RouterRequestAndResponseWithGiantBodyBuffer) {
   testRouterRequestAndResponseWithBody(16 * 1024 * 1024, 16 * 1024 * 1024, false, false, nullptr);

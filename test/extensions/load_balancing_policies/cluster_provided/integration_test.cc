@@ -18,10 +18,14 @@ namespace LoadBalancingPolices {
 namespace ClusterProvided {
 namespace {
 
-class ClusterProvidedIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                       public HttpIntegrationTest {
+class ClusterProvidedIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
-  ClusterProvidedIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {
+  ClusterProvidedIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {
     // Create 3 different upstream server.
     setUpstreamCount(3);
 
@@ -56,9 +60,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, ClusterProvidedIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, ClusterProvidedIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Test the case where the cluster provided load balancer is configured by the load balancing
 // policy API and it works as expected.

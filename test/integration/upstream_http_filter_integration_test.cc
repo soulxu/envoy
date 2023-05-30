@@ -19,10 +19,13 @@ namespace {
 using HttpFilterProto =
     envoy::extensions::filters::network::http_connection_manager::v3::HttpFilter;
 class UpstreamHttpFilterIntegrationTest
-    : public testing::TestWithParam<Network::Address::IpVersion>,
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
       public HttpIntegrationTest {
 public:
-  UpstreamHttpFilterIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP2, GetParam()) {
+  UpstreamHttpFilterIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP2, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {
     setUpstreamProtocol(Http::CodecType::HTTP2);
     autonomous_upstream_ = true;
   }
@@ -129,9 +132,11 @@ TEST_P(UpstreamHttpFilterIntegrationTest, RouterAndClusterFilters) {
   EXPECT_FALSE(upstream_headers->get(Http::LowerCaseString("x-header-to-add")).empty());
 }
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, UpstreamHttpFilterIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, UpstreamHttpFilterIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 } // namespace
 } // namespace Envoy

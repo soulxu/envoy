@@ -13,15 +13,18 @@
 namespace Envoy {
 namespace {
 
-class TapIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                           public HttpIntegrationTest {
+class TapIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
   TapIntegrationTest()
       // Note: This test must use HTTP/2 because of the lack of early close detection for
       // HTTP/1 on OSX. In this test we close the admin /tap stream when we don't want any
       // more data, and without immediate close detection we can't have a flake free test.
       // Thus, we use HTTP/2 for everything here.
-      : HttpIntegrationTest(Http::CodecType::HTTP2, GetParam()) {
+      : HttpIntegrationTest(Http::CodecType::HTTP2, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {
 
     // Also use HTTP/2 for upstream so that we can fully test trailers.
     setUpstreamProtocol(Http::CodecType::HTTP2);
@@ -211,9 +214,11 @@ typed_config:
   IntegrationStreamDecoderPtr admin_response_;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, TapIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, TapIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Verify a static configuration with an any matcher, writing to a file per tap sink.
 TEST_P(TapIntegrationTest, StaticFilePerTap) {

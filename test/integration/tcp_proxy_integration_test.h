@@ -15,10 +15,14 @@ struct TcpProxyIntegrationTestParams {
   bool test_original_version;
 };
 
-class TcpProxyIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                public BaseIntegrationTest {
+class TcpProxyIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
-  TcpProxyIntegrationTest() : BaseIntegrationTest(GetParam(), ConfigHelper::tcpProxyConfig()) {
+  TcpProxyIntegrationTest()
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            ConfigHelper::tcpProxyConfig()) {
     enableHalfClose(true);
   }
 

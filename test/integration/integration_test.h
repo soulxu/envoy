@@ -8,12 +8,14 @@
 // A test class for testing HTTP/1.1 upstream and downstreams
 namespace Envoy {
 class IntegrationTest
-    : public testing::TestWithParam<std::tuple<Network::Address::IpVersion, Http1ParserImpl>>,
+    : public testing::TestWithParam<std::tuple<Network::Address::IpVersion,
+                                               Network::DefaultSocketInterface, Http1ParserImpl>>,
       public HttpIntegrationTest {
 public:
   IntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam())),
-        http1_implementation_(std::get<1>(GetParam())) {
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())),
+        http1_implementation_(std::get<2>(GetParam())) {
     setupHttp1ImplOverrides(http1_implementation_);
   }
 
@@ -22,7 +24,8 @@ protected:
 };
 
 class UpstreamEndpointIntegrationTest
-    : public testing::TestWithParam<std::tuple<Network::Address::IpVersion, Http1ParserImpl>>,
+    : public testing::TestWithParam<std::tuple<Network::Address::IpVersion,
+                                               Network::DefaultSocketInterface, Http1ParserImpl>>,
       public HttpIntegrationTest {
 public:
   UpstreamEndpointIntegrationTest()
@@ -32,8 +35,8 @@ public:
               return Network::Utility::parseInternetAddress(
                   Network::Test::getLoopbackAddressString(std::get<0>(GetParam())), 0);
             },
-            std::get<0>(GetParam())),
-        http1_implementation_(std::get<1>(GetParam())) {
+            std::get<0>(GetParam()), std::get<1>(GetParam())),
+        http1_implementation_(std::get<2>(GetParam())) {
     setupHttp1ImplOverrides(http1_implementation_);
   }
 

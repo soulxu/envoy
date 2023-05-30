@@ -39,7 +39,8 @@ virtual_hosts:
 class VhdsInitializationTest : public HttpIntegrationTest,
                                public Grpc::UnifiedOrLegacyMuxIntegrationParamTest {
 public:
-  VhdsInitializationTest() : HttpIntegrationTest(Http::CodecType::HTTP2, ipVersion(), config()) {
+  VhdsInitializationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP2, ipVersion(), socketInterface(), config()) {
     use_lds_ = false;
     config_helper_.addRuntimeOverride("envoy.reloadable_features.unified_mux",
                                       isUnified() ? "true" : "false");

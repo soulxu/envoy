@@ -14,11 +14,14 @@
 namespace Envoy {
 namespace {
 
-class WeightedClusterIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                       public HttpIntegrationTest {
+class WeightedClusterIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
   WeightedClusterIntegrationTest()
-      : HttpIntegrationTest(Http::CodecClient::Type::HTTP2, GetParam()) {}
+      : HttpIntegrationTest(Http::CodecClient::Type::HTTP2, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void createUpstreams() override {
     setUpstreamProtocol(FakeHttpConnection::Type::HTTP2);
@@ -99,9 +102,11 @@ private:
   std::vector<uint64_t> default_weights_ = {20, 30};
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, WeightedClusterIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, WeightedClusterIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Steer the traffic (i.e. send the request) to the weighted cluster with `name` specified.
 TEST_P(WeightedClusterIntegrationTest, SteerTrafficToOneClusterWithName) {

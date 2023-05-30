@@ -322,6 +322,7 @@ HttpIntegrationTest::makeHttpConnection(Network::ClientConnectionPtr&& conn) {
 
 HttpIntegrationTest::HttpIntegrationTest(Http::CodecType downstream_protocol,
                                          Network::Address::IpVersion version,
+                                         Network::DefaultSocketInterface interface,
                                          const std::string& config)
     : HttpIntegrationTest::HttpIntegrationTest(
           downstream_protocol,
@@ -329,13 +330,14 @@ HttpIntegrationTest::HttpIntegrationTest(Http::CodecType downstream_protocol,
             return Network::Utility::parseInternetAddress(
                 Network::Test::getLoopbackAddressString(version), 0);
           },
-          version, config) {}
+          version, interface, config) {}
 
 HttpIntegrationTest::HttpIntegrationTest(Http::CodecType downstream_protocol,
                                          const InstanceConstSharedPtrFn& upstream_address_fn,
                                          Network::Address::IpVersion version,
+                                         Network::DefaultSocketInterface interface,
                                          const std::string& config)
-    : BaseIntegrationTest(upstream_address_fn, version, config),
+    : BaseIntegrationTest(upstream_address_fn, version, interface, config),
       downstream_protocol_(downstream_protocol), quic_stat_names_(stats_store_.symbolTable()) {
   // Legacy integration tests expect the default listener to be named "http" for
   // lookupPort calls.

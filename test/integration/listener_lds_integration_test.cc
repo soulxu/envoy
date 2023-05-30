@@ -35,8 +35,9 @@ public:
     absl::flat_hash_map<std::string, FakeStreamPtr> stream_by_resource_name_;
   };
 
-  ListenerIntegrationTestBase(Network::Address::IpVersion version, const std::string& config)
-      : HttpIntegrationTest(Http::CodecType::HTTP1, version, config) {
+  ListenerIntegrationTestBase(Network::Address::IpVersion version,
+                              Network::DefaultSocketInterface interface, const std::string& config)
+      : HttpIntegrationTest(Http::CodecType::HTTP1, version, interface, config) {
     // TODO(ggreenway): add tag extraction rules.
     // Missing stat tag-extraction rule for stat
     // 'listener_manager.lds.grpc.lds_cluster.streams_closed_1' and stat_prefix 'lds_cluster'.
@@ -212,7 +213,7 @@ class ListenerIntegrationTest : public ListenerIntegrationTestBase,
                                 public Grpc::GrpcClientIntegrationParamTest {
 public:
   ListenerIntegrationTest()
-      : ListenerIntegrationTestBase(ipVersion(),
+      : ListenerIntegrationTestBase(ipVersion(), socketInterface(),
                                     ConfigHelper::httpProxyConfig(/*downstream_use_quic=*/false,
                                                                   /*multiple_addresses=*/false)) {}
 
@@ -227,7 +228,7 @@ class ListenerMultiAddressesIntegrationTest : public ListenerIntegrationTestBase
                                               public Grpc::GrpcClientIntegrationParamTest {
 public:
   ListenerMultiAddressesIntegrationTest()
-      : ListenerIntegrationTestBase(ipVersion(),
+      : ListenerIntegrationTestBase(ipVersion(), socketInterface(),
                                     ConfigHelper::httpProxyConfig(/*downstream_use_quic=*/false,
                                                                   /*multiple_addresses=*/true)) {}
 
@@ -1105,7 +1106,7 @@ class ListenerFilterIntegrationTest : public BaseIntegrationTest,
                                       public Grpc::GrpcClientIntegrationParamTest {
 public:
   ListenerFilterIntegrationTest()
-      : BaseIntegrationTest(ipVersion(), ConfigHelper::baseConfig() + R"EOF(
+      : BaseIntegrationTest(ipVersion(), socketInterface(), ConfigHelper::baseConfig() + R"EOF(
     filter_chains:
     - filters:
       - name: envoy.filters.network.tcp_proxy
@@ -1622,11 +1623,14 @@ TEST_P(ListenerFilterIntegrationTest,
 INSTANTIATE_TEST_SUITE_P(IpVersionsAndGrpcTypes, ListenerFilterIntegrationTest,
                          GRPC_CLIENT_INTEGRATION_PARAMS);
 
-class RebalancerTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                       public BaseIntegrationTest {
+class RebalancerTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
   RebalancerTest()
-      : BaseIntegrationTest(GetParam(), ConfigHelper::baseConfig() + R"EOF(
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            ConfigHelper::baseConfig() + R"EOF(
     listener_filters:
     # The inspect data filter is used for test the file event reset after
     # rebalance the request.
@@ -1752,9 +1756,11 @@ TEST_P(RebalancerTest, DISABLED_RedirectConnectionIsBalancedOnDestinationListene
   verifyBalance();
 }
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, RebalancerTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, RebalancerTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 } // namespace
 } // namespace Envoy

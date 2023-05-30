@@ -8,11 +8,14 @@ namespace Extensions {
 namespace TransportSockets {
 namespace TcpStats {
 namespace {
-class TcpStatsSocketIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                      public BaseIntegrationTest {
+class TcpStatsSocketIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
   TcpStatsSocketIntegrationTest()
-      : BaseIntegrationTest(GetParam(), ConfigHelper::tcpProxyConfig()) {}
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            ConfigHelper::tcpProxyConfig()) {}
 
   void initialize() override {
     config_helper_.addConfigModifier([](envoy::config::bootstrap::v3::Bootstrap& bootstrap) {
@@ -40,9 +43,11 @@ public:
   FakeRawConnectionPtr fake_upstream_connection_;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, TcpStatsSocketIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, TcpStatsSocketIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Verify that:
 // * Stats are in the correct scope/namespace.

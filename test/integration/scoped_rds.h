@@ -28,7 +28,8 @@ protected:
     absl::flat_hash_map<std::string, FakeStreamPtr> stream_by_resource_name_;
   };
 
-  ScopedRdsIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, ipVersion()) {
+  ScopedRdsIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, ipVersion(), socketInterface()) {
     // TODO(ggreenway): add tag extraction rules.
     // Missing stat tag-extraction rule for stat
     // 'http.scoped_rds.foo-scoped-routes.grpc.srds_cluster.streams_closed_16' and stat_prefix

@@ -3,10 +3,14 @@
 #include "gtest/gtest.h"
 
 namespace Envoy {
-class DirectResponseIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                      public HttpIntegrationTest {
+class DirectResponseIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
-  DirectResponseIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {}
+  DirectResponseIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void TearDown() override { cleanupUpstreamAndDownstream(); }
 
@@ -46,9 +50,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, DirectResponseIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, DirectResponseIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(DirectResponseIntegrationTest, DefaultDirectResponseBodySize) {
   // The default of direct response body size is 4KB.

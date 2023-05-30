@@ -22,7 +22,7 @@ class TcpProxyOdcdsIntegrationTest : public Grpc::GrpcClientIntegrationParamTest
                                      public BaseIntegrationTest {
 public:
   TcpProxyOdcdsIntegrationTest()
-      : BaseIntegrationTest(std::get<0>(GetParam()), ConfigHelper::tcpProxyConfig()) {
+      : BaseIntegrationTest(ipVersion(), socketInterface(), ConfigHelper::tcpProxyConfig()) {
     // The test envoy uses static listener and cluster for xDS.
     // The test framework does not update the above static resources.
     // Another upstream will be serving on-demand CDS requests and the response is explicitly

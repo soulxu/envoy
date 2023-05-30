@@ -69,5 +69,7 @@ static inline IoHandlePtr ioHandleForAddr(Socket::Type type,
   return addr->socketInterface().socket(type, addr, options);
 }
 
+enum class DefaultSocketInterface { Default, IoUring };
+
 } // namespace Network
 } // namespace Envoy

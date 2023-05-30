@@ -12,11 +12,15 @@
 
 namespace Envoy {
 namespace {
-class AutoSniIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                               public Event::TestUsingSimulatedTime,
-                               public HttpIntegrationTest {
+class AutoSniIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public Event::TestUsingSimulatedTime,
+      public HttpIntegrationTest {
 public:
-  AutoSniIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {}
+  AutoSniIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void setup(const std::string& override_auto_sni_header = "") {
     setUpstreamProtocol(Http::CodecType::HTTP1);
@@ -69,9 +73,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, AutoSniIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, AutoSniIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(AutoSniIntegrationTest, BasicAutoSniTest) {
   setup();

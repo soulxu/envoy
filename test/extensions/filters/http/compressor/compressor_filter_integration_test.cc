@@ -15,11 +15,15 @@ namespace Envoy {
 using Envoy::Protobuf::MapPair;
 using Envoy::ProtobufWkt::Any;
 
-class CompressorIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                  public Event::SimulatedTimeSystem,
-                                  public HttpIntegrationTest {
+class CompressorIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public Event::SimulatedTimeSystem,
+      public HttpIntegrationTest {
 public:
-  CompressorIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {}
+  CompressorIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void SetUp() override { decompressor_.init(window_bits); }
   void TearDown() override { cleanupUpstreamAndDownstream(); }
@@ -154,9 +158,11 @@ public:
       *stats_store_.rootScope(), "test", 4096, 100};
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, CompressorIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, CompressorIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 /**
  * Exercises gzip compression with default configuration.

@@ -12,10 +12,13 @@ namespace Envoy {
 namespace Formatter {
 
 class OriginalIPDetectionIntegrationTest
-    : public testing::TestWithParam<Network::Address::IpVersion>,
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
       public HttpIntegrationTest {
 public:
-  OriginalIPDetectionIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {}
+  OriginalIPDetectionIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void runTest(const std::string& ip) {
     autonomous_upstream_ = true;
@@ -43,9 +46,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, OriginalIPDetectionIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, OriginalIPDetectionIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(OriginalIPDetectionIntegrationTest, HeaderBasedDetectionIPv4) { runTest("9.9.9.9"); }
 

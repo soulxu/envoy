@@ -14,7 +14,8 @@ namespace {
 class SocketInterfaceIntegrationTest : public BaseIntegrationTest,
                                        public testing::TestWithParam<Network::Address::IpVersion> {
 public:
-  SocketInterfaceIntegrationTest() : BaseIntegrationTest(GetParam(), config()) {
+  SocketInterfaceIntegrationTest()
+      : BaseIntegrationTest(GetParam(), Network::DefaultSocketInterface::Default, config()) {
     use_lds_ = false;
   };
 

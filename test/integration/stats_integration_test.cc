@@ -22,17 +22,21 @@
 namespace Envoy {
 namespace {
 
-class StatsIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                             public BaseIntegrationTest {
+class StatsIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
-  StatsIntegrationTest() : BaseIntegrationTest(GetParam()) {}
+  StatsIntegrationTest() : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam())) {}
 
   void initialize() override { BaseIntegrationTest::initialize(); }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, StatsIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, StatsIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(StatsIntegrationTest, WithDefaultConfig) {
   initialize();
@@ -244,7 +248,13 @@ TEST_P(StatsIntegrationTest, WithExpiredCert) {
 class ClusterMemoryTestHelper : public BaseIntegrationTest {
 public:
   ClusterMemoryTestHelper()
-      : BaseIntegrationTest(testing::TestWithParam<Network::Address::IpVersion>::GetParam()) {
+      : BaseIntegrationTest(
+            std::get<0>(
+                testing::TestWithParam<std::tuple<Network::Address::IpVersion,
+                                                  Network::DefaultSocketInterface>>::GetParam()),
+            std::get<1>(
+                testing::TestWithParam<std::tuple<Network::Address::IpVersion,
+                                                  Network::DefaultSocketInterface>>::GetParam())) {
     use_real_stats_ = true;
   }
 
@@ -306,17 +316,23 @@ private:
   }
 };
 
-class ClusterMemoryTestRunner : public testing::TestWithParam<Network::Address::IpVersion> {
+class ClusterMemoryTestRunner
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>> {
 protected:
   ClusterMemoryTestRunner()
-      : ip_version_(testing::TestWithParam<Network::Address::IpVersion>::GetParam()) {}
+      : ip_version_(std::get<0>(
+            testing::TestWithParam<std::tuple<Network::Address::IpVersion,
+                                              Network::DefaultSocketInterface>>::GetParam())) {}
 
   Network::Address::IpVersion ip_version_;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, ClusterMemoryTestRunner,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, ClusterMemoryTestRunner,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(ClusterMemoryTestRunner, MemoryLargeClusterSize) {
   // A unique instance of ClusterMemoryTest allows for multiple runs of Envoy with

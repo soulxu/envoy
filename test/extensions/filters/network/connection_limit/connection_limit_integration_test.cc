@@ -3,12 +3,15 @@
 namespace Envoy {
 namespace {
 
-class ConnectionLimitIntegrationTest : public Event::TestUsingSimulatedTime,
-                                       public testing::TestWithParam<Network::Address::IpVersion>,
-                                       public BaseIntegrationTest {
+class ConnectionLimitIntegrationTest
+    : public Event::TestUsingSimulatedTime,
+      public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
   ConnectionLimitIntegrationTest()
-      : BaseIntegrationTest(GetParam(), ConfigHelper::tcpProxyConfig()) {
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            ConfigHelper::tcpProxyConfig()) {
     // TODO(ggreenway): add tag extraction rules.
     // Missing stat tag-extraction rule for stat
     // 'connection_limit.connection_limit_stats.limited_connections' and stat_prefix
@@ -22,9 +25,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, ConnectionLimitIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, ConnectionLimitIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Make sure the filter works in the basic case.
 TEST_P(ConnectionLimitIntegrationTest, NoConnectionLimiting) {

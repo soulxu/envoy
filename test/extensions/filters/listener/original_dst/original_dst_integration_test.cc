@@ -85,11 +85,13 @@ TEST_P(OriginalDstIntegrationTest, OriginalDstHttpManyConnections) {
 }
 
 class OriginalDstTcpProxyIntegrationTest
-    : public testing::TestWithParam<Network::Address::IpVersion>,
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
       public BaseIntegrationTest {
 public:
   OriginalDstTcpProxyIntegrationTest()
-      : BaseIntegrationTest(GetParam(), ConfigHelper::tcpProxyConfig()) {
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            ConfigHelper::tcpProxyConfig()) {
     enableHalfClose(true);
   }
 };
@@ -142,8 +144,10 @@ TEST_P(OriginalDstTcpProxyIntegrationTest, TestManyConnections) {
   test_server_->waitForCounterGe("cluster_manager.cluster_updated", kMaxConnections);
 }
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, OriginalDstTcpProxyIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, OriginalDstTcpProxyIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 } // namespace Envoy

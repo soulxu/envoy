@@ -53,7 +53,7 @@ TEST_P(GrpcClientIntegrationTest, MultiStream) {
   stream_0->sendRequest();
   stream_1->sendRequest();
   // Access stream info to make sure it is present.
-  if (std::get<1>(GetParam()) == ClientType::EnvoyGrpc) {
+  if (std::get<2>(GetParam()) == ClientType::EnvoyGrpc) {
     envoy::config::core::v3::Metadata m;
     (*m.mutable_filter_metadata())["com.foo.bar"] = {};
     EXPECT_THAT(stream_0->grpc_stream_.streamInfo().dynamicMetadata(), ProtoEq(m));

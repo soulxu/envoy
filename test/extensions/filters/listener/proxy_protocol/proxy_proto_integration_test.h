@@ -12,14 +12,18 @@
 #include "gtest/gtest.h"
 
 namespace Envoy {
-class ProxyProtoIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                  public HttpIntegrationTest {
+class ProxyProtoIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
   ProxyProtoIntegrationTest();
 };
 
-class ProxyProtoTcpIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                     public BaseIntegrationTest {
+class ProxyProtoTcpIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
   ProxyProtoTcpIntegrationTest();
 };

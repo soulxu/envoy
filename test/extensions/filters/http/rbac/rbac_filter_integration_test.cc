@@ -1056,20 +1056,22 @@ TEST_P(RBACIntegrationTest, MatcherLogConnectionAllow) {
 
 // Helper for integration testing of RBAC filter with dynamic forward proxy.
 class RbacDynamicForwardProxyIntegrationHelper
-    : public testing::TestWithParam<Network::Address::IpVersion>,
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
       public Event::TestUsingSimulatedTime,
       public HttpIntegrationTest {
 public:
   RbacDynamicForwardProxyIntegrationHelper()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {}
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void initializeWithFilterConfigs(bool save_filter_state, const std::string& rbac_config) {
     setUpstreamProtocol(Http::CodecType::HTTP1);
 
     const std::string save_upstream_config =
         save_filter_state ? "save_upstream_address: true " : "";
-    const std::string dfp_config =
-        fmt::format(R"EOF(
+    const std::string dfp_config = fmt::format(
+        R"EOF(
 name: dynamic_forward_proxy
 typed_config:
   "@type": type.googleapis.com/envoy.extensions.filters.http.dynamic_forward_proxy.v3.FilterConfig
@@ -1078,7 +1080,7 @@ typed_config:
     name: foo
     dns_lookup_family: {}
 )EOF",
-                    save_upstream_config, Network::Test::ipVersionToDnsFamily(GetParam()));
+        save_upstream_config, Network::Test::ipVersionToDnsFamily(std::get<0>(GetParam())));
 
     config_helper_.prependFilter(rbac_config);
 
@@ -1120,7 +1122,7 @@ typed_config:
     name: foo
     dns_lookup_family: {}
 )EOF",
-        Network::Test::ipVersionToDnsFamily(GetParam()));
+        Network::Test::ipVersionToDnsFamily(std::get<0>(GetParam())));
 
     TestUtility::loadFromYaml(cluster_type_config, *cluster_.mutable_cluster_type());
     // Load the CDS cluster and wait for it to initialize.
@@ -1135,9 +1137,11 @@ typed_config:
   bool write_cache_file_{};
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, RbacDynamicForwardProxyIntegrationHelper,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, RbacDynamicForwardProxyIntegrationHelper,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Verify that if upstream ip matcher is configured, upstream address is saved by a filter(dynamic
 // forward proxy in this case). If not saved, the request would be denied.

@@ -9,6 +9,7 @@ namespace Envoy {
 
 struct HttpProtocolTestParams {
   Network::Address::IpVersion version;
+  Network::DefaultSocketInterface interface;
   Http::CodecType downstream_protocol;
   Http::CodecType upstream_protocol;
   Http1ParserImpl http1_implementation;
@@ -35,13 +36,14 @@ class HttpProtocolIntegrationTest : public testing::TestWithParam<HttpProtocolTe
                                     public HttpIntegrationTest {
 public:
   // By default returns 8 combinations of
-  // [HTTP  upstream / HTTP  downstream] x [Ipv4, IPv6]
-  // [HTTP  upstream / HTTP2 downstream] x [IPv4, Ipv6]
-  // [HTTP2 upstream / HTTP  downstream] x [Ipv4, IPv6]
-  // [HTTP2 upstream / HTTP2 downstream] x [IPv4, Ipv6]
+  // [HTTP  upstream / HTTP  downstream] x [Ipv4, IPv6] x [Default, IoUring]
+  // [HTTP  upstream / HTTP2 downstream] x [IPv4, Ipv6] x [Default, IoUring]
+  // [HTTP2 upstream / HTTP  downstream] x [Ipv4, IPv6] x [Default, IoUring]
+  // [HTTP2 upstream / HTTP2 downstream] x [IPv4, Ipv6] x [Default, IoUring]
   //
   // Upstream and downstream protocols may be changed via the input vectors.
   // Address combinations are propagated from TestEnvironment::getIpVersionsForTest()
+  // Interface combinations are propagated from TestEnvironment::getSocketInterfacesForTest()
   static std::vector<HttpProtocolTestParams>
   getProtocolTestParams(const std::vector<Http::CodecType>& downstream_protocols =
                             {
@@ -68,7 +70,7 @@ public:
 
   HttpProtocolIntegrationTest()
       : HttpIntegrationTest(
-            GetParam().downstream_protocol, GetParam().version,
+            GetParam().downstream_protocol, GetParam().version, GetParam().interface,
             ConfigHelper::httpProxyConfig(/*downstream_is_quic=*/GetParam().downstream_protocol ==
                                           Http::CodecType::HTTP3)) {
     setupHttp1ImplOverrides(GetParam().http1_implementation);
@@ -94,6 +96,7 @@ public:
   UpstreamDownstreamIntegrationTest()
       : HttpIntegrationTest(
             std::get<0>(GetParam()).downstream_protocol, std::get<0>(GetParam()).version,
+            std::get<0>(GetParam()).interface,
             ConfigHelper::httpProxyConfig(std::get<0>(GetParam()).downstream_protocol ==
                                           Http::CodecType::HTTP3)) {
     setupHttp1ImplOverrides(std::get<0>(GetParam()).http1_implementation);

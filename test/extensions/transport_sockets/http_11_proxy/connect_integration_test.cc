@@ -9,11 +9,14 @@
 namespace Envoy {
 namespace {
 
-class Http11ConnectHttpIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                         public HttpIntegrationTest {
+class Http11ConnectHttpIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
   Http11ConnectHttpIntegrationTest()
-      : HttpIntegrationTest(Http::CodecClient::Type::HTTP1, GetParam()) {
+      : HttpIntegrationTest(Http::CodecClient::Type::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {
     upstream_tls_ = true;
   }
 
@@ -134,9 +137,11 @@ typed_config:
   bool try_http3_ = false;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, Http11ConnectHttpIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, Http11ConnectHttpIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Test that with no connect-proxy header, the transport socket is a no-op.
 TEST_P(Http11ConnectHttpIntegrationTest, NoHeader) {

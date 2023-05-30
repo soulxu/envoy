@@ -152,10 +152,14 @@ public:
 };
 
 // Fixture class for integration tests.
-class StartTlsIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                public BaseIntegrationTest {
+class StartTlsIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
-  StartTlsIntegrationTest() : BaseIntegrationTest(GetParam(), ConfigHelper::startTlsConfig()) {}
+  StartTlsIntegrationTest()
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            ConfigHelper::startTlsConfig()) {}
   void initialize() override;
   void addStartTlsSwitchFilter(ConfigHelper& config_helper);
 
@@ -377,7 +381,9 @@ TEST_P(StartTlsIntegrationTest, SwitchToTlsFromUpstream) {
   conn_->close(Network::ConnectionCloseType::FlushWrite);
 }
 
-INSTANTIATE_TEST_SUITE_P(StartTlsIntegrationTestSuite, StartTlsIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()));
+INSTANTIATE_TEST_SUITE_P(
+    StartTlsIntegrationTestSuite, StartTlsIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())));
 
 } // namespace Envoy

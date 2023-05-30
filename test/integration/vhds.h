@@ -141,7 +141,8 @@ vhds:
 class VhdsIntegrationTest : public HttpIntegrationTest,
                             public Grpc::UnifiedOrLegacyMuxIntegrationParamTest {
 public:
-  VhdsIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP2, ipVersion(), config()) {
+  VhdsIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP2, ipVersion(), socketInterface(), config()) {
     use_lds_ = false;
     config_helper_.addRuntimeOverride("envoy.reloadable_features.unified_mux",
                                       isUnified() ? "true" : "false");

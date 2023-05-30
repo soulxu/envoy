@@ -29,7 +29,8 @@ namespace {
 // TODO(jmarantz): switch this to simulated-time after debugging flakes.
 class HdsIntegrationTest : public Grpc::GrpcClientIntegrationParamTest, public HttpIntegrationTest {
 public:
-  HdsIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, ipVersion()) {}
+  HdsIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, ipVersion(), socketInterface()) {}
 
   void createUpstreams() override {
     addFakeUpstream(Http::CodecType::HTTP2);

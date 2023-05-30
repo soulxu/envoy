@@ -9,7 +9,8 @@ namespace {
 class HTTPTypedPerFilterConfigTest : public testing::Test, public HttpIntegrationTest {
 public:
   HTTPTypedPerFilterConfigTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP2, Network::Address::IpVersion::v4) {}
+      : HttpIntegrationTest(Http::CodecType::HTTP2, Network::Address::IpVersion::v4,
+                            Network::DefaultSocketInterface::Default) {}
 };
 
 TEST_F(HTTPTypedPerFilterConfigTest, RejectUnsupportedTypedPerFilterConfig) {

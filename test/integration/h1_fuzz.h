@@ -11,8 +11,9 @@ namespace Envoy {
 
 class H1FuzzIntegrationTest : public HttpIntegrationTest {
 public:
-  H1FuzzIntegrationTest(Network::Address::IpVersion version)
-      : HttpIntegrationTest(Http::CodecType::HTTP1, version) {}
+  H1FuzzIntegrationTest(Network::Address::IpVersion version,
+                        Network::DefaultSocketInterface interface)
+      : HttpIntegrationTest(Http::CodecType::HTTP1, version, interface) {}
 
   void initialize() override;
   void replay(const test::integration::CaptureFuzzTestCase&, bool ignore_response);

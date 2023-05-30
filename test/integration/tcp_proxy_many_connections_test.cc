@@ -13,10 +13,14 @@ using testing::HasSubstr;
 
 namespace Envoy {
 
-class TcpProxyManyConnectionsTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                    public BaseIntegrationTest {
+class TcpProxyManyConnectionsTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
-  TcpProxyManyConnectionsTest() : BaseIntegrationTest(GetParam(), ConfigHelper::tcpProxyConfig()) {
+  TcpProxyManyConnectionsTest()
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            ConfigHelper::tcpProxyConfig()) {
     enableHalfClose(true);
   }
 
@@ -30,9 +34,11 @@ public:
   static constexpr int timeout_scaling_factor_ = 20;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, TcpProxyManyConnectionsTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, TcpProxyManyConnectionsTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(TcpProxyManyConnectionsTest, TcpProxyManyConnections) {
   autonomous_upstream_ = true;

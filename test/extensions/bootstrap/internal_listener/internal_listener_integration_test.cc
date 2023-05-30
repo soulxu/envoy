@@ -19,11 +19,14 @@
 namespace Envoy {
 namespace {
 
-class InternalListenerIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                        public BaseIntegrationTest {
+class InternalListenerIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
   InternalListenerIntegrationTest()
-      : BaseIntegrationTest(GetParam(), ConfigHelper::tcpProxyConfig()) {}
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            ConfigHelper::tcpProxyConfig()) {}
 
   void initialize() override {
     config_helper_.renameListener("tcp");
@@ -103,9 +106,11 @@ TEST_P(InternalListenerIntegrationTest, DeleteListener) {
   test_server_->waitForGaugeEq("listener_manager.total_listeners_draining", 0);
 }
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, InternalListenerIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, InternalListenerIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 } // namespace
 } // namespace Envoy

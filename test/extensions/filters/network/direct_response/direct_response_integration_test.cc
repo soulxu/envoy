@@ -4,10 +4,14 @@
 
 namespace Envoy {
 
-class DirectResponseIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                      public BaseIntegrationTest {
+class DirectResponseIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
-  DirectResponseIntegrationTest() : BaseIntegrationTest(GetParam(), directResponseConfig()) {}
+  DirectResponseIntegrationTest()
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            directResponseConfig()) {}
 
   static std::string directResponseConfig() {
     return absl::StrCat(ConfigHelper::baseConfig(), R"EOF(
@@ -27,9 +31,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, DirectResponseIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, DirectResponseIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(DirectResponseIntegrationTest, DirectResponseOnConnection) {
   std::string response;

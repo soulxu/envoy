@@ -9,10 +9,13 @@
 namespace Envoy {
 namespace {
 
-class RegexEngineIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                   public BaseIntegrationTest {
+class RegexEngineIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
-  RegexEngineIntegrationTest() : BaseIntegrationTest(GetParam(), config()) {}
+  RegexEngineIntegrationTest()
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()), config()) {}
 
   // Ensure that regex definitions in the stats matcher config will parse too
   static std::string config() {
@@ -34,9 +37,11 @@ default_regex_engine:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, RegexEngineIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, RegexEngineIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(RegexEngineIntegrationTest, GoogleRE2) {
   initialize();

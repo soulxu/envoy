@@ -11,10 +11,14 @@
 
 namespace Envoy {
 
-class DecompressorIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                    public HttpIntegrationTest {
+class DecompressorIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
-  DecompressorIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP2, GetParam()) {
+  DecompressorIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP2, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {
     Extensions::Compression::Gzip::Compressor::GzipCompressorLibraryFactory
         compressor_library_factory;
     envoy::extensions::compression::gzip::compressor::v3::Gzip factory_config;
@@ -49,9 +53,11 @@ public:
   Envoy::Compression::Compressor::CompressorPtr response_compressor_{};
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, DecompressorIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, DecompressorIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 /**
  * Exercises gzip decompression bidirectionally with default configuration.

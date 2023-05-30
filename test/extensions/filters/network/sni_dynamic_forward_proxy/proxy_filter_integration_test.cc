@@ -13,14 +13,16 @@ namespace Envoy {
 namespace {
 
 class SniDynamicProxyFilterIntegrationTest
-    : public testing::TestWithParam<Network::Address::IpVersion>,
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
       public Event::TestUsingSimulatedTime,
       public HttpIntegrationTest {
 public:
   // This test is using HTTP integration test to use the utilities to pass SNI from downstream
   // to upstream. The config being tested is tcp_proxy.
   SniDynamicProxyFilterIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam(), ConfigHelper::tcpProxyConfig()) {}
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam()), ConfigHelper::tcpProxyConfig()) {}
 
   void setup(uint64_t max_hosts = 1024, uint32_t max_pending_requests = 1024) {
     setUpstreamProtocol(Http::CodecType::HTTP1);
@@ -51,7 +53,7 @@ typed_config:
       max_pending_requests: {}
   port_value: {}
 )EOF",
-                      Network::Test::ipVersionToDnsFamily(GetParam()), max_hosts,
+                      Network::Test::ipVersionToDnsFamily(std::get<0>(GetParam())), max_hosts,
                       max_pending_requests, fake_upstreams_[0]->localAddress()->ip()->port());
       config_helper_.addNetworkFilter(filter);
     });
@@ -74,7 +76,8 @@ typed_config:
     dns_cache_circuit_breaker:
       max_pending_requests: {}
 )EOF",
-        Network::Test::ipVersionToDnsFamily(GetParam()), max_hosts, max_pending_requests);
+        Network::Test::ipVersionToDnsFamily(std::get<0>(GetParam())), max_hosts,
+        max_pending_requests);
 
     TestUtility::loadFromYaml(cluster_type_config, *cluster_.mutable_cluster_type());
 
@@ -108,9 +111,11 @@ typed_config:
   envoy::config::cluster::v3::Cluster cluster_;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, SniDynamicProxyFilterIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, SniDynamicProxyFilterIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Verify that upstream TLS works with auto verification for SAN as well as auto setting SNI.
 TEST_P(SniDynamicProxyFilterIntegrationTest, UpstreamTls) {

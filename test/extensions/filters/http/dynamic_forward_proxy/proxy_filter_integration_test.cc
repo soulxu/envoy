@@ -14,10 +14,14 @@ using testing::HasSubstr;
 namespace Envoy {
 namespace {
 
-class ProxyFilterIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                   public HttpIntegrationTest {
+class ProxyFilterIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
-  ProxyFilterIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {
+  ProxyFilterIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {
     upstream_tls_ = true;
     filename_ = TestEnvironment::temporaryPath("dns_cache.txt");
     ::unlink(filename_.c_str());
@@ -56,7 +60,7 @@ typed_config:
     dns_cache_circuit_breaker:
       max_pending_requests: {}{}{}
 )EOF",
-                    Network::Test::ipVersionToDnsFamily(GetParam()), max_hosts,
+                    Network::Test::ipVersionToDnsFamily(std::get<0>(GetParam())), max_hosts,
                     max_pending_requests, key_value_config_, typed_dns_resolver_config);
     config_helper_.prependFilter(use_sub_cluster ? filter_use_sub_cluster : filter_use_dns_cache);
 
@@ -88,7 +92,7 @@ name: stream-info-to-headers-filter
     cluster_.set_name("cluster_0");
     cluster_.set_lb_policy(envoy::config::cluster::v3::Cluster::CLUSTER_PROVIDED);
     cluster_.set_dns_lookup_family(
-        GetParam() == Network::Address::IpVersion::v4
+        std::get<0>(GetParam()) == Network::Address::IpVersion::v4
             ? envoy::config::cluster::v3::Cluster_DnsLookupFamily::Cluster_DnsLookupFamily_V4_ONLY
             : envoy::config::cluster::v3::Cluster_DnsLookupFamily::Cluster_DnsLookupFamily_V6_ONLY);
 
@@ -133,8 +137,8 @@ typed_config:
     dns_cache_circuit_breaker:
       max_pending_requests: {}{}{}
 )EOF",
-        Network::Test::ipVersionToDnsFamily(GetParam()), max_hosts, max_pending_requests,
-        key_value_config_, typed_dns_resolver_config);
+        Network::Test::ipVersionToDnsFamily(std::get<0>(GetParam())), max_hosts,
+        max_pending_requests, key_value_config_, typed_dns_resolver_config);
 
     TestUtility::loadFromYaml(use_sub_cluster ? cluster_type_config_use_sub_cluster
                                               : cluster_type_config_use_dns_cache,
@@ -299,12 +303,16 @@ void ProxyFilterIntegrationTest::testConnectionTiming(IntegrationStreamDecoderPt
 class ProxyFilterWithSimtimeIntegrationTest : public Event::TestUsingSimulatedTime,
                                               public ProxyFilterIntegrationTest {};
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, ProxyFilterWithSimtimeIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
-INSTANTIATE_TEST_SUITE_P(IpVersions, ProxyFilterIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, ProxyFilterWithSimtimeIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, ProxyFilterIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // A basic test where we pause a request to lookup localhost, and then do another request which
 // should hit the TLS cache.
@@ -332,7 +340,7 @@ TEST_P(ProxyFilterIntegrationTest, RequestWithBodyGetAddrInfoResolver) {
   // getaddrinfo() does not reliably return v6 addresses depending on the environment. For now
   // just run this on v4 which is most likely to succeed. In v6 only environments this test won't
   // run at all but should still be covered in public CI.
-  if (GetParam() != Network::Address::IpVersion::v4) {
+  if (std::get<0>(GetParam()) != Network::Address::IpVersion::v4) {
     return;
   }
 
@@ -496,7 +504,7 @@ TEST_P(ProxyFilterIntegrationTest, UpstreamTlsWithAltHeaderSni) {
   codec_client_ = makeHttpConnection(lookupPort("http"));
 
   std::string authority;
-  if (GetParam() == Network::Address::IpVersion::v6) {
+  if (std::get<0>(GetParam()) == Network::Address::IpVersion::v6) {
     authority =
         fmt::format("[{}]:{}", fake_upstreams_[0]->localAddress()->ip()->addressAsString().c_str(),
                     fake_upstreams_[0]->localAddress()->ip()->port());
@@ -615,7 +623,7 @@ TEST_P(ProxyFilterIntegrationTest, UseCacheFileAndTestHappyEyeballs) {
                                     "true");
   use_cache_file_ = true;
   // Prepend a bad address
-  if (GetParam() == Network::Address::IpVersion::v4) {
+  if (std::get<0>(GetParam()) == Network::Address::IpVersion::v4) {
     cache_file_value_contents_ = "99.99.99.99:1|1000000|0\n";
   } else {
     cache_file_value_contents_ = "[::99]:1|1000000|0\n";

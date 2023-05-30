@@ -15,13 +15,15 @@ constexpr uint64_t MAX_BUFFERED_PLAINTEXT_LENGTH = 16384;
 
 using ContentType = std::string;
 using Accept = std::string;
-using TestParams = std::tuple<Network::Address::IpVersion, Http::CodecType, ContentType, Accept>;
+using TestParams = std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface,
+                              Http::CodecType, ContentType, Accept>;
 
 class GrpcWebFilterIntegrationTest : public testing::TestWithParam<TestParams>,
                                      public HttpIntegrationTest {
 public:
   GrpcWebFilterIntegrationTest()
-      : HttpIntegrationTest(std::get<1>(GetParam()), std::get<0>(GetParam())) {}
+      : HttpIntegrationTest(std::get<2>(GetParam()), std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void SetUp() override {
     setUpstreamProtocol(Http::CodecType::HTTP2);
@@ -124,21 +126,25 @@ public:
   static std::string testParamsToString(const testing::TestParamInfo<TestParams> params) {
     return fmt::format(
         "{}_{}_{}_{}",
-        TestUtility::ipTestParamsToString(testing::TestParamInfo<Network::Address::IpVersion>(
-            std::get<0>(params.param), params.index)),
-        std::get<1>(params.param) == Http::CodecType::HTTP2 ? "Http2" : "Http",
-        std::get<2>(params.param) == text ? "SendText" : "SendBinary",
-        std::get<3>(params.param) == text ? "AcceptText" : "AcceptBinary");
+        TestUtility::ipAndSocketInterfaceTestParamsToString(
+            testing::TestParamInfo<
+                std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>(
+                std::make_tuple(std::get<0>(params.param), std::get<1>(params.param)),
+                params.index)),
+        std::get<2>(params.param) == Http::CodecType::HTTP2 ? "Http2" : "Http",
+        std::get<3>(params.param) == text ? "SendText" : "SendBinary",
+        std::get<4>(params.param) == text ? "AcceptText" : "AcceptBinary");
   }
 
-  const Envoy::Http::CodecType downstream_protocol_{std::get<1>(GetParam())};
-  const ContentType content_type_{std::get<2>(GetParam())};
-  const Accept accept_{std::get<3>(GetParam())};
+  const Envoy::Http::CodecType downstream_protocol_{std::get<2>(GetParam())};
+  const ContentType content_type_{std::get<3>(GetParam())};
+  const Accept accept_{std::get<4>(GetParam())};
 };
 
 INSTANTIATE_TEST_SUITE_P(
     Params, GrpcWebFilterIntegrationTest,
     testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
                      testing::Values(Http::CodecType::HTTP1, Http::CodecType::HTTP2),
                      testing::Values(ContentType{text}, ContentType{binary}),
                      testing::Values(Accept{text}, Accept{binary})),

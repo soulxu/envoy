@@ -31,7 +31,7 @@ protected:
   };
 
   LedsIntegrationTest()
-      : HttpIntegrationTest(Http::CodecClient::Type::HTTP1, ipVersion()),
+      : HttpIntegrationTest(Http::CodecClient::Type::HTTP1, ipVersion(), socketInterface()),
         codec_client_type_(envoy::type::v3::HTTP1) {
     use_lds_ = false;
     create_xds_upstream_ = false;

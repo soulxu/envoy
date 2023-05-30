@@ -88,18 +88,21 @@ virtual_hosts:
 
 struct TestParam {
   Network::Address::IpVersion ip_version{};
+  Network::DefaultSocketInterface interface {};
   bool cors_policy_from_per_filter_config{};
 };
 
 std::vector<TestParam> testParams() {
   std::vector<TestParam> params;
   for (auto ip_version : TestEnvironment::getIpVersionsForTest()) {
-    params.push_back({ip_version, true});
+    for (auto interface : TestEnvironment::getSocketInterfacesForTest()) {
+      params.push_back({ip_version, interface, true});
 
-    // Ignore the 'cors' field tests if the deprecated feature is disabled by compile time flag.
+      // Ignore the 'cors' field tests if the deprecated feature is disabled by compile time flag.
 #ifndef ENVOY_DISABLE_DEPRECATED_FEATURES
-    params.push_back({ip_version, false});
+      params.push_back({ip_version, interface, false});
 #endif
+    }
   }
   return params;
 }
@@ -111,6 +114,9 @@ std::string testParamsToString(const ::testing::TestParamInfo<TestParam>& params
   } else {
     param_string.append("IPv6");
   }
+
+  param_string.append(
+      fmt::format("_{}", TestUtility::socketInterfaceToString(params.param.interface)));
 
   if (params.param.cors_policy_from_per_filter_config) {
     param_string.append("_cors_policy_from_per_filter_config");
@@ -124,7 +130,7 @@ class CorsFilterIntegrationTest : public testing::TestWithParam<TestParam>,
                                   public Envoy::HttpIntegrationTest {
 public:
   CorsFilterIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam().ip_version) {}
+      : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam().ip_version, GetParam().interface) {}
 
   void initialize() override {
     config_helper_.prependFilter("name: envoy.filters.http.cors");

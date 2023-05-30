@@ -21,8 +21,10 @@ using testing::ReturnRef;
 namespace Envoy {
 namespace Xfcc {
 
-class XfccIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                            public HttpIntegrationTest {
+class XfccIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
   const std::string previous_xfcc_ =
       "By=spiffe://lyft.com/frontend;By=http://frontend.lyft.com;Hash=123456;URI=spiffe://lyft.com/"
@@ -39,7 +41,9 @@ public:
       "URI=spiffe://lyft.com/frontend-team;URI=http://frontend.lyft.com";
   const std::string client_dns_san_ = "DNS=lyft.com;DNS=www.lyft.com";
 
-  XfccIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {
+  XfccIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {
     ON_CALL(factory_context_.server_context_, api()).WillByDefault(ReturnRef(*api_));
   }
 

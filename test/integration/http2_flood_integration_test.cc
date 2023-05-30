@@ -31,16 +31,20 @@ namespace {
 const uint32_t ControlFrameFloodLimit = 100;
 const uint32_t AllFrameFloodLimit = 1000;
 
-bool deferredProcessing(std::tuple<Network::Address::IpVersion, bool, bool> params) {
-  return std::get<2>(params);
+bool deferredProcessing(
+    std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, bool, bool> params) {
+  return std::get<3>(params);
 }
 
 } // namespace
 
 std::string testParamsToString(
-    const ::testing::TestParamInfo<std::tuple<Network::Address::IpVersion, bool, bool>> params) {
-  const bool http2_new_codec_wrapper = std::get<1>(params.param);
+    const ::testing::TestParamInfo<
+        std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, bool, bool>>
+        params) {
+  const bool http2_new_codec_wrapper = std::get<2>(params.param);
   return absl::StrCat(TestUtility::ipVersionToString(std::get<0>(params.param)),
+                      TestUtility::socketInterfaceToString(std::get<1>(params.param)),
                       http2_new_codec_wrapper ? "WrappedHttp2" : "BareHttp2",
                       deferredProcessing(params.param) ? "WithDeferredProcessing"
                                                        : "NoDeferredProcessing");
@@ -53,12 +57,13 @@ std::string testParamsToString(
 // Http2FrameIntegrationTest destructor completes.
 class Http2FloodMitigationTest
     : public SocketInterfaceSwap,
-      public testing::TestWithParam<std::tuple<Network::Address::IpVersion, bool, bool>>,
+      public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, bool, bool>>,
       public Http2RawFrameIntegrationTest {
 public:
   Http2FloodMitigationTest()
       : SocketInterfaceSwap(Network::Socket::Type::Stream),
-        Http2RawFrameIntegrationTest(std::get<0>(GetParam())) {
+        Http2RawFrameIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam())) {
     // This test tracks the number of buffers created, and the tag extraction check uses some
     // buffers, so disable it in this test.
     skip_tag_extraction_rule_check_ = true;
@@ -67,11 +72,18 @@ public:
         [](envoy::extensions::filters::network::http_connection_manager::v3::HttpConnectionManager&
                hcm) { hcm.mutable_delayed_close_timeout()->set_seconds(1); });
     config_helper_.addConfigModifier(configureProxyStatus());
-    const bool enable_new_wrapper = std::get<1>(GetParam());
+    const bool enable_new_wrapper = std::get<2>(GetParam());
     config_helper_.addRuntimeOverride("envoy.reloadable_features.http2_new_codec_wrapper",
                                       enable_new_wrapper ? "true" : "false");
     config_helper_.addRuntimeOverride(Runtime::defer_processing_backedup_streams,
                                       deferredProcessing(GetParam()) ? "true" : "false");
+  }
+
+  void SetUp() override {
+    // TODO(zhxie): io_uring is not compatible with SocketInterfaceSwap.
+    if (std::get<1>(GetParam()) == Network::DefaultSocketInterface::IoUring) {
+      GTEST_SKIP();
+    }
   }
 
 protected:
@@ -92,8 +104,9 @@ protected:
 
 INSTANTIATE_TEST_SUITE_P(
     IpVersions, Http2FloodMitigationTest,
-    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()), ::testing::Bool(),
-                     ::testing::Bool()),
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
+                     ::testing::Bool(), ::testing::Bool()),
     testParamsToString);
 
 void Http2FloodMitigationTest::initializeUpstreamFloodTest() {

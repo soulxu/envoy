@@ -9,11 +9,14 @@
 namespace Envoy {
 namespace {
 
-class ConnectIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                               public HttpIntegrationTest {
+class ConnectIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
   ConnectIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()),
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())),
         dispatcher_(api_->allocateDispatcher("test_thread")) {}
 
   void SetUp() override {
@@ -188,9 +191,11 @@ TEST_P(ConnectIntegrationTest, ConnectFilterStreamingRequestE2E) {
   EXPECT_EQ(response_body.toString(), "{}");
 }
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, ConnectIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, ConnectIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 } // namespace
 } // namespace Envoy

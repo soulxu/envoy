@@ -25,19 +25,24 @@ void insertHttpInspectorConfigModifier(envoy::config::bootstrap::v3::Bootstrap& 
 }
 } // namespace
 
-class HttpInspectorTcpIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                        public BaseIntegrationTest {
+class HttpInspectorTcpIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
   HttpInspectorTcpIntegrationTest()
-      : BaseIntegrationTest(GetParam(), ConfigHelper::tcpProxyConfig()) {
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            ConfigHelper::tcpProxyConfig()) {
     config_helper_.addConfigModifier(insertHttpInspectorConfigModifier);
     config_helper_.renameListener("tcp_proxy");
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, HttpInspectorTcpIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, HttpInspectorTcpIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(HttpInspectorTcpIntegrationTest, DetectNoHttp) {
   initialize();

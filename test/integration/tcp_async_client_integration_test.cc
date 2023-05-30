@@ -5,11 +5,14 @@
 namespace Envoy {
 namespace {
 
-class TcpAsyncClientIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                      public BaseIntegrationTest {
+class TcpAsyncClientIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
   TcpAsyncClientIntegrationTest()
-      : BaseIntegrationTest(GetParam(), absl::StrCat(ConfigHelper::baseConfig(), R"EOF(
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            absl::StrCat(ConfigHelper::baseConfig(), R"EOF(
     filter_chains:
     - filters:
       - name: envoy.test.test_network_async_tcp_filter
@@ -19,8 +22,10 @@ public:
     )EOF")) {}
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, TcpAsyncClientIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()));
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, TcpAsyncClientIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())));
 
 TEST_P(TcpAsyncClientIntegrationTest, SingleRequest) {
   enableHalfClose(true);

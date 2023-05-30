@@ -3,12 +3,15 @@
 namespace Envoy {
 namespace {
 
-class LocalRateLimitIntegrationTest : public Event::TestUsingSimulatedTime,
-                                      public testing::TestWithParam<Network::Address::IpVersion>,
-                                      public BaseIntegrationTest {
+class LocalRateLimitIntegrationTest
+    : public Event::TestUsingSimulatedTime,
+      public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
   LocalRateLimitIntegrationTest()
-      : BaseIntegrationTest(GetParam(), ConfigHelper::tcpProxyConfig()) {}
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            ConfigHelper::tcpProxyConfig()) {}
 
   void setup(const std::string& filter_yaml = {}) {
     if (!filter_yaml.empty()) {
@@ -18,9 +21,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, LocalRateLimitIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, LocalRateLimitIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Make sure the filter works in the basic case.
 TEST_P(LocalRateLimitIntegrationTest, NoRateLimiting) {

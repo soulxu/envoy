@@ -11,11 +11,14 @@ namespace {
 using ProtoHeaderMutation =
     envoy::extensions::http::early_header_mutation::header_mutation::v3::HeaderMutation;
 
-class HeaderMutationIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                      public HttpIntegrationTest {
+class HeaderMutationIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
   HeaderMutationIntegrationTest()
-      : HttpIntegrationTest(Envoy::Http::CodecType::HTTP1, GetParam()) {}
+      : HttpIntegrationTest(Envoy::Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void initializeExtension(const std::string& header_mutation_yaml) {
     config_helper_.addConfigModifier(
@@ -51,9 +54,11 @@ public:
   ScopedInjectableLoader<Regex::Engine> engine_{std::make_unique<Regex::GoogleReEngine>()};
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, HeaderMutationIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, HeaderMutationIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(HeaderMutationIntegrationTest, TestHeaderMutation) {
   const std::string header_mutation_yaml = R"EOF(

@@ -36,11 +36,15 @@ typed_config:
     runtime_key: "foo.enabled"
 )EOF";
 
-class AdmissionControlIntegrationTest : public Event::TestUsingSimulatedTime,
-                                        public testing::TestWithParam<Network::Address::IpVersion>,
-                                        public HttpIntegrationTest {
+class AdmissionControlIntegrationTest
+    : public Event::TestUsingSimulatedTime,
+      public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
-  AdmissionControlIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {}
+  AdmissionControlIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void SetUp() override {}
 
@@ -98,8 +102,10 @@ protected:
   bool downstream_filter_ = true;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, AdmissionControlIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()));
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, AdmissionControlIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())));
 
 TEST_P(AdmissionControlIntegrationTest, HttpTest) {
   autonomous_upstream_ = true;

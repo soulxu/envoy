@@ -58,6 +58,7 @@ XdsFuzzTest::XdsFuzzTest(const test::server::config_validation::XdsTestCase& inp
                          bool use_unified_mux)
     : HttpIntegrationTest(
           Http::CodecType::HTTP2, TestEnvironment::getIpVersionsForTest()[0],
+          TestEnvironment::getSocketInterfacesForTest()[0],
           ConfigHelper::adsBootstrap(input.config().sotw_or_delta() ==
                                              test::server::config_validation::Config::SOTW
                                          ? "GRPC"

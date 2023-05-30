@@ -16,11 +16,13 @@ namespace Envoy {
 INSTANTIATE_TEST_SUITE_P(
     TestParameters, UdsUpstreamIntegrationTest,
     testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
                      testing::Values(false, true)));
 #else
 INSTANTIATE_TEST_SUITE_P(
     TestParameters, UdsUpstreamIntegrationTest,
     testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
                      testing::Values(false)));
 #endif
 
@@ -56,11 +58,13 @@ TEST_P(UdsUpstreamIntegrationTest, TestTls) {
 INSTANTIATE_TEST_SUITE_P(
     TestParameters, UdsListenerIntegrationTest,
     testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
                      testing::Values(false, true), testing::Values(0)));
 #else
 INSTANTIATE_TEST_SUITE_P(
     TestParameters, UdsListenerIntegrationTest,
     testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
                      testing::Values(false), testing::Values(0)));
 #endif
 
@@ -68,6 +72,7 @@ INSTANTIATE_TEST_SUITE_P(
 INSTANTIATE_TEST_SUITE_P(
     TestModeParameter, UdsListenerIntegrationTest,
     testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
                      testing::Values(false), testing::Values(0662)));
 
 void UdsListenerIntegrationTest::initialize() {

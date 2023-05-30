@@ -14,12 +14,13 @@ namespace Ssl {
 
 class SslCertValidatorIntegrationTest
     : public testing::TestWithParam<
-          std::tuple<Network::Address::IpVersion,
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface,
                      envoy::extensions::transport_sockets::tls::v3::TlsParameters::TlsProtocol>>,
       public HttpIntegrationTest {
 public:
   SslCertValidatorIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam())) {}
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void initialize() override;
   void TearDown() override;
@@ -30,17 +31,18 @@ public:
 
   static std::string ipClientVersionTestParamsToString(
       const ::testing::TestParamInfo<
-          std::tuple<Network::Address::IpVersion,
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface,
                      envoy::extensions::transport_sockets::tls::v3::TlsParameters::TlsProtocol>>&
           params) {
-    return fmt::format("{}_TLSv1_{}", TestUtility::ipVersionToString(std::get<0>(params.param)),
-                       std::get<1>(params.param) - 1);
+    return fmt::format("{}_{}_TLSv1_{}", TestUtility::ipVersionToString(std::get<0>(params.param)),
+                       TestUtility::socketInterfaceToString(std::get<1>(params.param)),
+                       std::get<2>(params.param) - 1);
   }
 
 protected:
   std::unique_ptr<ContextManager> context_manager_;
   const envoy::extensions::transport_sockets::tls::v3::TlsParameters::TlsProtocol tls_version_{
-      std::get<1>(GetParam())};
+      std::get<2>(GetParam())};
 };
 
 } // namespace Ssl

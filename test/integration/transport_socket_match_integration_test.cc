@@ -14,6 +14,7 @@ class TransportSockeMatchIntegrationTest : public testing::Test, public HttpInte
 public:
   TransportSockeMatchIntegrationTest()
       : HttpIntegrationTest(Http::CodecType::HTTP1, TestEnvironment::getIpVersionsForTest().front(),
+                            TestEnvironment::getSocketInterfacesForTest().front(),
                             ConfigHelper::httpProxyConfig()) {
     autonomous_upstream_ = true;
     setUpstreamCount(num_hosts_);

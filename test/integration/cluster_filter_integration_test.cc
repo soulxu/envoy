@@ -97,27 +97,31 @@ private:
 };
 
 std::string ipInitializeUpstreamFiltersTestParamsToString(
-    const testing::TestParamInfo<std::tuple<Network::Address::IpVersion, bool>>& params) {
+    const testing::TestParamInfo<
+        std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, bool>>& params) {
   return fmt::format(
       "{}_{}",
-      TestUtility::ipTestParamsToString(
-          testing::TestParamInfo<Network::Address::IpVersion>(std::get<0>(params.param), 0)),
-      std::get<1>(params.param) ? "do_initialize_upstream_filters"
+      TestUtility::ipAndSocketInterfaceTestParamsToString(
+          testing::TestParamInfo<
+              std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>(
+              std::make_tuple(std::get<0>(params.param), std::get<1>(params.param)), 0)),
+      std::get<2>(params.param) ? "do_initialize_upstream_filters"
                                 : "dont_initialize_upstream_filters");
 }
 
 class ClusterFilterIntegrationTestBase
-    : public testing::TestWithParam<std::tuple<Network::Address::IpVersion, bool>>,
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, bool>>,
       public TestParent {
 public:
   ClusterFilterIntegrationTestBase() : factory_(*this), registration_(factory_) {
     Runtime::maybeSetRuntimeGuard("envoy.reloadable_features.initialize_upstream_filters",
-                                  std::get<1>(GetParam()));
+                                  std::get<2>(GetParam()));
   }
 
   // Get the test parameter whether upstream filters are initialized right after the upstream
   // connection has been established
-  bool upstreamFiltersInitializedWhenConnected() const { return std::get<1>(GetParam()); }
+  bool upstreamFiltersInitializedWhenConnected() const { return std::get<2>(GetParam()); }
 
   void initialize() { on_new_connection_called_after_on_write_.store(absl::optional<bool>{}); }
 
@@ -149,7 +153,8 @@ class ClusterFilterTcpIntegrationTest : public ClusterFilterIntegrationTestBase,
                                         public BaseIntegrationTest {
 public:
   ClusterFilterTcpIntegrationTest()
-      : BaseIntegrationTest(std::get<0>(GetParam()), ConfigHelper::tcpProxyConfig()) {}
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            ConfigHelper::tcpProxyConfig()) {}
 
   void initialize() override {
     enableHalfClose(true);
@@ -168,7 +173,9 @@ public:
 
 INSTANTIATE_TEST_SUITE_P(
     IpVersionsInitializeUpstreamFilters, ClusterFilterTcpIntegrationTest,
-    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()), testing::Bool()),
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
+                     testing::Bool()),
     ipInitializeUpstreamFiltersTestParamsToString);
 
 TEST_P(ClusterFilterTcpIntegrationTest, TestClusterFilter) {
@@ -224,7 +231,8 @@ class ClusterFilterHttpIntegrationTest : public ClusterFilterIntegrationTestBase
                                          public HttpIntegrationTest {
 public:
   ClusterFilterHttpIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam())) {}
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void initialize() override {
     config_helper_.addConfigModifier([](envoy::config::bootstrap::v3::Bootstrap& bootstrap) {
@@ -242,7 +250,9 @@ public:
 
 INSTANTIATE_TEST_SUITE_P(
     IpVersionsInitializeUpstreamFilters, ClusterFilterHttpIntegrationTest,
-    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()), testing::Bool()),
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
+                     testing::Bool()),
     ipInitializeUpstreamFiltersTestParamsToString);
 
 TEST_P(ClusterFilterHttpIntegrationTest, TestClusterFilter) {

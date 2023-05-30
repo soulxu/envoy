@@ -117,24 +117,27 @@ using IntegrationCodecClientPtr = std::unique_ptr<IntegrationCodecClient>;
  */
 class HttpIntegrationTest : public BaseIntegrationTest {
 public:
-  HttpIntegrationTest(Http::CodecType downstream_protocol, Network::Address::IpVersion version)
+  HttpIntegrationTest(Http::CodecType downstream_protocol, Network::Address::IpVersion version,
+                      Network::DefaultSocketInterface interface)
       : HttpIntegrationTest(
-            downstream_protocol, version,
+            downstream_protocol, version, interface,
             ConfigHelper::httpProxyConfig(/*downstream_use_quic=*/downstream_protocol ==
                                           Http::CodecType::HTTP3)) {}
   HttpIntegrationTest(Http::CodecType downstream_protocol, Network::Address::IpVersion version,
-                      const std::string& config);
+                      Network::DefaultSocketInterface interface, const std::string& config);
 
   HttpIntegrationTest(Http::CodecType downstream_protocol,
                       const InstanceConstSharedPtrFn& upstream_address_fn,
-                      Network::Address::IpVersion version)
+                      Network::Address::IpVersion version,
+                      Network::DefaultSocketInterface interface)
       : HttpIntegrationTest(
-            downstream_protocol, upstream_address_fn, version,
+            downstream_protocol, upstream_address_fn, version, interface,
             ConfigHelper::httpProxyConfig(/*downstream_use_quic=*/downstream_protocol ==
                                           Http::CodecType::HTTP3)) {}
   HttpIntegrationTest(Http::CodecType downstream_protocol,
                       const InstanceConstSharedPtrFn& upstream_address_fn,
-                      Network::Address::IpVersion version, const std::string& config);
+                      Network::Address::IpVersion version,
+                      Network::DefaultSocketInterface interface, const std::string& config);
   ~HttpIntegrationTest() override;
 
   void initialize() override;
@@ -371,8 +374,9 @@ protected:
 // Helper class for integration tests using raw HTTP/2 frames
 class Http2RawFrameIntegrationTest : public HttpIntegrationTest {
 public:
-  Http2RawFrameIntegrationTest(Network::Address::IpVersion version)
-      : HttpIntegrationTest(Http::CodecType::HTTP2, version) {}
+  Http2RawFrameIntegrationTest(Network::Address::IpVersion version,
+                               Network::DefaultSocketInterface interface)
+      : HttpIntegrationTest(Http::CodecType::HTTP2, version, interface) {}
 
 protected:
   void startHttp2Session();

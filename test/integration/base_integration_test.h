@@ -70,11 +70,13 @@ public:
   // Creates a test fixture with an upstream bound to INADDR_ANY on an unspecified port using the
   // provided IP |version|.
   BaseIntegrationTest(Network::Address::IpVersion version,
+                      Network::DefaultSocketInterface interface,
                       const std::string& config = ConfigHelper::httpProxyConfig());
   // Creates a test fixture with a specified |upstream_address| function that provides the IP and
   // port to use.
   BaseIntegrationTest(const InstanceConstSharedPtrFn& upstream_address_fn,
                       Network::Address::IpVersion version,
+                      Network::DefaultSocketInterface interface,
                       const std::string& config = ConfigHelper::httpProxyConfig());
   virtual ~BaseIntegrationTest() = default;
 
@@ -443,6 +445,8 @@ protected:
 
   // The IpVersion (IPv4, IPv6) to use.
   Network::Address::IpVersion version_;
+  // The socket interface (Default, IoUring) to use.
+  Network::DefaultSocketInterface interface_;
   // IP Address to use when binding sockets on upstreams.
   InstanceConstSharedPtrFn upstream_address_fn_;
   // The config for envoy start-up.

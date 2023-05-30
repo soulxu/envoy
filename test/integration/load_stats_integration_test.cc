@@ -20,7 +20,8 @@ namespace {
 class LoadStatsIntegrationTest : public Grpc::GrpcClientIntegrationParamTest,
                                  public HttpIntegrationTest {
 public:
-  LoadStatsIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, ipVersion()) {
+  LoadStatsIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, ipVersion(), socketInterface()) {
     // We rely on some fairly specific load balancing picks in this test, so
     // determinize the schedule.
     setDeterministicValue();

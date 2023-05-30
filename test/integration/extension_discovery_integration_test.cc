@@ -58,7 +58,8 @@ std::string terminalFilterConfig() { return "is_terminal_filter: true"; }
 class ExtensionDiscoveryIntegrationTest : public Grpc::GrpcClientIntegrationParamTest,
                                           public HttpIntegrationTest {
 public:
-  ExtensionDiscoveryIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, ipVersion()) {
+  ExtensionDiscoveryIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, ipVersion(), socketInterface()) {
     // TODO(ggreenway): add tag extraction rules.
     // Missing stat tag-extraction rule for stat
     // 'listener_manager.lds.grpc.lds_cluster.streams_closed_10' and stat_prefix 'lds_cluster'.

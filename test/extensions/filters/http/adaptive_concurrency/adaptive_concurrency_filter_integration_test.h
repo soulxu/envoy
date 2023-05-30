@@ -32,11 +32,14 @@ const std::string MIN_RTT_GAUGE_NAME =
     "http.config_test.adaptive_concurrency.gradient_controller.min_rtt_msecs";
 
 class AdaptiveConcurrencyIntegrationTest
-    : public testing::TestWithParam<Network::Address::IpVersion>,
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
       public Event::TestUsingSimulatedTime,
       public HttpIntegrationTest {
 public:
-  AdaptiveConcurrencyIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP2, GetParam()) {}
+  AdaptiveConcurrencyIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP2, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void customInit() {
     setDownstreamProtocol(Http::CodecType::HTTP2);

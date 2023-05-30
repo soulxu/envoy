@@ -8,13 +8,17 @@
 #include "gtest/gtest.h"
 
 namespace Envoy {
-class HttpTimeoutIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                   public Event::TestUsingSimulatedTime,
-                                   public HttpIntegrationTest {
+class HttpTimeoutIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public Event::TestUsingSimulatedTime,
+      public HttpIntegrationTest {
 public:
   // Arbitrarily choose HTTP2 here, the tests for this class are around
   // timeouts which don't have version specific behavior.
-  HttpTimeoutIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP2, GetParam()) {}
+  HttpTimeoutIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP2, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void SetUp() override {
     setDownstreamProtocol(Http::CodecType::HTTP2);

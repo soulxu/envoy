@@ -7,10 +7,13 @@ namespace Envoy {
 
 std::string echo_config;
 
-class EchoIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                            public BaseIntegrationTest {
+class EchoIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
-  EchoIntegrationTest() : BaseIntegrationTest(GetParam(), echo_config) {}
+  EchoIntegrationTest()
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()), echo_config) {}
 
   // Called once by the gtest framework before any EchoIntegrationTests are run.
   static void SetUpTestSuite() { // NOLINT(readability-identifier-naming)
@@ -31,9 +34,11 @@ public:
   void SetUp() override { BaseIntegrationTest::initialize(); }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, EchoIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, EchoIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(EchoIntegrationTest, Hello) {
   std::string response;
@@ -58,7 +63,7 @@ filter_chains:
 - filters:
   - name: envoy.filters.network.echo
   )EOF",
-                                                       GetParam());
+                                                       std::get<0>(GetParam()));
 
   // Add the listener.
   ConditionalInitializer listener_added_by_worker;

@@ -14,12 +14,15 @@
 namespace Envoy {
 namespace {
 
-class ConnectionLimitIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                       public Event::TestUsingSimulatedTime,
-                                       public BaseIntegrationTest {
+class ConnectionLimitIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public Event::TestUsingSimulatedTime,
+      public BaseIntegrationTest {
 public:
   ConnectionLimitIntegrationTest()
-      : BaseIntegrationTest(GetParam(), ConfigHelper::tcpProxyConfig()) {}
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            ConfigHelper::tcpProxyConfig()) {}
 
   void setEmptyListenerLimit() {
     config_helper_.addRuntimeOverride("envoy.resource_limits.listener.listener_0.connection_limit",
@@ -123,9 +126,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, ConnectionLimitIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, ConnectionLimitIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(ConnectionLimitIntegrationTest, TestListenerLimit) {
   std::function<void()> init_func = [this]() {

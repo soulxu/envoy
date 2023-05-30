@@ -22,11 +22,14 @@
 namespace Envoy {
 namespace {
 
-class TlsInspectorIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                    public BaseIntegrationTest {
+class TlsInspectorIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public BaseIntegrationTest {
 public:
   TlsInspectorIntegrationTest()
-      : BaseIntegrationTest(GetParam(), ConfigHelper::baseConfig() + R"EOF(
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            ConfigHelper::baseConfig() + R"EOF(
     filter_chains:
       filters:
        -  name: envoy.filters.network.echo
@@ -192,8 +195,10 @@ TEST_P(TlsInspectorIntegrationTest, JA3FingerprintIsSet) {
               testing::Eq("71d1f47d1125ac53c3c6a4863c087cfe"));
 }
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, TlsInspectorIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, TlsInspectorIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 } // namespace
 } // namespace Envoy

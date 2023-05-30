@@ -34,7 +34,8 @@ class StreamingIntegrationTest : public HttpIntegrationTest,
                                  public Grpc::GrpcClientIntegrationParamTestWithDeferredProcessing {
 
 protected:
-  StreamingIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP2, ipVersion()) {}
+  StreamingIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP2, ipVersion(), socketInterface()) {}
 
   void TearDown() override {
     cleanupUpstreamAndDownstream();

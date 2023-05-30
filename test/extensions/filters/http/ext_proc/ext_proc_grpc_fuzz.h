@@ -56,9 +56,11 @@ static const uint32_t BufferSize = 100000;
 class ExtProcIntegrationFuzz : public HttpIntegrationTest,
                                public Grpc::BaseGrpcClientIntegrationParamTest {
 public:
-  ExtProcIntegrationFuzz(Network::Address::IpVersion ip_version, Grpc::ClientType client_type)
-      : HttpIntegrationTest(Http::CodecType::HTTP2, ip_version) {
+  ExtProcIntegrationFuzz(Network::Address::IpVersion ip_version,
+                         Network::DefaultSocketInterface interface, Grpc::ClientType client_type)
+      : HttpIntegrationTest(Http::CodecType::HTTP2, ip_version, interface) {
     ip_version_ = ip_version;
+    interface_ = interface;
     client_type_ = client_type;
   }
 
@@ -71,6 +73,7 @@ public:
   }
 
   Network::Address::IpVersion ipVersion() const override { return ip_version_; }
+  Network::DefaultSocketInterface socketInterface() const override { return interface_; }
   Grpc::ClientType clientType() const override { return client_type_; }
 
   void initializeFuzzer(bool autonomous_upstream) {
@@ -209,6 +212,7 @@ public:
   envoy::extensions::filters::http::ext_proc::v3::ExternalProcessor proto_config_{};
   TestProcessor test_processor_;
   Network::Address::IpVersion ip_version_;
+  Network::DefaultSocketInterface interface_;
   Grpc::ClientType client_type_;
 };
 
@@ -236,8 +240,10 @@ fuzzExtProcRun(const test::extensions::filters::http::ext_proc::ExtProcGrpcTestC
   static uint32_t fuzz_exec_count = 0;
   // Initialize fuzzer with IP and gRPC version from environment
   if (fuzzCreateEnvoy(fuzz_exec_count, persistent_mode)) {
-    fuzzer = std::make_unique<ExtProcIntegrationFuzz>(
-        TestEnvironment::getIpVersionsForTest()[0], TestEnvironment::getsGrpcVersionsForTest()[0]);
+    fuzzer =
+        std::make_unique<ExtProcIntegrationFuzz>(TestEnvironment::getIpVersionsForTest()[0],
+                                                 TestEnvironment::getSocketInterfacesForTest()[0],
+                                                 TestEnvironment::getsGrpcVersionsForTest()[0]);
   }
   // Initialize fuzz_helper.
   fuzz_helper = std::make_unique<ExtProcFuzzHelper>(&ext_proc_provider);

@@ -15,10 +15,14 @@ namespace {
 const int UpstreamIndex = 0;
 
 // Integration test for cluster extension using CustomStaticCluster.
-class CustomClusterIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                     public HttpIntegrationTest {
+class CustomClusterIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
-  CustomClusterIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {}
+  CustomClusterIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void initialize() override {
     setUpstreamCount(1);
@@ -49,8 +53,10 @@ public:
   bool cluster_provided_lb_{};
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, CustomClusterIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()));
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, CustomClusterIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())));
 
 TEST_P(CustomClusterIntegrationTest, TestRouterHeaderOnly) {
   testRouterHeaderOnlyRequestAndResponse(nullptr, UpstreamIndex);

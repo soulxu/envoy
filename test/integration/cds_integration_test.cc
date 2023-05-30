@@ -32,7 +32,7 @@ const int UpstreamIndex2 = 2;
 class CdsIntegrationTest : public Grpc::DeltaSotwIntegrationParamTest, public HttpIntegrationTest {
 public:
   CdsIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP2, ipVersion(),
+      : HttpIntegrationTest(Http::CodecType::HTTP2, ipVersion(), socketInterface(),
                             ConfigHelper::discoveredClustersBootstrap(
                                 sotwOrDelta() == Grpc::SotwOrDelta::Sotw ||
                                         sotwOrDelta() == Grpc::SotwOrDelta::UnifiedSotw

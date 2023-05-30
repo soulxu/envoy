@@ -18,6 +18,7 @@ class AlpnSelectionIntegrationTest : public testing::Test, public HttpIntegratio
 public:
   AlpnSelectionIntegrationTest()
       : HttpIntegrationTest(Http::CodecType::HTTP1, TestEnvironment::getIpVersionsForTest().front(),
+                            TestEnvironment::getSocketInterfacesForTest().front(),
                             ConfigHelper::httpProxyConfig()) {}
 
   void initialize() override {

@@ -16,8 +16,9 @@ namespace Ssl {
 
 class SslIntegrationTestBase : public HttpIntegrationTest {
 public:
-  SslIntegrationTestBase(Network::Address::IpVersion ip_version)
-      : HttpIntegrationTest(Http::CodecType::HTTP1, ip_version) {}
+  SslIntegrationTestBase(Network::Address::IpVersion ip_version,
+                         Network::DefaultSocketInterface interface)
+      : HttpIntegrationTest(Http::CodecType::HTTP1, ip_version, interface) {}
 
   void initialize() override;
 
@@ -48,10 +49,12 @@ protected:
   std::unique_ptr<ContextManager> context_manager_;
 };
 
-class SslIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                           public SslIntegrationTestBase {
+class SslIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public SslIntegrationTestBase {
 public:
-  SslIntegrationTest() : SslIntegrationTestBase(GetParam()) {}
+  SslIntegrationTest() : SslIntegrationTestBase(std::get<0>(GetParam()), std::get<1>(GetParam())) {}
   void TearDown() override { SslIntegrationTestBase::TearDown(); };
 };
 

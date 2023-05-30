@@ -122,10 +122,14 @@ static_resources:
                                                   Platform::null_device_path));
 }
 
-class AggregateIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                                 public HttpIntegrationTest {
+class AggregateIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
-  AggregateIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam(), config()) {
+  AggregateIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam()), config()) {
     use_lds_ = false;
   }
 
@@ -143,10 +147,10 @@ public:
     addFakeUpstream(Http::CodecType::HTTP2);
     cluster1_ = ConfigHelper::buildStaticCluster(
         FirstClusterName, fake_upstreams_[FirstUpstreamIndex]->localAddress()->ip()->port(),
-        Network::Test::getLoopbackAddressString(GetParam()));
+        Network::Test::getLoopbackAddressString(std::get<0>(GetParam())));
     cluster2_ = ConfigHelper::buildStaticCluster(
         SecondClusterName, fake_upstreams_[SecondUpstreamIndex]->localAddress()->ip()->port(),
-        Network::Test::getLoopbackAddressString(GetParam()));
+        Network::Test::getLoopbackAddressString(std::get<0>(GetParam())));
 
     // Let Envoy establish its connection to the CDS server.
     acceptXdsConnection();
@@ -177,8 +181,10 @@ public:
   envoy::config::cluster::v3::Cluster cluster2_;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, AggregateIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()));
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, AggregateIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())));
 
 TEST_P(AggregateIntegrationTest, ClusterUpDownUp) {
   // Calls our initialize(), which includes establishing a listener, route, and cluster.

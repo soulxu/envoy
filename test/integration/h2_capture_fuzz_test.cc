@@ -24,7 +24,8 @@ DEFINE_PROTO_FUZZER(const test::integration::H2CaptureFuzzTestCase& input) {
   // Pick an IP version to use for loopback, it doesn't matter which.
   FUZZ_ASSERT(!TestEnvironment::getIpVersionsForTest().empty());
   const auto ip_version = TestEnvironment::getIpVersionsForTest()[0];
-  PERSISTENT_FUZZ_VAR H2FuzzIntegrationTest h2_fuzz_integration_test(ip_version);
+  const auto interface = TestEnvironment::getSocketInterfacesForTest()[0];
+  PERSISTENT_FUZZ_VAR H2FuzzIntegrationTest h2_fuzz_integration_test(ip_version, interface);
   h2_fuzz_integration_test.replay(input, false);
 }
 

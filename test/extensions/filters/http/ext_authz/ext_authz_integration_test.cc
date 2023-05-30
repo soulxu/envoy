@@ -26,7 +26,8 @@ using Headers = std::vector<std::pair<const std::string, const std::string>>;
 class ExtAuthzGrpcIntegrationTest : public Grpc::GrpcClientIntegrationParamTest,
                                     public HttpIntegrationTest {
 public:
-  ExtAuthzGrpcIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, ipVersion()) {}
+  ExtAuthzGrpcIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, ipVersion(), socketInterface()) {}
 
   void createUpstreams() override {
     HttpIntegrationTest::createUpstreams();
@@ -458,10 +459,14 @@ attributes:
   )EOF";
 };
 
-class ExtAuthzHttpIntegrationTest : public HttpIntegrationTest,
-                                    public TestWithParam<Network::Address::IpVersion> {
+class ExtAuthzHttpIntegrationTest
+    : public HttpIntegrationTest,
+      public TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>> {
 public:
-  ExtAuthzHttpIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {}
+  ExtAuthzHttpIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void createUpstreams() override {
     HttpIntegrationTest::createUpstreams();
@@ -847,9 +852,11 @@ TEST_P(ExtAuthzGrpcIntegrationTest, FailureModeAllowNonUtf8) {
   cleanup();
 }
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, ExtAuthzHttpIntegrationTest,
-                         ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, ExtAuthzHttpIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // Verifies that by default HTTP service uses the case-sensitive string matcher
 // (uses legacy config for allowed_headers).
@@ -954,10 +961,14 @@ TEST_P(ExtAuthzHttpIntegrationTest, RedirectResponse) {
   EXPECT_EQ("http://host/redirect", response_->headers().getLocationValue());
 }
 
-class ExtAuthzLocalReplyIntegrationTest : public HttpIntegrationTest,
-                                          public TestWithParam<Network::Address::IpVersion> {
+class ExtAuthzLocalReplyIntegrationTest
+    : public HttpIntegrationTest,
+      public TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>> {
 public:
-  ExtAuthzLocalReplyIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP1, GetParam()) {}
+  ExtAuthzLocalReplyIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {}
 
   void createUpstreams() override {
     HttpIntegrationTest::createUpstreams();
@@ -977,9 +988,11 @@ public:
   FakeHttpConnectionPtr fake_ext_authz_connection_;
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, ExtAuthzLocalReplyIntegrationTest,
-                         ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, ExtAuthzLocalReplyIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 // This integration test uses ext_authz combined with `local_reply_config`.
 // * If ext_authz response status is 401; its response headers and body are sent to the client.

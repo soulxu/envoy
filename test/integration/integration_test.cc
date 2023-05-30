@@ -59,16 +59,19 @@ void setAllowHttp10WithDefaultHost(
 }
 
 std::string testParamToString(
-    const testing::TestParamInfo<std::tuple<Network::Address::IpVersion, Http1ParserImpl>>&
+    const testing::TestParamInfo<
+        std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, Http1ParserImpl>>&
         params) {
   return absl::StrCat(TestUtility::ipVersionToString(std::get<0>(params.param)),
-                      TestUtility::http1ParserImplToString(std::get<1>(params.param)));
+                      TestUtility::socketInterfaceToString(std::get<1>(params.param)),
+                      TestUtility::http1ParserImplToString(std::get<2>(params.param)));
 }
 
 } // namespace
 
 INSTANTIATE_TEST_SUITE_P(IpVersionsAndHttp1Parser, IntegrationTest,
                          Combine(ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                                 testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
                                  Values(Http1ParserImpl::HttpParser, Http1ParserImpl::BalsaParser)),
                          testParamToString);
 
@@ -1900,6 +1903,7 @@ TEST_P(IntegrationTest, TrailersDroppedDownstream) {
 
 INSTANTIATE_TEST_SUITE_P(IpVersionsAndHttp1Parser, UpstreamEndpointIntegrationTest,
                          Combine(ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                                 testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
                                  Values(Http1ParserImpl::HttpParser, Http1ParserImpl::BalsaParser)),
                          testParamToString);
 

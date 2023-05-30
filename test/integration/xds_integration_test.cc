@@ -24,10 +24,14 @@ namespace {
 using testing::HasSubstr;
 
 // This is a minimal litmus test for the v3 xDS APIs.
-class XdsIntegrationTest : public testing::TestWithParam<Network::Address::IpVersion>,
-                           public HttpIntegrationTest {
+class XdsIntegrationTest
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface>>,
+      public HttpIntegrationTest {
 public:
-  XdsIntegrationTest() : HttpIntegrationTest(Http::CodecType::HTTP2, GetParam()) {
+  XdsIntegrationTest()
+      : HttpIntegrationTest(Http::CodecType::HTTP2, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())) {
     setUpstreamProtocol(Http::CodecType::HTTP2);
   }
 
@@ -51,9 +55,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, XdsIntegrationTest,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, XdsIntegrationTest,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(XdsIntegrationTest, RouterRequestAndResponseWithBodyNoBuffer) {
   testRouterRequestAndResponseWithBody(1024, 512, false);
@@ -74,9 +80,11 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, XdsIntegrationTestTypedStruct,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, XdsIntegrationTestTypedStruct,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(XdsIntegrationTestTypedStruct, RouterRequestAndResponseWithBodyNoBuffer) {
   testRouterRequestAndResponseWithBody(1024, 512, false);
@@ -99,21 +107,25 @@ public:
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(IpVersions, UdpaXdsIntegrationTestListCollection,
-                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
-                         TestUtility::ipTestParamsToString);
+INSTANTIATE_TEST_SUITE_P(
+    IpVersions, UdpaXdsIntegrationTestListCollection,
+    testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest())),
+    TestUtility::ipAndSocketInterfaceTestParamsToString);
 
 TEST_P(UdpaXdsIntegrationTestListCollection, RouterRequestAndResponseWithBodyNoBuffer) {
   testRouterRequestAndResponseWithBody(1024, 512, false);
 }
 
 class LdsInplaceUpdateTcpProxyIntegrationTest
-    : public testing::TestWithParam<std::tuple<Network::Address::IpVersion, bool>>,
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, bool>>,
       public BaseIntegrationTest {
 public:
   LdsInplaceUpdateTcpProxyIntegrationTest()
-      : BaseIntegrationTest(std::get<0>(GetParam()), ConfigHelper::baseConfig() +
-                                                         (std::get<1>(GetParam()) ? R"EOF(
+      : BaseIntegrationTest(std::get<0>(GetParam()), std::get<1>(GetParam()),
+                            ConfigHelper::baseConfig() +
+                                (std::get<2>(GetParam()) ? R"EOF(
     filter_chain_matcher:
       matcher_tree:
         input:
@@ -135,8 +147,8 @@ public:
                   "@type": type.googleapis.com/google.protobuf.StringValue
                   value: bar
 )EOF"
-                                                                                  : "") +
-                                                         R"EOF(
+                                                         : "") +
+                                R"EOF(
     filter_chains:
     - filter_chain_match:
         application_protocols: ["alpn0"]
@@ -169,7 +181,7 @@ public:
           stat_prefix: tcp_stats
           cluster: cluster_0
 )EOF"),
-        matcher_(std::get<1>(GetParam())) {}
+        matcher_(std::get<2>(GetParam())) {}
 
   void initialize() override {
     config_helper_.renameListener("tcp");
@@ -361,12 +373,14 @@ TEST_P(LdsInplaceUpdateTcpProxyIntegrationTest, ReloadConfigAddingFilterChain) {
 }
 
 class LdsInplaceUpdateHttpIntegrationTest
-    : public testing::TestWithParam<std::tuple<Network::Address::IpVersion, bool>>,
+    : public testing::TestWithParam<
+          std::tuple<Network::Address::IpVersion, Network::DefaultSocketInterface, bool>>,
       public HttpIntegrationTest {
 public:
   LdsInplaceUpdateHttpIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam())),
-        matcher_(std::get<1>(GetParam())) {}
+      : HttpIntegrationTest(Http::CodecType::HTTP1, std::get<0>(GetParam()),
+                            std::get<1>(GetParam())),
+        matcher_(std::get<2>(GetParam())) {}
 
   void inplaceInitialize(bool add_default_filter_chain = false) {
     autonomous_upstream_ = true;
@@ -651,11 +665,13 @@ TEST_P(LdsInplaceUpdateHttpIntegrationTest, DefaultFilterChainUpdate) {}
 INSTANTIATE_TEST_SUITE_P(
     IpVersionsAndMatcher, LdsInplaceUpdateHttpIntegrationTest,
     testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
                      testing::Values(false, true)));
 
 INSTANTIATE_TEST_SUITE_P(
     IpVersionsAndMatcher, LdsInplaceUpdateTcpProxyIntegrationTest,
     testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
                      testing::Values(false, true)));
 
 using LdsIntegrationTest = HttpProtocolIntegrationTest;
@@ -748,6 +764,7 @@ class LdsStsIntegrationTest : public Event::SimulatedTimeSystem,
 INSTANTIATE_TEST_SUITE_P(
     IpVersionsAndMatcher, LdsStsIntegrationTest,
     testing::Combine(testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                     testing::ValuesIn(TestEnvironment::getSocketInterfacesForTest()),
                      testing::Values(false, true)));
 
 // Verify that the listener in place update will accomplish anyway if the listener is removed.
@@ -813,7 +830,7 @@ class XdsSotwMultipleAuthoritiesTest : public HttpIntegrationTest,
                                        public Grpc::GrpcClientIntegrationParamTest {
 public:
   XdsSotwMultipleAuthoritiesTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP2, ipVersion(),
+      : HttpIntegrationTest(Http::CodecType::HTTP2, ipVersion(), socketInterface(),
                             ConfigHelper::baseConfigNoListeners()) {
     use_lds_ = false;
     sotw_or_delta_ = Grpc::SotwOrDelta::Sotw;

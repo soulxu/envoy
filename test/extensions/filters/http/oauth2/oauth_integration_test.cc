@@ -20,7 +20,8 @@ class OauthIntegrationTest : public HttpIntegrationTest,
                              public Grpc::GrpcClientIntegrationParamTest {
 public:
   OauthIntegrationTest()
-      : HttpIntegrationTest(Http::CodecType::HTTP2, Network::Address::IpVersion::v4) {
+      : HttpIntegrationTest(Http::CodecType::HTTP2, Network::Address::IpVersion::v4,
+                            Network::DefaultSocketInterface::Default) {
     skip_tag_extraction_rule_check_ = true;
     enableHalfClose(true);
   }
