@@ -2,7 +2,10 @@ syntax = "proto3";
 
 package envoy.extensions.network.socket_interface.v3;
 
+import "google/protobuf/wrappers.proto";
+
 import "udpa/annotations/status.proto";
+import "validate/validate.proto";
 
 option java_package = "io.envoyproxy.envoy.extensions.network.socket_interface.v3";
 option java_outer_classname = "DefaultSocketInterfaceProto";
@@ -15,4 +18,38 @@ option (udpa.annotations.file_status).package_version_status = ACTIVE;
 // Configuration for default socket interface that relies on OS dependent syscall to create
 // sockets.
 message DefaultSocketInterface {
+  // Enable io_uring for socket operations if the kernel supports. io_uring is only valid in
+  // Linux with minimum kernel version 5.6. Otherwise, Envoy will fallback to use the default
+  // socket operations. Default to false.
+  bool enable_io_uring = 1;
+
+  // The size for io_uring submission queues (SQ) and completion queues (CQ). io_uring is built
+  // up during configuration with a fixed size in each threads, and each io_uring operation will
+  // create a submission queue entry (SQE). Once the SQ is used up, more operations will not be
+  // added to the io_uring. Default to 1000.
+  google.protobuf.UInt32Value io_uring_size = 2;
+
+  // Enable io_uring submission queue polling (SQPOLL). io_uring SQPOLL mode polls all SQEs in SQ
+  // in the kernel thread. io_uring SQPOLL mode may reduce latency and increase CPU usage as a
+  // cost. Default to false.
+  bool enable_io_uring_submission_queue_polling = 3;
+
+  // The size of a io_uring TCP accept socket's pending connections queue can grow to. The value is
+  // different from :ref:`tcp_backlog_size <envoy_v3_api_field_config.listener.v3.Listener.tcp_backlog_size>`.
+  // Connections in TCP listener's queue are not being accepted, while connections in io_uring TCP
+  // accept socket's queue are accepted but not handled. io_uring accepts sockets asynchronously,
+  // and a large backlog value will have a better performance in situation with large number of no
+  // keep-alive connections. Default to 5.
+  google.protobuf.UInt32Value io_uring_accept_backlog = 4;
+
+  // The size of a io_uring socket's read buffer. Each io_uring read operation will allocate buffer
+  // with the given size, and if the buffer provided is to small, the socket may read multiple
+  // times to read all the data. Default to 8192.
+  google.protobuf.UInt32Value io_uring_read_buffer_size = 5;
+
+  // The timeout of a io_uring socket's write on closing in ms. io_uring writes and closes
+  // asynchronously. If the remote stops reading, the io_uring write operation may never complete.
+  // Connections may have timeout like per_try_timeout before closing, and io_uring adds another
+  // timeout period on top of it. Default to 1000.
+  google.protobuf.UInt32Value io_uring_write_timeout_ms = 6;
 }

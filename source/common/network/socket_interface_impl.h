@@ -44,13 +44,6 @@ public:
                                                 absl::optional<int> domain,
                                                 Io::IoUringFactory* io_uring_factory = nullptr);
 
-  // TODO (soulxu): making those configurable
-  static constexpr uint32_t DefaultIoUringSize = 300;
-  static constexpr uint32_t DefaultAcceptSize = 5;
-  static constexpr uint32_t DefaultReadBufferSize = 8192;
-  static constexpr uint32_t DefaultWriteTimeoutMs = 1000;
-  static constexpr bool UseSubmissionQueuePolling = false;
-
 protected:
   virtual IoHandlePtr makeSocket(int socket_fd, bool socket_v6only, Socket::Type socket_type,
                                  absl::optional<int> domain) const;
