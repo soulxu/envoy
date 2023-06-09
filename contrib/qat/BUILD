@@ -26,6 +26,7 @@ configure_make(
         "-Wno-error=sizeof-array-decay",
         "-Wno-error=unneeded-internal-declaration",
     ],
+    linkopts = ["-ludev"],
     #copts = ["-Qunused-arguments",
     #         "-Qenum-conversion"],
     #env = {
@@ -33,16 +34,16 @@ configure_make(
     #      "CC": "/home/xuhj/clang+llvm-14.0.0-x86_64-linux-gnu-ubuntu-18.04/bin/clang",
     #},
     lib_source = "@com_github_intel_qatlib//:all",
-    out_shared_libs = [
-        "libqat_s.so",
-        "libusdm_drv_s.so",
+    # out_shared_libs = [
+    #     "libqat_s.so",
+    #     "libusdm_drv_s.so",
+    # ],
+    out_static_libs = [
+       "libqat.a",
+       "libusdm_drv.a",
+       "libadf.a",
+       "libosal.a",
     ],
-    #out_static_libs = [
-    #    "libqat.a",
-    #    "libusdm_drv.a",
-    #    "libadf.a",
-    #    "libosal.a",
-    #],
     target_compatible_with = envoy_contrib_linux_x86_64_constraints(),
     visibility = ["//visibility:public"],
     #deps = ["@boringssl//:ssl"],
