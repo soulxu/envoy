@@ -483,6 +483,7 @@ def _com_github_intel_qatlib():
         patches = [
             "@envoy//bazel/external:0001-qat-build.patch",
             "@envoy//bazel/external:0002-qat-no-driver-install.patch",
+            "@envoy//bazel/external:0003-qat-fix-fortify-source.patch"
         ],
         patch_args = ["-p1"],
     )
