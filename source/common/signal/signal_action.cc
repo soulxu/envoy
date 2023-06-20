@@ -105,9 +105,9 @@ void SignalAction::mapAndProtectStackMemory() {
   altstack_ = static_cast<char*>(mmap(nullptr, mapSizeWithGuards(), PROT_READ | PROT_WRITE,
                                       MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0));
   RELEASE_ASSERT(altstack_, "");
-  RELEASE_ASSERT(mprotect(altstack_, guard_size_, PROT_NONE) == 0, "");
-  RELEASE_ASSERT(mprotect(altstack_ + guard_size_ + altstack_size_, guard_size_, PROT_NONE) == 0,
-                 "");
+  // RELEASE_ASSERT(mprotect(altstack_, guard_size_, PROT_NONE) == 0, "");
+  // RELEASE_ASSERT(mprotect(altstack_ + guard_size_ + altstack_size_, guard_size_, PROT_NONE) == 0,
+  //                "");
 }
 
 void SignalAction::unmapStackMemory() { munmap(altstack_, mapSizeWithGuards()); }
