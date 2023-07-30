@@ -35,6 +35,7 @@ envoy_cc_test(
     }),
     deps = [
         "//source/common/network:address_lib",
+        "//test/mocks/io:io_mocks",
         "//test/mocks/server:server_mocks",
         "//test/test_common:environment_lib",
         "//test/test_common:utility_lib",

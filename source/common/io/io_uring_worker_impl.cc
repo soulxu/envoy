@@ -30,7 +30,6 @@ IoUringSocketEntry::IoUringSocketEntry(os_fd_t fd, IoUringWorkerImpl& parent, Ev
     : fd_(fd), parent_(parent), enable_close_event_(enable_close_event), cb_(std::move(cb)) {}
 
 void IoUringSocketEntry::cleanup() {
-  parent_.removeInjectedCompletion(*this);
   IoUringSocketEntryPtr socket = parent_.removeSocket(*this);
   parent_.dispatcher().deferredDelete(std::move(socket));
 }
@@ -123,8 +122,7 @@ IoUringSocket& IoUringWorkerImpl::addAcceptSocket(os_fd_t fd, Event::FileReadyCb
   std::unique_ptr<IoUringAcceptSocket> socket = std::make_unique<IoUringAcceptSocket>(
       fd, *this, std::move(cb), accept_size_, enable_close_event);
   socket->enable();
-  LinkedList::moveIntoListBack(std::move(socket), sockets_);
-  return *sockets_.back();
+  return addSocket(std::move(socket));
 }
 
 IoUringSocket& IoUringWorkerImpl::addServerSocket(os_fd_t fd, Event::FileReadyCb cb,
@@ -133,8 +131,7 @@ IoUringSocket& IoUringWorkerImpl::addServerSocket(os_fd_t fd, Event::FileReadyCb
   std::unique_ptr<IoUringServerSocket> socket = std::make_unique<IoUringServerSocket>(
       fd, *this, std::move(cb), write_timeout_ms_, enable_close_event);
   socket->enable();
-  LinkedList::moveIntoListBack(std::move(socket), sockets_);
-  return *sockets_.back();
+  return addSocket(std::move(socket));
 }
 
 IoUringSocket& IoUringWorkerImpl::addServerSocket(os_fd_t fd, Buffer::Instance& read_buf,
@@ -143,15 +140,17 @@ IoUringSocket& IoUringWorkerImpl::addServerSocket(os_fd_t fd, Buffer::Instance& 
   std::unique_ptr<IoUringServerSocket> socket = std::make_unique<IoUringServerSocket>(
       fd, read_buf, *this, std::move(cb), write_timeout_ms_, enable_close_event);
   socket->enable();
-  LinkedList::moveIntoListBack(std::move(socket), sockets_);
-  return *sockets_.back();
+  return addSocket(std::move(socket));
 }
 
 IoUringSocket& IoUringWorkerImpl::addClientSocket(os_fd_t fd, Event::FileReadyCb cb,
                                                   bool enable_close_event) {
   ENVOY_LOG(trace, "add client socket, fd = {}", fd);
-  std::unique_ptr<IoUringClientSocket> socket = std::make_unique<IoUringClientSocket>(
-      fd, *this, std::move(cb), write_timeout_ms_, enable_close_event);
+  return addSocket(std::make_unique<IoUringClientSocket>(
+      fd, *this, std::move(cb), write_timeout_ms_, enable_close_event));
+}
+
+IoUringSocketEntry& IoUringWorkerImpl::addSocket(IoUringSocketEntryPtr&& socket) {
   LinkedList::moveIntoListBack(std::move(socket), sockets_);
   return *sockets_.back();
 }
@@ -280,6 +279,8 @@ Request* IoUringWorkerImpl::submitShutdownRequest(IoUringSocket& socket, int how
 }
 
 IoUringSocketEntryPtr IoUringWorkerImpl::removeSocket(IoUringSocketEntry& socket) {
+  // Remove all the injectioned completion for this socket.
+  io_uring_->removeInjectedCompletion(socket.fd());
   return socket.removeFromList(sockets_);
 }
 
@@ -287,10 +288,6 @@ void IoUringWorkerImpl::injectCompletion(IoUringSocket& socket, uint32_t type, i
   Request* req = new BaseRequest(type, socket);
   io_uring_->injectCompletion(socket.fd(), req, result);
   file_event_->activate(Event::FileReadyType::Read);
-}
-
-void IoUringWorkerImpl::removeInjectedCompletion(IoUringSocket& socket) {
-  io_uring_->removeInjectedCompletion(socket.fd());
 }
 
 void IoUringWorkerImpl::onFileEvent() {

@@ -71,8 +71,6 @@ public:
   IoUringSocket& addClientSocket(os_fd_t fd, Event::FileReadyCb cb,
                                  bool enable_close_event) override;
 
-  Event::Dispatcher& dispatcher() override;
-
   Request* submitAcceptRequest(IoUringSocket& socket) override;
   Request* submitConnectRequest(IoUringSocket& socket,
                                 const Network::Address::InstanceConstSharedPtr& address) override;
@@ -81,16 +79,24 @@ public:
   Request* submitCloseRequest(IoUringSocket& socket) override;
   Request* submitCancelRequest(IoUringSocket& socket, Request* request_to_cancel) override;
   Request* submitShutdownRequest(IoUringSocket& socket, int how) override;
+  // IoUringWorker
+  Event::Dispatcher& dispatcher() override;
+
+  // Remove a socket from this worker.
+  IoUringSocketEntryPtr removeSocket(IoUringSocketEntry& socket);
+
+  // Inject a request completion into the io_uring instance for a specific socket.
+  void injectCompletion(IoUringSocket& socket, uint32_t type, int32_t result);
+
+  // Return the number of sockets in this worker.
   uint32_t getNumOfSockets() const override { return sockets_.size(); }
 
-  // From socket from the worker.
-  IoUringSocketEntryPtr removeSocket(IoUringSocketEntry& socket);
-  // Inject a request completion into the io_uring instance.
-  void injectCompletion(IoUringSocket& socket, uint32_t type, int32_t result);
-  // Remove all the injected completion for the specific socket.
-  void removeInjectedCompletion(IoUringSocket& socket);
-
 protected:
+  // Add a socket to the worker.
+  IoUringSocketEntry& addSocket(IoUringSocketEntryPtr&& socket);
+  void onFileEvent();
+  void submit();
+
   // The io_uring instance.
   IoUringPtr io_uring_;
   const uint32_t accept_size_;
@@ -105,9 +111,6 @@ protected:
   // The IoUringWorker will delay the submit the requests which are submitted in request completion
   // callback.
   bool delay_submit_{false};
-
-  void onFileEvent();
-  void submit();
 };
 
 class IoUringSocketEntry : public IoUringSocket,
@@ -138,9 +141,7 @@ public:
   void write(Buffer::Instance&) override { PANIC("not implement"); }
   uint64_t write(const Buffer::RawSlice*, uint64_t) override { PANIC("not implement"); }
   void shutdown(int) override { PANIC("not implement"); }
-  // This will cleanup all the injected completions for this socket and
-  // unlink itself from the worker.
-  void cleanup();
+
   void onAccept(Request*, int32_t, bool injected) override {
     if (injected && (injected_completions_ & RequestType::Accept)) {
       injected_completions_ &= ~RequestType::Accept;
@@ -180,6 +181,7 @@ public:
     }
   }
   void injectCompletion(uint32_t type) override;
+
   IoUringSocketStatus getStatus() const override { return status_; }
 
   const OptRef<ReadParam>& getReadParam() const override { return read_param_; }
@@ -199,6 +201,9 @@ public:
   void onLocalClose();
 
 protected:
+  // This will cleanup all the injected completions for this socket and
+  // unlink itself from the worker.
+  void cleanup();
   os_fd_t fd_{INVALID_SOCKET};
   IoUringWorkerImpl& parent_;
   uint32_t injected_completions_{0};

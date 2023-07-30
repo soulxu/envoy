@@ -11,6 +11,21 @@ namespace Io {
 class IoUringSocket;
 
 /**
+ * io_uring request type.
+ */
+struct RequestType {
+  static constexpr uint32_t Accept = 0x1;
+  static constexpr uint32_t Connect = 0x2;
+  static constexpr uint32_t Read = 0x4;
+  static constexpr uint32_t Write = 0x8;
+  static constexpr uint32_t Close = 0x10;
+  static constexpr uint32_t Cancel = 0x20;
+  static constexpr uint32_t Shutdown = 0x40;
+};
+
+class IoUringSocket;
+
+/**
  * Abstract for io_uring I/O Request.
  */
 class Request {
@@ -155,21 +170,7 @@ public:
 };
 
 using IoUringPtr = std::unique_ptr<IoUring>;
-
-/**
- * io_uring request type.
- */
-struct RequestType {
-  static constexpr uint32_t Accept = 0x1;
-  static constexpr uint32_t Connect = 0x2;
-  static constexpr uint32_t Read = 0x4;
-  static constexpr uint32_t Write = 0x8;
-  static constexpr uint32_t Close = 0x10;
-  static constexpr uint32_t Cancel = 0x20;
-  static constexpr uint32_t Shutdown = 0x40;
-};
-
-class IoUringSocket;
+class IoUringWorker;
 
 /**
  * The Status of IoUringSocket.
@@ -181,8 +182,6 @@ enum IoUringSocketStatus {
   RemoteClosed,
   Closed,
 };
-
-class IoUringWorker;
 
 using IoUringSocketOnClosedCb = std::function<void()>;
 
@@ -345,6 +344,8 @@ public:
   virtual void clearAcceptedSocketParam() PURE;
   virtual void setFileReadyCb(Event::FileReadyCb cb) PURE;
 };
+
+using IoUringSocketPtr = std::unique_ptr<IoUringSocket>;
 
 /**
  * Abstract for per-thread worker.

@@ -13,23 +13,22 @@ public:
   MOCK_METHOD(void, forEveryCompletion, (const CompletionCb& completion_cb));
   MOCK_METHOD(IoUringResult, prepareAccept,
               (os_fd_t fd, struct sockaddr* remote_addr, socklen_t* remote_addr_len,
-               void* user_data));
+               Request* user_data));
   MOCK_METHOD(IoUringResult, prepareConnect,
               (os_fd_t fd, const Network::Address::InstanceConstSharedPtr& address,
-               void* user_data));
+               Request* user_data));
   MOCK_METHOD(IoUringResult, prepareReadv,
               (os_fd_t fd, const struct iovec* iovecs, unsigned nr_vecs, off_t offset,
-               void* user_data));
+               Request* user_data));
   MOCK_METHOD(IoUringResult, prepareWritev,
               (os_fd_t fd, const struct iovec* iovecs, unsigned nr_vecs, off_t offset,
-               void* user_data));
-  MOCK_METHOD(IoUringResult, prepareClose, (os_fd_t fd, void* user_data));
-  MOCK_METHOD(IoUringResult, prepareCancel, (void* cancelling_user_data, void* user_data));
-  MOCK_METHOD(IoUringResult, prepareShutdown, (os_fd_t fd, int how, void* user_data));
+               Request* user_data));
+  MOCK_METHOD(IoUringResult, prepareClose, (os_fd_t fd, Request* user_data));
+  MOCK_METHOD(IoUringResult, prepareCancel, (Request * cancelling_user_data, Request* user_data));
+  MOCK_METHOD(IoUringResult, prepareShutdown, (os_fd_t fd, int how, Request* user_data));
   MOCK_METHOD(IoUringResult, submit, ());
-  MOCK_METHOD(void, injectCompletion, (os_fd_t fd, void* user_data, int32_t result));
-  MOCK_METHOD(void, removeInjectedCompletion,
-              (os_fd_t fd, InjectedCompletionUserDataReleasor releasor));
+  MOCK_METHOD(void, injectCompletion, (os_fd_t fd, Request* user_data, int32_t result));
+  MOCK_METHOD(void, removeInjectedCompletion, (os_fd_t fd));
 };
 
 class MockIoUringFactory : public IoUringFactory {

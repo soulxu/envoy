@@ -15,9 +15,9 @@ namespace Envoy {
 namespace Io {
 namespace {
 
-class IoUringTestSocket : public IoUringSocketEntry {
+class IoUringSocketTestImpl : public IoUringSocketEntry {
 public:
-  IoUringTestSocket(os_fd_t fd, IoUringWorkerImpl& parent)
+  IoUringSocketTestImpl(os_fd_t fd, IoUringWorkerImpl& parent)
       : IoUringSocketEntry(
             fd, parent, [](uint32_t) {}, false) {}
 
@@ -69,6 +69,8 @@ public:
     nr_completion_++;
   }
 
+  void cleanupForTest() { cleanup(); }
+
   int32_t accept_result_{-1};
   bool is_accept_injected_completion_{false};
   int32_t connect_result_{-1};
@@ -92,9 +94,7 @@ public:
   IoUringWorkerTestImpl(IoUringPtr io_uring_instance, Event::Dispatcher& dispatcher)
       : IoUringWorkerImpl(std::move(io_uring_instance), 5, 8192, 1000, dispatcher) {}
   IoUringSocket& addTestSocket(os_fd_t fd) {
-    std::unique_ptr<IoUringTestSocket> socket = std::make_unique<IoUringTestSocket>(fd, *this);
-    LinkedList::moveIntoListBack(std::move(socket), sockets_);
-    return *sockets_.back();
+    return addSocket(std::make_unique<IoUringSocketTestImpl>(fd, *this));
   }
 
   const std::list<IoUringSocketEntryPtr>& getSockets() const { return sockets_; }
@@ -212,7 +212,7 @@ TEST_F(IoUringWorkerIntegrationTest, Accept) {
   socket(false, true);
   listen();
 
-  auto& socket = dynamic_cast<IoUringTestSocket&>(io_uring_worker_->addTestSocket(listen_socket_));
+  auto& socket = dynamic_cast<IoUringSocketTestImpl&>(io_uring_worker_->addTestSocket(listen_socket_));
   EXPECT_EQ(io_uring_worker_->getSockets().size(), 1);
 
   // Connect through client socket.
@@ -227,7 +227,7 @@ TEST_F(IoUringWorkerIntegrationTest, Accept) {
   EXPECT_GE(socket.accept_result_, 0);
   EXPECT_FALSE(socket.is_accept_injected_completion_);
 
-  socket.cleanup();
+  dynamic_cast<IoUringSocketTestImpl*>(io_uring_worker_->getSockets().front().get())->cleanupForTest();
   EXPECT_EQ(io_uring_worker_->getSockets().size(), 0);
   cleanup();
 }
@@ -237,7 +237,7 @@ TEST_F(IoUringWorkerIntegrationTest, Connect) {
   socket(true, false);
   listen();
 
-  auto& socket = dynamic_cast<IoUringTestSocket&>(io_uring_worker_->addTestSocket(client_socket_));
+  auto& socket = dynamic_cast<IoUringSocketTestImpl&>(io_uring_worker_->addTestSocket(client_socket_));
   EXPECT_EQ(io_uring_worker_->getSockets().size(), 1);
 
   // Waiting for the client socket connect.
@@ -255,7 +255,7 @@ TEST_F(IoUringWorkerIntegrationTest, Connect) {
   EXPECT_EQ(socket.connect_result_, 0);
   EXPECT_FALSE(socket.is_connect_injected_completion_);
 
-  socket.cleanup();
+  dynamic_cast<IoUringSocketTestImpl*>(io_uring_worker_->getSockets().front().get())->cleanupForTest();
   EXPECT_EQ(io_uring_worker_->getSockets().size(), 0);
   cleanup();
 }
@@ -264,7 +264,7 @@ TEST_F(IoUringWorkerIntegrationTest, Read) {
   initialize();
   initializeSockets();
 
-  auto& socket = dynamic_cast<IoUringTestSocket&>(io_uring_worker_->addTestSocket(server_socket_));
+  auto& socket = dynamic_cast<IoUringSocketTestImpl&>(io_uring_worker_->addTestSocket(server_socket_));
   EXPECT_EQ(io_uring_worker_->getSockets().size(), 1);
 
   // Write data through client socket.
@@ -280,7 +280,7 @@ TEST_F(IoUringWorkerIntegrationTest, Read) {
   EXPECT_EQ(socket.read_data_, write_data);
   EXPECT_FALSE(socket.is_read_injected_completion_);
 
-  socket.cleanup();
+  dynamic_cast<IoUringSocketTestImpl*>(io_uring_worker_->getSockets().front().get())->cleanupForTest();
   EXPECT_EQ(io_uring_worker_->getSockets().size(), 0);
   cleanup();
 }
@@ -289,7 +289,7 @@ TEST_F(IoUringWorkerIntegrationTest, Write) {
   initialize();
   initializeSockets();
 
-  auto& socket = dynamic_cast<IoUringTestSocket&>(io_uring_worker_->addTestSocket(server_socket_));
+  auto& socket = dynamic_cast<IoUringSocketTestImpl&>(io_uring_worker_->addTestSocket(server_socket_));
   EXPECT_EQ(io_uring_worker_->getSockets().size(), 1);
 
   // Waiting for the server socket sending the data.
@@ -313,7 +313,7 @@ TEST_F(IoUringWorkerIntegrationTest, Write) {
   EXPECT_EQ(read_data, write_data);
   EXPECT_FALSE(socket.is_write_injected_completion_);
 
-  socket.cleanup();
+  dynamic_cast<IoUringSocketTestImpl*>(io_uring_worker_->getSockets().front().get())->cleanupForTest();
   EXPECT_EQ(io_uring_worker_->getSockets().size(), 0);
   cleanup();
 }
@@ -323,7 +323,7 @@ TEST_F(IoUringWorkerIntegrationTest, Close) {
   socket(false, true);
   listen();
 
-  auto& socket = dynamic_cast<IoUringTestSocket&>(io_uring_worker_->addTestSocket(listen_socket_));
+  auto& socket = dynamic_cast<IoUringSocketTestImpl&>(io_uring_worker_->addTestSocket(listen_socket_));
   EXPECT_EQ(io_uring_worker_->getSockets().size(), 1);
 
   // Waiting for the listen socket close.
@@ -335,7 +335,7 @@ TEST_F(IoUringWorkerIntegrationTest, Close) {
   EXPECT_EQ(socket.close_result_, 0);
   EXPECT_FALSE(socket.is_close_injected_completion_);
 
-  socket.cleanup();
+  dynamic_cast<IoUringSocketTestImpl*>(io_uring_worker_->getSockets().front().get())->cleanupForTest();
   EXPECT_EQ(io_uring_worker_->getSockets().size(), 0);
   cleanup();
 }
@@ -344,7 +344,7 @@ TEST_F(IoUringWorkerIntegrationTest, CancelRead) {
   initialize();
   initializeSockets();
 
-  auto& socket = dynamic_cast<IoUringTestSocket&>(io_uring_worker_->addTestSocket(server_socket_));
+  auto& socket = dynamic_cast<IoUringSocketTestImpl&>(io_uring_worker_->addTestSocket(server_socket_));
   EXPECT_EQ(io_uring_worker_->getSockets().size(), 1);
 
   // Waiting for the server socket cancel receiving.
@@ -359,7 +359,7 @@ TEST_F(IoUringWorkerIntegrationTest, CancelRead) {
   EXPECT_FALSE(socket.is_cancel_injected_completion_);
   EXPECT_FALSE(socket.is_read_injected_completion_);
 
-  socket.cleanup();
+  dynamic_cast<IoUringSocketTestImpl*>(io_uring_worker_->getSockets().front().get())->cleanupForTest();
   EXPECT_EQ(io_uring_worker_->getSockets().size(), 0);
   cleanup();
 }
@@ -368,7 +368,7 @@ TEST_F(IoUringWorkerIntegrationTest, Injection) {
   initialize();
   initializeSockets();
 
-  auto& socket = dynamic_cast<IoUringTestSocket&>(io_uring_worker_->addTestSocket(server_socket_));
+  auto& socket = dynamic_cast<IoUringSocketTestImpl&>(io_uring_worker_->addTestSocket(server_socket_));
   EXPECT_EQ(io_uring_worker_->getSockets().size(), 1);
 
   socket.injectCompletion(RequestType::Accept);
@@ -397,7 +397,7 @@ TEST_F(IoUringWorkerIntegrationTest, Injection) {
   EXPECT_EQ(socket.read_result_, -EAGAIN);
   EXPECT_EQ(socket.write_result_, -EAGAIN);
 
-  socket.cleanup();
+  dynamic_cast<IoUringSocketTestImpl*>(io_uring_worker_->getSockets().front().get())->cleanupForTest();
   EXPECT_EQ(io_uring_worker_->getSockets().size(), 0);
   cleanup();
 }
@@ -406,7 +406,7 @@ TEST_F(IoUringWorkerIntegrationTest, ReadAndInjection) {
   initialize();
   initializeSockets();
 
-  auto& socket = dynamic_cast<IoUringTestSocket&>(io_uring_worker_->addTestSocket(server_socket_));
+  auto& socket = dynamic_cast<IoUringSocketTestImpl&>(io_uring_worker_->addTestSocket(server_socket_));
   EXPECT_EQ(io_uring_worker_->getSockets().size(), 1);
 
   // Expect an inject completion after real read request.
@@ -426,7 +426,7 @@ TEST_F(IoUringWorkerIntegrationTest, ReadAndInjection) {
   EXPECT_TRUE(socket.is_write_injected_completion_);
   EXPECT_EQ(socket.write_result_, -EAGAIN);
 
-  socket.cleanup();
+  dynamic_cast<IoUringSocketTestImpl*>(io_uring_worker_->getSockets().front().get())->cleanupForTest();
   EXPECT_EQ(io_uring_worker_->getSockets().size(), 0);
   cleanup();
 }
@@ -435,7 +435,7 @@ TEST_F(IoUringWorkerIntegrationTest, MergeInjection) {
   initialize();
   initializeSockets();
 
-  auto& socket = dynamic_cast<IoUringTestSocket&>(io_uring_worker_->addTestSocket(server_socket_));
+  auto& socket = dynamic_cast<IoUringSocketTestImpl&>(io_uring_worker_->addTestSocket(server_socket_));
   EXPECT_EQ(io_uring_worker_->getSockets().size(), 1);
 
   socket.injectCompletion(RequestType::Read);
@@ -450,7 +450,7 @@ TEST_F(IoUringWorkerIntegrationTest, MergeInjection) {
   EXPECT_EQ(socket.read_result_, -EAGAIN);
   EXPECT_EQ(socket.nr_completion_, 1);
 
-  socket.cleanup();
+  dynamic_cast<IoUringSocketTestImpl*>(io_uring_worker_->getSockets().front().get())->cleanupForTest();
 }
 
 TEST_F(IoUringWorkerIntegrationTest, AcceptSocketAccept) {
