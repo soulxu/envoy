@@ -10,9 +10,9 @@ BaseRequest::BaseRequest(uint32_t type, IoUringSocket& socket) : type_(type), so
 AcceptRequest::AcceptRequest(IoUringSocket& socket) : BaseRequest(RequestType::Accept, socket) {}
 
 ReadRequest::ReadRequest(IoUringSocket& socket, uint32_t size)
-    : BaseRequest(RequestType::Read, socket), buf_{std::make_unique<uint8_t[]>(size), size},
+    : BaseRequest(RequestType::Read, socket), buf_(std::make_unique<uint8_t[]>(size)),
       iov_(std::make_unique<struct iovec>()) {
-  iov_->iov_base = buf_.mem_.get();
+  iov_->iov_base = buf_.get();
   iov_->iov_len = size;
 }
 
@@ -608,9 +608,13 @@ void IoUringServerSocket::onRead(Request* req, int32_t result, bool injected) {
         write_or_shutdown_cancel_req_ == nullptr) {
       if (result > 0 && keep_fd_open_) {
         ReadRequest* read_req = static_cast<ReadRequest*>(req);
-        // TODO (soulxu): Maybe add new interface for get account.
-        read_buf_.addSlice(Buffer::Slice{std::move(read_req->buf_), static_cast<uint64_t>(result),
-                                         read_buf_.getAccountForTest()});
+        Buffer::BufferFragment* fragment = new Buffer::BufferFragmentImpl(
+            read_req->buf_.release(), result,
+            [](const void* data, size_t, const Buffer::BufferFragmentImpl* this_fragment) {
+              delete[] reinterpret_cast<const uint8_t*>(data);
+              delete this_fragment;
+            });
+        read_buf_.addBufferFragment(*fragment);
       }
       closeInternal();
       return;
@@ -620,9 +624,13 @@ void IoUringServerSocket::onRead(Request* req, int32_t result, bool injected) {
   // Move read data from request to buffer or store the error.
   if (result > 0) {
     ReadRequest* read_req = static_cast<ReadRequest*>(req);
-    // TODO (soulxu): Maybe add new interface for get account.
-    read_buf_.addSlice(Buffer::Slice{std::move(read_req->buf_), static_cast<uint64_t>(result),
-                                     read_buf_.getAccountForTest()});
+    Buffer::BufferFragment* fragment = new Buffer::BufferFragmentImpl(
+        read_req->buf_.release(), result,
+        [](const void* data, size_t, const Buffer::BufferFragmentImpl* this_fragment) {
+          delete[] reinterpret_cast<const uint8_t*>(data);
+          delete this_fragment;
+        });
+    read_buf_.addBufferFragment(*fragment);
   } else {
     if (result != -ECANCELED) {
       read_error_ = result;

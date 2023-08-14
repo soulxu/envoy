@@ -39,7 +39,7 @@ public:
     if (!injected && result > 0) {
       auto read_req = static_cast<ReadRequest*>(req);
       read_data_ = std::string(
-          reinterpret_cast<char*>(static_cast<ReadRequest*>(read_req)->buf_.mem_.get()), result);
+          reinterpret_cast<char*>(static_cast<ReadRequest*>(read_req)->buf_.get()), result);
     }
     is_read_injected_completion_ = injected;
     nr_completion_++;

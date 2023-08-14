@@ -38,7 +38,7 @@ class ReadRequest : public BaseRequest {
 public:
   ReadRequest(IoUringSocket& socket, uint32_t size);
 
-  Buffer::Slice::SizedStorage buf_;
+  std::unique_ptr<uint8_t[]> buf_;
   std::unique_ptr<struct iovec> iov_;
 };
 
