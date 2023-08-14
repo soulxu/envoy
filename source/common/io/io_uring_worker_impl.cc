@@ -290,8 +290,7 @@ void IoUringWorkerImpl::injectCompletion(IoUringSocket& socket, uint32_t type, i
 }
 
 void IoUringWorkerImpl::removeInjectedCompletion(IoUringSocket& socket) {
-  io_uring_->removeInjectedCompletion(
-      socket.fd(), [](void* user_data) { delete reinterpret_cast<BaseRequest*>(user_data); });
+  io_uring_->removeInjectedCompletion(socket.fd());
 }
 
 void IoUringWorkerImpl::onFileEvent() {

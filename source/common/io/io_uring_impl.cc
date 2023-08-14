@@ -197,7 +197,7 @@ IoUringResult IoUringImpl::prepareClose(os_fd_t fd, Request* user_data) {
   return IoUringResult::Ok;
 }
 
-IoUringResult IoUringImpl::prepareCancel(void* cancelling_user_data, void* user_data) {
+IoUringResult IoUringImpl::prepareCancel(Request* cancelling_user_data, Request* user_data) {
   ENVOY_LOG(trace, "prepare cancels for user data = {}", fmt::ptr(cancelling_user_data));
   struct io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
   if (sqe == nullptr) {
@@ -210,7 +210,7 @@ IoUringResult IoUringImpl::prepareCancel(void* cancelling_user_data, void* user_
   return IoUringResult::Ok;
 }
 
-IoUringResult IoUringImpl::prepareShutdown(os_fd_t fd, int how, void* user_data) {
+IoUringResult IoUringImpl::prepareShutdown(os_fd_t fd, int how, Request* user_data) {
   ENVOY_LOG(trace, "prepare shutdown for fd = {}, how = {}", fd, how);
   struct io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
   if (sqe == nullptr) {

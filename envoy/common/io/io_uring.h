@@ -1,12 +1,14 @@
 #pragma once
 
-#include <functional>
-
+#include "envoy/buffer/buffer.h"
 #include "envoy/common/pure.h"
 #include "envoy/network/address.h"
+#include "envoy/thread_local/thread_local.h"
 
 namespace Envoy {
 namespace Io {
+
+class IoUringSocket;
 
 /**
  * Abstract for io_uring I/O Request.
@@ -14,6 +16,16 @@ namespace Io {
 class Request {
 public:
   virtual ~Request() = default;
+
+  /**
+   * Return the request type.
+   */
+  virtual uint32_t type() const PURE;
+
+  /**
+   * Return on which io_uring socket the request belongs to.
+   */
+  virtual IoUringSocket& socket() const PURE;
 };
 
 /**
@@ -24,12 +36,6 @@ public:
  * @param injected indicates whether the completion is injected or not.
  */
 using CompletionCb = std::function<void(Request* user_data, int32_t result, bool injected)>;
-
-/**
- * Callback for releasing the user data.
- * @param user_data the pointer to the user data.
- */
-using InjectedCompletionUserDataReleasor = std::function<void(Request* user_data)>;
 
 enum class IoUringResult { Ok, Busy, Failed };
 
@@ -42,12 +48,14 @@ public:
 
   /**
    * Registers an eventfd file descriptor for the ring and returns it.
-   * It can be used for integration with event loops.
+   * It can be used for integration with event loops. The assertion is
+   * the eventfd isn't registered.
    */
   virtual os_fd_t registerEventfd() PURE;
 
   /**
-   * Resets the eventfd file descriptor for the ring.
+   * Resets the eventfd file descriptor for the ring. The assertion is
+   * the eventfd is registered.
    */
   virtual void unregisterEventfd() PURE;
 
@@ -103,6 +111,20 @@ public:
   virtual IoUringResult prepareClose(os_fd_t fd, Request* user_data) PURE;
 
   /**
+   * Prepares a cancellation and puts it into the submission queue.
+   * Returns IoUringResult::Failed in case the submission queue is full already
+   * and IoUringResult::Ok otherwise.
+   */
+  virtual IoUringResult prepareCancel(Request* cancelling_user_data, Request* user_data) PURE;
+
+  /**
+   * Prepares a shutdown operation and puts it into the submission queue.
+   * Returns IoUringResult::Failed in case the submission queue is full already
+   * and IoUringResult::Ok otherwise.
+   */
+  virtual IoUringResult prepareShutdown(os_fd_t fd, int how, Request* user_data) PURE;
+
+  /**
    * Submits the entries in the submission queue to the kernel using the
    * `io_uring_enter()` system call.
    * Returns IoUringResult::Ok in case of success and may return
@@ -135,23 +157,297 @@ public:
 using IoUringPtr = std::unique_ptr<IoUring>;
 
 /**
- * Abstract factory for IoUring wrappers.
+ * io_uring request type.
+ */
+struct RequestType {
+  static constexpr uint32_t Accept = 0x1;
+  static constexpr uint32_t Connect = 0x2;
+  static constexpr uint32_t Read = 0x4;
+  static constexpr uint32_t Write = 0x8;
+  static constexpr uint32_t Close = 0x10;
+  static constexpr uint32_t Cancel = 0x20;
+  static constexpr uint32_t Shutdown = 0x40;
+};
+
+class IoUringSocket;
+
+/**
+ * The Status of IoUringSocket.
+ */
+enum IoUringSocketStatus {
+  Initialized,
+  Enabled,
+  Disabled,
+  RemoteClosed,
+  Closed,
+};
+
+class IoUringWorker;
+
+using IoUringSocketOnClosedCb = std::function<void()>;
+
+struct AcceptedSocketParam {
+  os_fd_t fd_;
+  sockaddr_storage* remote_addr_;
+  socklen_t remote_addr_len_;
+};
+
+struct ReadParam {
+  Buffer::Instance& buf_;
+  int32_t result_;
+};
+
+struct WriteParam {
+  int32_t result_;
+};
+
+/**
+ * Abstract for each socket.
+ */
+class IoUringSocket {
+public:
+  virtual ~IoUringSocket() = default;
+
+  /**
+   * Get the IoUringWorker this socket bind to.
+   */
+  virtual IoUringWorker& getIoUringWorker() const PURE;
+
+  /**
+   * Return the raw fd.
+   */
+  virtual os_fd_t fd() const PURE;
+
+  /**
+   * Close the socket.
+   * param keep_fd_open is indicated the file descriptor of the socket will be closed or not in the
+   * end. The value of `true` is used for destroy the IoUringSocket but keep the file descriptor
+   * open.
+   */
+  virtual void close(bool keep_fd_open, IoUringSocketOnClosedCb cb = nullptr) PURE;
+
+  /**
+   * Enable the socket.
+   */
+  virtual void enable() PURE;
+
+  /**
+   * Disable the socket.
+   */
+  virtual void disable() PURE;
+
+  /**
+   * Enable close event.
+   */
+  virtual void enableCloseEvent(bool enable) PURE;
+
+  /**
+   * Connect to an address.
+   * @param address the peer of address which is connected to.
+   */
+  virtual void connect(const Network::Address::InstanceConstSharedPtr& address) PURE;
+
+  /**
+   * Write data to the socket.
+   */
+  virtual void write(Buffer::Instance& data) PURE;
+
+  /**
+   * Write data to the socket.
+   */
+  virtual uint64_t write(const Buffer::RawSlice* slices, uint64_t num_slice) PURE;
+
+  /**
+   * Shutdown the socket.
+   * @param how is SHUT_RD, SHUT_WR and SHUT_RDWR.
+   */
+  virtual void shutdown(int how) PURE;
+
+  /**
+   * On accept request completed.
+   * TODO (soulxu): wrap the raw result into a type. It can be `IoCallUint64Result`.
+   * @param req the AcceptRequest object which is as request user data.
+   * @param result the result of operation in the request.
+   * @param injected indicates the completion is injected or not.
+   */
+  virtual void onAccept(Request* req, int32_t result, bool injected) PURE;
+
+  /**
+   * On connect request completed.
+   * TODO (soulxu): wrap the raw result into a type. It can be `IoCallUint64Result`.
+   * @param req the request object which is as request user data.
+   * @param result the result of operation in the request.
+   * @param injected indicates the completion is injected or not.
+   */
+  virtual void onConnect(Request* req, int32_t result, bool injected) PURE;
+
+  /**
+   * On read request completed.
+   * TODO (soulxu): wrap the raw result into a type. It can be `IoCallUint64Result`.
+   * @param req the ReadRequest object which is as request user data.
+   * @param result the result of operation in the request.
+   * @param injected indicates the completion is injected or not.
+   */
+  virtual void onRead(Request* req, int32_t result, bool injected) PURE;
+
+  /**
+   * On write request completed.
+   * TODO (soulxu): wrap the raw result into a type. It can be `IoCallUint64Result`.
+   * @param req the WriteRequest object which is as request user data.
+   * @param result the result of operation in the request.
+   * @param injected indicates the completion is injected or not.
+   */
+  virtual void onWrite(Request* req, int32_t result, bool injected) PURE;
+
+  /**
+   * On close request completed.
+   * TODO (soulxu): wrap the raw result into a type. It can be `IoCallUint64Result`.
+   * @param req the request object which is as request user data.
+   * @param result the result of operation in the request.
+   * @param injected indicates the completion is injected or not.
+   */
+  virtual void onClose(Request* req, int32_t result, bool injected) PURE;
+
+  /**
+   * On cancel request completed.
+   * TODO (soulxu): wrap the raw result into a type. It can be `IoCallUint64Result`.
+   * @param req the request object which is as request user data.
+   * @param result the result of operation in the request.
+   * @param injected indicates the completion is injected or not.
+   */
+  virtual void onCancel(Request* req, int32_t result, bool injected) PURE;
+
+  /**
+   * On shutdown request completed.
+   * TODO (soulxu): wrap the raw result into a type. It can be `IoCallUint64Result`.
+   * @param req the request object which is as request user data.
+   * @param result the result of operation in the request.
+   * @param injected indicates the completion is injected or not.
+   */
+  virtual void onShutdown(Request* req, int32_t result, bool injected) PURE;
+
+  /**
+   * Inject a request completion to the io uring instance.
+   * @param type the request type of injected completion.
+   */
+  virtual void injectCompletion(uint32_t type) PURE;
+
+  /**
+   * Return the current status of IoUringSocket.
+   * @return the status.
+   */
+  virtual IoUringSocketStatus getStatus() const PURE;
+
+  virtual const OptRef<ReadParam>& getReadParam() const PURE;
+  virtual const OptRef<AcceptedSocketParam>& getAcceptedSocketParam() const PURE;
+  virtual const OptRef<WriteParam>& getWriteParam() const PURE;
+
+  virtual void clearAcceptedSocketParam() PURE;
+  virtual void setFileReadyCb(Event::FileReadyCb cb) PURE;
+};
+
+/**
+ * Abstract for per-thread worker.
+ */
+class IoUringWorker : public ThreadLocal::ThreadLocalObject {
+public:
+  ~IoUringWorker() override = default;
+
+  /**
+   * Add an accept socket socket to the worker.
+   */
+  virtual IoUringSocket& addAcceptSocket(os_fd_t fd, Event::FileReadyCb cb,
+                                         bool enable_close_event) PURE;
+
+  /**
+   * Add an server socket socket to the worker.
+   */
+  virtual IoUringSocket& addServerSocket(os_fd_t fd, Event::FileReadyCb cb,
+                                         bool enable_close_event) PURE;
+
+  /**
+   * Add an server socket through an existing socket from another thread.
+   */
+  virtual IoUringSocket& addServerSocket(os_fd_t fd, Buffer::Instance& read_buf,
+                                         Event::FileReadyCb cb, bool enable_close_event) PURE;
+  /**
+   * Add an client socket socket to the worker.
+   */
+  virtual IoUringSocket& addClientSocket(os_fd_t fd, Event::FileReadyCb cb,
+                                         bool enable_close_event) PURE;
+
+  /**
+   * Return the current thread's dispatcher.
+   */
+  virtual Event::Dispatcher& dispatcher() PURE;
+
+  /**
+   * Submit a accept request for a socket.
+   */
+  virtual Request* submitAcceptRequest(IoUringSocket& socket) PURE;
+
+  /**
+   * Submit a connect request for a socket.
+   */
+  virtual Request*
+  submitConnectRequest(IoUringSocket& socket,
+                       const Network::Address::InstanceConstSharedPtr& address) PURE;
+
+  /**
+   * Submit a read request for a socket.
+   */
+  virtual Request* submitReadRequest(IoUringSocket& socket) PURE;
+
+  /**
+   * Submit a write request for a socket.
+   */
+  virtual Request* submitWriteRequest(IoUringSocket& socket,
+                                      const Buffer::RawSliceVector& slices) PURE;
+
+  /**
+   * Submit a close request for a socket.
+   */
+  virtual Request* submitCloseRequest(IoUringSocket& socket) PURE;
+
+  /**
+   * Submit a cancel request for a socket.
+   */
+  virtual Request* submitCancelRequest(IoUringSocket& socket, Request* request_to_cancel) PURE;
+
+  /**
+   * Submit a shutdown request for a socket.
+   */
+  virtual Request* submitShutdownRequest(IoUringSocket& socket, int how) PURE;
+
+  /**
+   * Return the number of sockets in the worker.
+   */
+  virtual uint32_t getNumOfSockets() const PURE;
+};
+
+/**
+ * Abstract factory for io_uring wrappers.
  */
 class IoUringFactory {
 public:
   virtual ~IoUringFactory() = default;
 
   /**
-   * Returns an instance of IoUring and creates it if needed for the current
-   * thread.
+   * Returns the current thread's IoUringWorker. If it isn't register a worker yet,
+   * absl::nullopt returned.
    */
-  virtual IoUring& getOrCreate() const PURE;
+  virtual OptRef<IoUringWorker> getIoUringWorker() PURE;
 
   /**
    * Initializes a factory upon server readiness. For example this method can be
    * used to set TLS.
    */
-  virtual void onServerInitialized() PURE;
+  virtual void onWorkerThreadInitialized() PURE;
+
+  /**
+   * Indicates whether the current thread has IoUringWorker
+   */
+  virtual bool currentThreadRegistered() PURE;
 };
 
 } // namespace Io

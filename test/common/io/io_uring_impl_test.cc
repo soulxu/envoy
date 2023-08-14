@@ -1,4 +1,6 @@
 #include "source/common/io/io_uring_impl.h"
+
+#include "source/common/io/io_uring_factory_impl.h"
 #include "source/common/network/address_impl.h"
 
 #include "test/mocks/server/mocks.h"
@@ -24,8 +26,8 @@ public:
   IoUringImplTest() : api_(Api::createApiForTest()), should_skip_(!isIoUringSupported()) {
     if (!should_skip_) {
       factory_ = std::make_unique<IoUringFactoryImpl>(2, false, context_.threadLocal());
-      factory_->onServerInitialized();
-      io_uring_ = factory_->getOrCreate();
+      factory_->onWorkerThreadInitialized();
+      io_uring_ = factory_->getIoUringWorker();
     }
   }
 
