@@ -8,8 +8,8 @@
 
 #include "source/common/common/logger.h"
 #include "source/common/network/io_socket_error_impl.h"
-#include "source/common/runtime/runtime_features.h"
 #include "source/common/network/io_socket_handle_base_impl.h"
+#include "source/common/runtime/runtime_features.h"
 
 namespace Envoy {
 namespace Network {

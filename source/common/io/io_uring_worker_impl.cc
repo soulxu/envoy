@@ -146,8 +146,8 @@ IoUringSocket& IoUringWorkerImpl::addServerSocket(os_fd_t fd, Buffer::Instance& 
 IoUringSocket& IoUringWorkerImpl::addClientSocket(os_fd_t fd, Event::FileReadyCb cb,
                                                   bool enable_close_event) {
   ENVOY_LOG(trace, "add client socket, fd = {}", fd);
-  return addSocket(std::make_unique<IoUringClientSocket>(
-      fd, *this, std::move(cb), write_timeout_ms_, enable_close_event));
+  return addSocket(std::make_unique<IoUringClientSocket>(fd, *this, std::move(cb),
+                                                         write_timeout_ms_, enable_close_event));
 }
 
 IoUringSocketEntry& IoUringWorkerImpl::addSocket(IoUringSocketEntryPtr&& socket) {

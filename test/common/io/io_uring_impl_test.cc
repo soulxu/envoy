@@ -1,5 +1,4 @@
 #include "source/common/io/io_uring_impl.h"
-
 #include "source/common/network/address_impl.h"
 
 #include "test/mocks/io/mocks.h"

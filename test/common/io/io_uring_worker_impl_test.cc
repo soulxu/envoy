@@ -20,7 +20,9 @@ namespace {
 
 class IoUringSocketTestImpl : public IoUringSocketEntry {
 public:
-  IoUringSocketTestImpl(os_fd_t fd, IoUringWorkerImpl& parent) : IoUringSocketEntry(fd, parent, [](uint32_t) {}, false) {}
+  IoUringSocketTestImpl(os_fd_t fd, IoUringWorkerImpl& parent)
+      : IoUringSocketEntry(
+            fd, parent, [](uint32_t) {}, false) {}
   void cleanupForTest() { cleanup(); }
 };
 
@@ -172,9 +174,7 @@ TEST(IoUringWorkerImplTest, ServerSocketInjectAfterWrite) {
 
   // After the close request finished, the socket will be cleanup.
   EXPECT_CALL(mock_io_uring, forEveryCompletion(_))
-      .WillOnce(Invoke([&close_req](const CompletionCb& cb) {
-        cb(close_req, 0, false);
-      }));
+      .WillOnce(Invoke([&close_req](const CompletionCb& cb) { cb(close_req, 0, false); }));
   EXPECT_CALL(mock_io_uring, removeInjectedCompletion(fd));
   EXPECT_CALL(dispatcher, deferredDelete_);
   EXPECT_CALL(dispatcher, clearDeferredDeleteList());
@@ -242,9 +242,7 @@ TEST(IoUringWorkerImplTest, ServerSocketInjectAfterRead) {
 
   // After the close request finished, the socket will be cleanup.
   EXPECT_CALL(mock_io_uring, forEveryCompletion(_))
-      .WillOnce(Invoke([&close_req](const CompletionCb& cb) {
-        cb(close_req, 0, false);
-      }));
+      .WillOnce(Invoke([&close_req](const CompletionCb& cb) { cb(close_req, 0, false); }));
   EXPECT_CALL(mock_io_uring, removeInjectedCompletion(fd));
   EXPECT_CALL(dispatcher, deferredDelete_);
   EXPECT_CALL(dispatcher, clearDeferredDeleteList());
@@ -349,9 +347,7 @@ TEST(IoUringWorkerImplTest, ServerCloseWithWriteRequestOnly) {
   io_uring_socket.disable();
   // Fake the read request finish.
   EXPECT_CALL(mock_io_uring, forEveryCompletion(_))
-      .WillOnce(Invoke([&read_req](const CompletionCb& cb) {
-        cb(read_req, -EAGAIN, false);
-      }));
+      .WillOnce(Invoke([&read_req](const CompletionCb& cb) { cb(read_req, -EAGAIN, false); }));
   EXPECT_CALL(mock_io_uring, submit()).Times(1).RetiresOnSaturation();
   file_event_callback(Event::FileReadyType::Read);
 
@@ -383,9 +379,7 @@ TEST(IoUringWorkerImplTest, ServerCloseWithWriteRequestOnly) {
 
   // After the close request finished, the socket will be cleanup.
   EXPECT_CALL(mock_io_uring, forEveryCompletion(_))
-      .WillOnce(Invoke([&close_req](const CompletionCb& cb) {
-        cb(close_req, 0, false);
-      }));
+      .WillOnce(Invoke([&close_req](const CompletionCb& cb) { cb(close_req, 0, false); }));
   EXPECT_CALL(mock_io_uring, removeInjectedCompletion(fd));
   EXPECT_CALL(dispatcher, deferredDelete_);
   EXPECT_CALL(dispatcher, clearDeferredDeleteList());
