@@ -110,7 +110,7 @@ IoUringWorkerImpl::~IoUringWorkerImpl() {
     for (auto& socket : sockets_) {
       ENVOY_LOG(trace, "the socket fd = {} not closed", socket->fd());
     }
-    dispatcher_.run(Event::Dispatcher::RunType::NonBlock);
+    onFileEvent();
   }
 
   dispatcher_.clearDeferredDeleteList();

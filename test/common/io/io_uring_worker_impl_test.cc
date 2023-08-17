@@ -286,32 +286,25 @@ TEST(IoUringWorkerImplTest, CloseAllSocketsWhenDestruction) {
   EXPECT_CALL(mock_io_uring, submit()).Times(1).RetiresOnSaturation();
 
   // The IoUringWorker will wait for the socket closed.
-  EXPECT_CALL(dispatcher, run(_))
-      .WillOnce(Invoke([&file_event_callback, &mock_io_uring, fd, &read_req,
-                        &cancel_req](Event::Dispatcher::RunType) {
-        // Fake an injected completion.
-        EXPECT_CALL(mock_io_uring, forEveryCompletion(_))
-            .WillOnce(Invoke([&mock_io_uring, fd, &read_req, &cancel_req](const CompletionCb& cb) {
-              // When the cancel request is done, the close request will be submitted.
-              Request* close_req = nullptr;
-              EXPECT_CALL(mock_io_uring, prepareClose(fd, _))
-                  .WillOnce(DoAll(SaveArg<1>(&close_req), Return<IoUringResult>(IoUringResult::Ok)))
-                  .RetiresOnSaturation();
-              EXPECT_CALL(mock_io_uring, submit()).Times(1).RetiresOnSaturation();
+  EXPECT_CALL(mock_io_uring, forEveryCompletion(_))
+      .WillOnce(Invoke([&mock_io_uring, fd, &read_req, &cancel_req](const CompletionCb& cb) {
+        // When the cancel request is done, the close request will be submitted.
+        Request* close_req = nullptr;
+        EXPECT_CALL(mock_io_uring, prepareClose(fd, _))
+            .WillOnce(DoAll(SaveArg<1>(&close_req), Return<IoUringResult>(IoUringResult::Ok)))
+            .RetiresOnSaturation();
+        EXPECT_CALL(mock_io_uring, submit()).Times(1).RetiresOnSaturation();
 
-              EXPECT_CALL(mock_io_uring, removeInjectedCompletion(fd));
+        EXPECT_CALL(mock_io_uring, removeInjectedCompletion(fd));
 
-              // Fake the read request cancel completion.
-              cb(read_req, -ECANCELED, false);
+        // Fake the read request cancel completion.
+        cb(read_req, -ECANCELED, false);
 
-              // Fake the cancel request is done.
-              cb(cancel_req, 0, false);
+        // Fake the cancel request is done.
+        cb(cancel_req, 0, false);
 
-              // Fake the close request is done.
-              cb(close_req, 0, false);
-            }));
-
-        file_event_callback(Event::FileReadyType::Read);
+        // Fake the close request is done.
+        cb(close_req, 0, false);
       }));
 
   EXPECT_CALL(dispatcher, deferredDelete_);
