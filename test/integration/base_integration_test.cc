@@ -11,6 +11,7 @@
 #include "envoy/buffer/buffer.h"
 #include "envoy/config/bootstrap/v3/bootstrap.pb.h"
 #include "envoy/config/endpoint/v3/endpoint_components.pb.h"
+#include "envoy/extensions/network/socket_interface/v3/default_socket_interface.pb.h"
 #include "envoy/extensions/transport_sockets/quic/v3/quic_transport.pb.h"
 #include "envoy/extensions/transport_sockets/tls/v3/cert.pb.h"
 #include "envoy/service/discovery/v3/discovery.pb.h"
@@ -78,6 +79,18 @@ BaseIntegrationTest::BaseIntegrationTest(const InstanceConstSharedPtrFn& upstrea
 #ifndef ENVOY_ADMIN_FUNCTIONALITY
   config_helper_.addConfigModifier(
       [&](envoy::config::bootstrap::v3::Bootstrap& bootstrap) -> void { bootstrap.clear_admin(); });
+#endif
+
+#ifdef ENVOY_TEST_IO_URING
+  config_helper_.addConfigModifier([&](envoy::config::bootstrap::v3::Bootstrap& bootstrap) {
+    bootstrap.set_default_socket_interface(
+        "envoy.extensions.network.socket_interface.default_socket_interface");
+    auto extension = bootstrap.add_bootstrap_extensions();
+    extension->set_name("envoy.extensions.network.socket_interface.default_socket_interface");
+    envoy::extensions::network::socket_interface::v3::DefaultSocketInterface interface;
+    interface.set_enable_io_uring(true);
+    extension->mutable_typed_config()->PackFrom(interface);
+  });
 #endif
 }
 

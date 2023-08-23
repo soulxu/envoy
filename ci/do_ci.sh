@@ -587,6 +587,17 @@ case $CI_TARGET in
             --test_arg="-runs=10"
         ;;
 
+    io_uring)
+        setup_clang_toolchain
+        echo "bazel build with tests and io_uring enabled"
+        echo "Building and testing envoy tests ${TEST_TARGETS[*]}"
+        bazel_with_collection \
+            test "${BAZEL_BUILD_OPTIONS[@]}" \
+             --define test_io_uring=enabled \
+             --remote_download_minimal \
+             "${TEST_TARGETS[@]}"
+        ;;
+
     gcc)
         BAZEL_BUILD_OPTIONS+=("--test_env=HEAPCHECK=")
         setup_gcc_toolchain

@@ -524,6 +524,14 @@ config_setting(
     values = {"define": "uhv=enabled"},
 )
 
+# This config setting enables using io_uring socket handle in tests and works
+# in bazel.io_uring CI target. io_uring socket handle is in its early stage,
+# and a separate warning-only CI target is responsilbe for check its status.
+config_setting(
+    name = "enable_test_io_uring",
+    values = {"define": "test_io_uring=enabled"},
+)
+
 # Alias pointing to the selected version of BoringSSL:
 # - BoringSSL FIPS from @boringssl_fips//:ssl,
 # - non-FIPS BoringSSL from @boringssl//:ssl.

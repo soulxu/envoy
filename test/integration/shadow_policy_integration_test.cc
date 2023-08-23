@@ -28,6 +28,13 @@ public:
     setUpstreamCount(2);
   }
 
+  void SetUp() override {
+    // TODO(zhxie): io_uring is not compatible with SocketInterfaceSwap.
+#ifdef ENVOY_TEST_IO_URING
+    GTEST_SKIP();
+#endif
+  }
+
   // Adds a mirror policy that routes to cluster_header or cluster_name, in that order. Additionally
   // optionally registers an upstream filter on the cluster specified by
   // cluster_with_custom_filter_.

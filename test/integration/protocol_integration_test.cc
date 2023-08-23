@@ -2840,12 +2840,11 @@ TEST_P(DownstreamProtocolIntegrationTest, ConnDurationTimeoutNoHttpRequest) {
 }
 
 TEST_P(DownstreamProtocolIntegrationTest, TestPreconnect) {
-  // TODO (soulxu): skip this test for io-uring, since this test depends on the io behavior.
-  // After we enable the parameter test for io-uring and
-  // default socket, then we should run this test for default socket, and write another version for
-  // the io-uring.
-  // It is caused by connection order behavior in tests.
+  // TODO(zhxie): io_uring works asynchronously and the connection may not come in a sequence as
+  // expected.
+#ifdef ENVOY_TEST_IO_URING
   GTEST_SKIP();
+#endif
 
   config_helper_.addConfigModifier([](envoy::config::bootstrap::v3::Bootstrap& bootstrap) {
     auto* cluster = bootstrap.mutable_static_resources()->mutable_clusters(0);
@@ -4291,6 +4290,10 @@ public:
 };
 
 TEST_P(DownstreamProtocolIntegrationTest, HandleDownstreamSocketFail) {
+  // TODO(zhxie): io_uring is not compatible with SocketInterfaceSwap.
+#ifdef ENVOY_TEST_IO_URING
+  GTEST_SKIP();
+#endif
   // Make sure for HTTP/3 Envoy will use sendmsg, so the write_matcher will work.
   NoUdpGso reject_gso_;
   TestThreadsafeSingletonInjector<Api::OsSysCallsImpl> os_calls{&reject_gso_};
@@ -4331,6 +4334,10 @@ TEST_P(DownstreamProtocolIntegrationTest, HandleDownstreamSocketFail) {
 }
 
 TEST_P(ProtocolIntegrationTest, HandleUpstreamSocketFail) {
+  // TODO(zhxie): io_uring is not compatible with SocketInterfaceSwap.
+#ifdef ENVOY_TEST_IO_URING
+  GTEST_SKIP();
+#endif
   SocketInterfaceSwap socket_swap(upstreamProtocol() == Http::CodecType::HTTP3
                                       ? Network::Socket::Type::Datagram
                                       : Network::Socket::Type::Stream);

@@ -93,6 +93,48 @@ jobs:
         timeoutInMinutes: 10
         condition: and(failed(), eq(variables['CI_TARGET'], 'bazel.clang_tidy'))
 
+# Exempt job will continue on error and will be regarded as a warning instead
+# of an error on failed.
+- job: exempt
+  displayName: "Linux x64"
+  dependsOn: []
+  condition: |
+    and(not(canceled()),
+        eq(${{ parameters.runChecks }}, 'true'))
+  continueOnError: true
+  variables:
+    REPO_FETCH_DEPTH: 1
+    REPO_FETCH_TAGS: false
+    PUBLISH_TEST_RESULTS: true
+    PUBLISH_ENVOY: true
+  strategy:
+    maxParallel: ${{ parameters.concurrencyChecks }}
+    matrix:
+      io_uring:
+        CI_TARGET: "bazel.io_uring"
+  timeoutInMinutes: 180
+  pool:
+    vmImage: $(agentUbuntu)
+  steps:
+  - template: ../bazel.yml
+    parameters:
+      ciTarget: $(CI_TARGET)
+      envoyBuildFilterExample: $(ENVOY_FILTER_EXAMPLE)
+      cacheTestResults: ${{ parameters.cacheTestResults }}
+      repoFetchDepth: $(REPO_FETCH_DEPTH)
+      repoFetchTags: $(REPO_FETCH_TAGS)
+      publishTestResults: variables.PUBLISH_TEST_RESULTS
+      publishEnvoy: variables.PUBLISH_ENVOY
+      stepsPost:
+
+      # TODO(phlax): consolidate "fix" paths/jobs
+      - task: PublishBuildArtifacts@1
+        inputs:
+          pathtoPublish: "$(Build.StagingDirectory)/tmp/lint-fixes"
+          artifactName: "$(CI_TARGET).fixes"
+        timeoutInMinutes: 10
+        condition: and(failed(), eq(variables['CI_TARGET'], 'bazel.clang_tidy'))
+
 - job: coverage
   displayName: "Linux x64"
   dependsOn: []

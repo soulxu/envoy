@@ -2,6 +2,7 @@
 
 #include "envoy/common/exception.h"
 #include "envoy/extensions/network/socket_interface/v3/default_socket_interface.pb.h"
+#include "envoy/extensions/network/socket_interface/v3/default_socket_interface.pb.validate.h"
 
 #include "source/common/api/os_sys_calls_impl.h"
 #include "source/common/common/assert.h"
@@ -162,15 +163,21 @@ bool SocketInterfaceImpl::ipFamilySupported(int domain) {
 }
 
 Server::BootstrapExtensionPtr SocketInterfaceImpl::createBootstrapExtension(
-    const Protobuf::Message&,
+    const Protobuf::Message& config,
     [[maybe_unused]] Server::Configuration::ServerFactoryContext& context) {
+  const auto& message = MessageUtil::downcastAndValidate<
+      const envoy::extensions::network::socket_interface::v3::DefaultSocketInterface&>(
+      config, context.messageValidationVisitor());
 #ifdef __linux__
-  // TODO (soulxu): Add runtime flag here.
-  if (Io::isIoUringSupported()) {
+  if (message.enable_io_uring() && Io::isIoUringSupported()) {
     std::shared_ptr<Io::IoUringFactoryImpl> io_uring_factory =
-        std::make_shared<Io::IoUringFactoryImpl>(DefaultIoUringSize, UseSubmissionQueuePolling,
-                                                 DefaultAcceptSize, DefaultReadBufferSize,
-                                                 DefaultWriteTimeoutMs, context.threadLocal());
+        std::make_shared<Io::IoUringFactoryImpl>(
+            PROTOBUF_GET_WRAPPED_OR_DEFAULT(message, io_uring_size, 1000),
+            message.enable_io_uring_submission_queue_polling(),
+            PROTOBUF_GET_WRAPPED_OR_DEFAULT(message, io_uring_accept_backlog, 5),
+            PROTOBUF_GET_WRAPPED_OR_DEFAULT(message, io_uring_read_buffer_size, 8192),
+            PROTOBUF_GET_WRAPPED_OR_DEFAULT(message, io_uring_write_timeout_ms, 1000),
+            context.threadLocal());
     io_uring_factory_ = io_uring_factory;
 
     return std::make_unique<DefaultSocketInterfaceExtension>(*this, io_uring_factory);

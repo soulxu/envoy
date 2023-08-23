@@ -1239,12 +1239,11 @@ TEST_P(MultiplexedIntegrationTest, IdleTimeoutWithSimultaneousRequests) {
 
 // Test request mirroring / shadowing with an HTTP/2 downstream and a request with a body.
 TEST_P(MultiplexedIntegrationTest, RequestMirrorWithBody) {
-  // TODO (soulxu): skip this test for io-uring, since this test depends on the io behavior.
-  // After we enable the parameter test for io-uring and
-  // default socket, then we should run this test for default socket, and write another version for
-  // the io-uring.
-  // It is caused by connection order behavior in tests.
+  // TODO(zhxie): io_uring works asynchronously and the connection may not come in a sequence as
+  // expected.
+#ifdef ENVOY_TEST_IO_URING
   GTEST_SKIP();
+#endif
 
   config_helper_.addConfigModifier(
       [&](envoy::extensions::filters::network::http_connection_manager::v3::HttpConnectionManager&
@@ -2293,13 +2292,12 @@ TEST_P(MultiplexedIntegrationTest, Reset101SwitchProtocolResponse) {
 }
 
 TEST_P(MultiplexedIntegrationTest, PerTryTimeoutWhileDownstreamStopsReading) {
-  // TODO (soulxu): skip this test for io-uring, since this test depends on the io behavior.
-  // After we enable the parameter test for io-uring and
-  // default socket, then we should run this test for default socket, and write another version for
-  // the io-uring.
-  // It is caused by connection buffer never touch high watermark since the activate write file
-  // events of server socket will get handled in the end of the on read of client socket.
+  // TODO(zhxie): io_uring socket is not compatible with watermark. It is caused by connection
+  // buffer never touch high watermark since the activate write file events of server socket will
+  // get handled in the end of the on read of client socket.
+#ifdef ENVOY_TEST_IO_URING
   GTEST_SKIP();
+#endif
 
   if (downstreamProtocol() != Http::CodecType::HTTP2) {
     return;
@@ -2427,6 +2425,13 @@ public:
       : SocketInterfaceSwap(GetParam().downstream_protocol == Http::CodecType::HTTP3
                                 ? Network::Socket::Type::Datagram
                                 : Network::Socket::Type::Stream) {}
+
+  void SetUp() override {
+    // TODO(zhxie): io_uring is not compatible with SocketInterfaceSwap.
+#ifdef ENVOY_TEST_IO_URING
+    GTEST_SKIP();
+#endif
+  }
 };
 
 INSTANTIATE_TEST_SUITE_P(IpVersions, SocketSwappableMultiplexedIntegrationTest,

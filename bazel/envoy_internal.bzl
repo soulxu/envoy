@@ -118,6 +118,9 @@ def envoy_copts(repository, test = False):
            }) + select({
                repository + "//bazel:uhv_enabled": ["-DENVOY_ENABLE_UHV"],
                "//conditions:default": [],
+           }) + select({
+               repository + "//bazel:enable_test_io_uring": ["-DENVOY_TEST_IO_URING"],
+               "//conditions:default": [],
            }) + envoy_select_hot_restart(["-DENVOY_HOT_RESTART"], repository) + \
            envoy_select_disable_exceptions(["-fno-unwind-tables", "-fno-exceptions"], repository) + \
            envoy_select_admin_html(["-DENVOY_ADMIN_HTML"], repository) + \

@@ -145,6 +145,8 @@ The `./ci/run_envoy_docker.sh './ci/do_ci.sh <TARGET>'` targets are:
 * `bazel.fuzz <test>` &mdash; build and run a specified fuzz test or test dir under `-c dbg --config=asan-fuzzer` with clang. If specifying a single fuzz test, must use the full target name with "_with_libfuzzer" for `<test>`.
 * `bazel.compile_time_options` &mdash; build Envoy and run tests with various compile-time options toggled to their non-default state, to ensure they still build.
 * `bazel.compile_time_options <test>` &mdash; build Envoy and run a specified test or test dir with various compile-time options toggled to their non-default state, to ensure they still build.
+* `bazel.io_uring` &mdash; build and run tests with io_uring enabled.
+* `bazel.io_uring <test>` &mdash; build and run a specified test or test dir with io_uring enabled.
 * `bazel.clang_tidy <files>` &mdash; build and run clang-tidy specified source files, if no files specified, runs against the diff with the last GitHub commit.
 * `check_proto_format`&mdash; check configuration, formatting and build issues in API proto files.
 * `fix_proto_format`&mdash; fix configuration, formatting and build issues in API proto files.

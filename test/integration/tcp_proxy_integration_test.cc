@@ -274,12 +274,10 @@ TEST_P(TcpProxyIntegrationTest, TcpProxyLargeWrite) {
 
 // Test that a downstream flush works correctly (all data is flushed)
 TEST_P(TcpProxyIntegrationTest, TcpProxyDownstreamFlush) {
-
-  // TODO (soulxu): skip this test for io-uring, since this test depends on the io behavior.
-  // After we enable the parameter test for io-uring and
-  // default socket, then we should run this test for default socket, and write another version for
-  // the io-uring.
+  // TODO(zhxie): io_uring works asynchronously and the counter may not reach the value expected.
+#ifdef ENVOY_TEST_IO_URING
   GTEST_SKIP();
+#endif
 
   // Use a very large size to make sure it is larger than the kernel socket read buffer.
   const uint32_t size = 50 * 1024 * 1024;
@@ -320,11 +318,10 @@ TEST_P(TcpProxyIntegrationTest, TcpProxyDownstreamFlush) {
 
 // Test that an upstream flush works correctly (all data is flushed)
 TEST_P(TcpProxyIntegrationTest, TcpProxyUpstreamFlush) {
-  // TODO (soulxu): skip this test for io-uring, since this test depends on the io behavior.
-  // After we enable the parameter test for io-uring and
-  // default socket, then we should run this test for default socket, and write another version for
-  // the io-uring.
+  // TODO(zhxie): io_uring works asynchronously and the counter may not reach the value expected.
+#ifdef ENVOY_TEST_IO_URING
   GTEST_SKIP();
+#endif
 
   // Use a very large size to make sure it is larger than the kernel socket read buffer.
   const uint32_t size = 50 * 1024 * 1024;
@@ -357,11 +354,10 @@ TEST_P(TcpProxyIntegrationTest, TcpProxyUpstreamFlush) {
 
 // Test that Envoy doesn't crash or assert when shutting down with an upstream flush active
 TEST_P(TcpProxyIntegrationTest, TcpProxyUpstreamFlushEnvoyExit) {
-  // TODO (soulxu): skip this test for io-uring, since this test depends on the io behavior.
-  // After we enable the parameter test for io-uring and
-  // default socket, then we should run this test for default socket, and write another version for
-  // the io-uring.
+  // TODO(zhxie): io_uring works asynchronously and the counter may not reach the value expected.
+#ifdef ENVOY_TEST_IO_URING
   GTEST_SKIP();
+#endif
 
   // Use a very large size to make sure it is larger than the kernel socket read buffer.
   const uint32_t size = 50 * 1024 * 1024;
@@ -1617,12 +1613,11 @@ TEST_P(MysqlIntegrationTest, UpstreamWritesFirst) {
 // Early close notification does not work for OSX
 #if !defined(__APPLE__)
 TEST_P(MysqlIntegrationTest, DisconnectDetected) {
-  // TODO (soulxu): skip this test for io-uring, since this test depends on the io behavior.
-  // After we enable the parameter test for io-uring and
-  // default socket, then we should run this test for default socket, and write another version for
-  // the io-uring.
-  // It is caused by connection order behavior in tests.
+  // TODO(zhxie): io_uring works asynchronously and the connection may not come in a sequence as
+  // expected.
+#ifdef ENVOY_TEST_IO_URING
   GTEST_SKIP();
+#endif
 
   // Switch to per-upstream preconnect.
   perUpstreamPreconnect();
