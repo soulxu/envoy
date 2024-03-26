@@ -403,12 +403,10 @@ def envoy_dependencies(skip_targets = []):
     )
 
 def _boringssl():
-    external_http_archive(
+    native.local_repository(
         name = "boringssl",
-        patch_args = ["-p1"],
-        patches = [
-            "@envoy//bazel:boringssl_static.patch",
-        ],
+        # Relative paths are also supported.
+        path = "/home/hejiexu/go/src/github.com/boringssl",
     )
 
 def _boringssl_fips():
