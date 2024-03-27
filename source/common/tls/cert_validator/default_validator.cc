@@ -30,6 +30,7 @@
 #include "source/common/tls/cert_validator/cert_validator.h"
 #include "source/common/tls/cert_validator/factory.h"
 #include "source/common/tls/cert_validator/utility.h"
+#include "source/common/tls/cert_validator/verifier.h"
 #include "source/common/tls/stats.h"
 #include "source/common/tls/utility.h"
 
@@ -316,7 +317,9 @@ ValidationResults DefaultCertValidator::doVerifyCertChain(
       return {ValidationResults::ValidationStatus::Failed,
               Envoy::Ssl::ClientValidationStatus::Failed, absl::nullopt, error};
     }
-    const bool verify_succeeded = (X509_verify_cert(ctx.get()) == 1);
+    CryptoMBVerifier verifier;
+    const bool verify_succeeded = (verifier.verify(ctx.get()) == ValidationResults::ValidationStatus::Successful);
+    // const bool verify_succeeded = (X509_verify_cert(ctx.get()) == 1);
 
     if (!verify_succeeded) {
       const std::string error =
