@@ -173,8 +173,10 @@ ContextImpl::ContextImpl(Stats::Scope& scope, const Envoy::Ssl::ContextConfig& c
   auto verify_mode = cert_validator_->initializeSslContexts(
       ssl_contexts, config.capabilities().provides_certificates);
   if (!capabilities_.verifies_peer_certificates) {
+    ENVOY_LOG_MISC(debug, "####### before set the custom verify callback");
     for (auto ctx : ssl_contexts) {
       if (verify_mode != SSL_VERIFY_NONE) {
+        ENVOY_LOG_MISC(debug, "####### set the custom verify callback");
         // TODO(danzh) Envoy's use of SSL_VERIFY_NONE does not quite match the actual semantics as
         // a client. As a client, SSL_VERIFY_NONE means to verify the certificate (which will fail
         // without trust anchors), save the result in the session ticket, but otherwise continue

@@ -317,6 +317,7 @@ ValidationResults DefaultCertValidator::doVerifyCertChain(
       return {ValidationResults::ValidationStatus::Failed,
               Envoy::Ssl::ClientValidationStatus::Failed, absl::nullopt, error};
     }
+    ENVOY_LOG_MISC(debug, "######### before the x509 verify");
     CryptoMBVerifier verifier;
     const bool verify_succeeded = (verifier.verify(ctx.get()) == ValidationResults::ValidationStatus::Successful);
     // const bool verify_succeeded = (X509_verify_cert(ctx.get()) == 1);
